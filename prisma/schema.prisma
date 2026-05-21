@@ -1,0 +1,315 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Season {
+  id         String   @id @default(cuid())
+  name       String
+  year       Int
+  type       String   // "AH" or "PE"
+  isActive   Boolean  @default(true)
+  isArchived Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  clients            ClientSeason[]
+  supplierOrders     SupplierOrder[]
+  clientOrders       ClientOrder[]
+  allocationSessions AllocationSession[]
+  imports            ImportLog[]
+
+  @@unique([year, type])
+}
+
+model Client {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  name      String
+  email     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  seasons      ClientSeason[]
+  clientOrders ClientOrder[]
+  deliveries   Delivery[]
+}
+
+model ClientSeason {
+  id                   String   @id @default(cuid())
+  clientId             String
+  seasonId             String
+  ranking              Int      @default(5)
+  maxReductionOrder    Float    @default(30.0)
+  maxReductionLine     Float    @default(50.0)
+  minDeliveryThreshold Int      @default(10)
+  isActive             Boolean  @default(true)
+  rotationScore        Int      @default(0)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  season Season @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, seasonId])
+  @@index([seasonId])
+  @@index([ranking])
+}
+
+model Supplier {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  supplierOrders SupplierOrder[]
+  receptions     SupplierReception[]
+}
+
+model Product {
+  id        String   @id @default(cuid())
+  reference String
+  color     String
+  colorCode String?
+  sizeScale String   // "XS,S,M,L,XL,XXL"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  supplierOrderLines SupplierOrderLine[]
+  clientOrderLines   ClientOrderLine[]
+  receptionLines     ReceptionLine[]
+  stockEntries       StockEntry[]
+  allocationLines    AllocationLine[]
+  deliveryLines      DeliveryLine[]
+
+  @@unique([reference, color])
+  @@index([reference])
+}
+
+model ProductSizeEan {
+  id        String @id @default(cuid())
+  reference String
+  color     String
+  size      String
+  ean       String @unique
+
+  @@unique([reference, color, size])
+  @@index([reference, color])
+}
+
+model SupplierOrder {
+  id          String    @id @default(cuid())
+  orderNumber String
+  seasonId    String
+  supplierId  String
+  orderDate   DateTime?
+  status      String    @default("EN_ATTENTE") // EN_ATTENTE, PARTIEL, COMPLET, SOLDE
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  season     Season              @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  supplier   Supplier            @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  lines      SupplierOrderLine[]
+  receptions SupplierReception[]
+
+  @@unique([orderNumber, seasonId])
+  @@index([seasonId])
+  @@index([supplierId])
+}
+
+model SupplierOrderLine {
+  id               String   @id @default(cuid())
+  supplierOrderId  String
+  productId        String
+  quantitiesBySize String   // JSON: {"S":10,"M":20}
+  totalQuantity    Int
+  createdAt        DateTime @default(now())
+
+  supplierOrder SupplierOrder @relation(fields: [supplierOrderId], references: [id], onDelete: Cascade)
+  product       Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([supplierOrderId, productId])
+}
+
+model SupplierReception {
+  id              String   @id @default(cuid())
+  receptionNumber String
+  supplierOrderId String
+  supplierId      String
+  receptionDate   DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  supplierOrder SupplierOrder @relation(fields: [supplierOrderId], references: [id], onDelete: Cascade)
+  supplier      Supplier      @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  lines         ReceptionLine[]
+
+  @@index([supplierOrderId])
+}
+
+model ReceptionLine {
+  id                  String   @id @default(cuid())
+  supplierReceptionId String
+  productId           String
+  quantitiesBySize    String   // JSON
+  totalQuantity       Int
+  createdAt           DateTime @default(now())
+
+  supplierReception SupplierReception @relation(fields: [supplierReceptionId], references: [id], onDelete: Cascade)
+  product           Product           @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+
+model ClientOrder {
+  id          String    @id @default(cuid())
+  orderNumber String
+  seasonId    String
+  clientId    String
+  orderDate   DateTime?
+  orderType   String    @default("COMMANDE") // COMMANDE or VSS
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  season Season          @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  client Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  lines  ClientOrderLine[]
+
+  @@unique([orderNumber, seasonId])
+  @@index([seasonId])
+  @@index([clientId])
+}
+
+model ClientOrderLine {
+  id               String   @id @default(cuid())
+  clientOrderId    String
+  productId        String
+  quantitiesBySize String   // JSON
+  totalQuantity    Int
+  createdAt        DateTime @default(now())
+
+  clientOrder ClientOrder @relation(fields: [clientOrderId], references: [id], onDelete: Cascade)
+  product     Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([clientOrderId, productId])
+}
+
+model StockEntry {
+  id               String   @id @default(cuid())
+  productId        String
+  quantitiesBySize String   // JSON
+  totalQuantity    Int
+  importDate       DateTime @default(now())
+  createdAt        DateTime @default(now())
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+}
+
+model AllocationSession {
+  id          String   @id @default(cuid())
+  seasonId    String
+  sessionDate DateTime @default(now())
+  status      String   @default("SIMULATION") // SIMULATION, VALIDATED, CANCELLED
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  season     Season           @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  lines      AllocationLine[]
+  deliveries Delivery[]
+
+  @@index([seasonId])
+  @@index([status])
+}
+
+model AllocationLine {
+  id                  String   @id @default(cuid())
+  allocationSessionId String
+  clientOrderId       String?
+  productId           String
+  clientId            String?
+  originalBySize      String   // JSON
+  allocatedBySize     String   // JSON
+  reducedBySize       String   // JSON
+  reductionReason     String
+  status              String   @default("LIVRABLE") // LIVRABLE, EN_ATTENTE, ANNULE
+  isManualAdjustment  Boolean  @default(false)
+  createdAt           DateTime @default(now())
+
+  allocationSession AllocationSession @relation(fields: [allocationSessionId], references: [id], onDelete: Cascade)
+  product           Product           @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([allocationSessionId])
+  @@index([productId])
+}
+
+model Delivery {
+  id                  String    @id @default(cuid())
+  deliveryNumber      Int
+  clientId            String
+  clientOrderId       String?
+  allocationSessionId String?
+  status              String    @default("PLANIFIEE") // PLANIFIEE, EN_PREPARATION, EXPEDIEE
+  colorCode           String
+  eanExportGenerated  Boolean   @default(false)
+  shippedAt           DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  client            Client              @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  allocationSession AllocationSession?  @relation(fields: [allocationSessionId], references: [id])
+  lines             DeliveryLine[]
+  eanExports        EanExport[]
+
+  @@index([clientId])
+  @@index([status])
+}
+
+model DeliveryLine {
+  id               String   @id @default(cuid())
+  deliveryId       String
+  productId        String
+  quantitiesBySize String   // JSON
+  totalQuantity    Int
+  createdAt        DateTime @default(now())
+
+  delivery Delivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  product  Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+
+model EanExport {
+  id          String   @id @default(cuid())
+  deliveryId  String
+  fileName    String
+  exportData  String   // JSON array
+  generatedAt DateTime @default(now())
+
+  delivery Delivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+}
+
+model ImportLog {
+  id         String   @id @default(cuid())
+  seasonId   String
+  importType String   // CLIENT_ORDER, SUPPLIER_ORDER, RECEPTION, STOCK
+  fileName   String
+  rowCount   Int
+  errorCount Int      @default(0)
+  errors     String?  // JSON
+  importedAt DateTime @default(now())
+
+  season Season @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+
+  @@index([seasonId])
+}
+
+model Setting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  updatedAt DateTime @updatedAt
+}
