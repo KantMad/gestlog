@@ -313,3 +313,13 @@ model Setting {
   value     String
   updatedAt DateTime @updatedAt
 }
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  code      String   @unique
+  role      String   @default("USER") // ADMIN or USER
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

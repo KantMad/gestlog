@@ -11,8 +11,13 @@ import {
   Settings,
   BarChart3,
   Package,
+  Users,
+  LogOut,
+  Shield,
+  User,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/lib/auth-context";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Tableau de bord", icon: LayoutDashboard },
@@ -24,8 +29,18 @@ const NAV_ITEMS = [
   { href: "/statistics", label: "Statistiques", icon: BarChart3 },
 ];
 
+const ADMIN_NAV_ITEMS = [
+  { href: "/users", label: "Utilisateurs", icon: Users },
+];
+
 export function Sidebar() {
   const pathname = usePathname();
+  const { user, logout } = useAuth();
+
+  const allItems = [
+    ...NAV_ITEMS,
+    ...(user?.role === "ADMIN" ? ADMIN_NAV_ITEMS : []),
+  ];
 
   return (
     <aside className="fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-border bg-card">
@@ -40,7 +55,7 @@ export function Sidebar() {
       </div>
 
       <nav className="flex-1 space-y-1 px-3 py-4">
-        {NAV_ITEMS.map((item) => {
+        {allItems.map((item) => {
           const isActive =
             pathname === item.href || pathname.startsWith(item.href + "/");
           return (
@@ -66,10 +81,31 @@ export function Sidebar() {
         })}
       </nav>
 
-      <div className="border-t border-border p-4">
-        <p className="text-xs text-muted-foreground text-center">
-          v1.0
-        </p>
+      <div className="border-t border-border p-4 space-y-3">
+        {user && (
+          <div className="flex items-center gap-3">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-100">
+              {user.role === "ADMIN" ? (
+                <Shield className="h-4 w-4 text-zinc-600" />
+              ) : (
+                <User className="h-4 w-4 text-zinc-600" />
+              )}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium truncate">{user.name}</p>
+              <p className="text-xs text-muted-foreground">
+                {user.role === "ADMIN" ? "Administrateur" : "Utilisateur"}
+              </p>
+            </div>
+            <button
+              onClick={logout}
+              className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+              title="Se déconnecter"
+            >
+              <LogOut className="h-4 w-4" />
+            </button>
+          </div>
+        )}
       </div>
     </aside>
   );
