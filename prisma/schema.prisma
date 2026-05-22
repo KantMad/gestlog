@@ -20,6 +20,7 @@ model Season {
   clients            ClientSeason[]
   supplierOrders     SupplierOrder[]
   clientOrders       ClientOrder[]
+  catalogs           Catalog[]
   allocationSessions AllocationSession[]
   imports            ImportLog[]
 
@@ -73,13 +74,14 @@ model Supplier {
 }
 
 model Product {
-  id        String   @id @default(cuid())
-  reference String
-  color     String
-  colorCode String?
-  sizeScale String   // "XS,S,M,L,XL,XXL"
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id         String   @id @default(cuid())
+  reference  String
+  color      String
+  colorCode  String?
+  externalId String?  @unique // B2B product_id + color_id (e.g. "3119_53")
+  sizeScale  String   // "XS,S,M,L,XL,XXL"
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   supplierOrderLines SupplierOrderLine[]
   clientOrderLines   ClientOrderLine[]
@@ -90,6 +92,7 @@ model Product {
 
   @@unique([reference, color])
   @@index([reference])
+  @@index([externalId])
 }
 
 model ProductSizeEan {
@@ -204,11 +207,25 @@ model ReceptionLine {
   product           Product           @relation(fields: [productId], references: [id], onDelete: Cascade)
 }
 
+model Catalog {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  seasonId  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  season       Season        @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  clientOrders ClientOrder[]
+
+  @@index([seasonId])
+}
+
 model ClientOrder {
   id              String    @id @default(cuid())
   orderNumber     String
   seasonId        String
   clientId        String
+  catalogId       String?
   orderDate       DateTime?
   orderType       String    @default("COMMANDE") // COMMANDE or VSS
   status          String    @default("EN_COURS") // EN_COURS, VALIDEE, SOLDEE, ANNULEE
@@ -216,13 +233,15 @@ model ClientOrder {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-  season Season          @relation(fields: [seasonId], references: [id], onDelete: Cascade)
-  client Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  lines  ClientOrderLine[]
+  season  Season          @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  client  Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  catalog Catalog?        @relation(fields: [catalogId], references: [id])
+  lines   ClientOrderLine[]
 
   @@unique([orderNumber, seasonId])
   @@index([seasonId])
   @@index([clientId])
+  @@index([catalogId])
   @@index([status])
 }
 

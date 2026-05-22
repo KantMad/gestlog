@@ -41,10 +41,13 @@ export async function POST(request: NextRequest) {
               ? (variations as { size: string }[]).map((v) => v.size).join(",")
               : "";
 
+            // Build externalId from B2B IDs (product_id + color_id)
+            const extId = prod.externalId ? String(prod.externalId) : undefined;
+
             await tx.product.upsert({
               where: { reference_color: { reference: String(reference), color: colorStr } },
-              update: { colorCode: colorCode || undefined, sizeScale: sizeScale || undefined },
-              create: { reference: String(reference), color: colorStr, colorCode: colorCode || undefined, sizeScale },
+              update: { colorCode: colorCode || undefined, sizeScale: sizeScale || undefined, externalId: extId || undefined },
+              create: { reference: String(reference), color: colorStr, colorCode: colorCode || undefined, sizeScale, externalId: extId || undefined },
             });
 
             if (Array.isArray(variations)) {

@@ -159,21 +159,36 @@ export async function POST(request: NextRequest) {
         // Process lines
         if (Array.isArray(lines)) {
           for (const line of lines) {
-            const { reference, color, colorLabel, quantities, category, sizeTypeCode } = line;
-            if (!reference || !color) continue;
+            const { reference, color, colorLabel, quantities, category, sizeTypeCode, externalId } = line;
 
-            const sizeScale = quantities ? Object.keys(quantities).join(",") : "";
+            let product = null;
 
-            const product = await prisma.product.upsert({
-              where: { reference_color: { reference: String(reference), color: String(color) } },
-              update: {},
-              create: {
-                reference: String(reference),
-                color: String(color),
-                colorCode: colorLabel || undefined,
-                sizeScale,
-              },
-            });
+            // Strategy 1: resolve by externalId (B2B product_id_color_id)
+            if (externalId) {
+              product = await prisma.product.findUnique({
+                where: { externalId: String(externalId) },
+              });
+            }
+
+            // Strategy 2: resolve by reference + color (fallback or direct import)
+            if (!product && reference && color) {
+              const sizeScale = quantities ? Object.keys(quantities).join(",") : "";
+              product = await prisma.product.upsert({
+                where: { reference_color: { reference: String(reference), color: String(color) } },
+                update: {},
+                create: {
+                  reference: String(reference),
+                  color: String(color),
+                  colorCode: colorLabel || undefined,
+                  sizeScale,
+                },
+              });
+            }
+
+            if (!product) {
+              errors.push(`Commande ${orderNumber}, ligne externalId=${externalId || "?"} ref=${reference || "?"}: produit introuvable`);
+              continue;
+            }
 
             const quantitiesBySize = quantities ? JSON.stringify(quantities) : "{}";
             const totalQuantity = quantities
