@@ -15,6 +15,7 @@ import {
   LogOut,
   Shield,
   User,
+  Tag,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
@@ -22,6 +23,7 @@ import { useAuth } from "@/lib/auth-context";
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Tableau de bord", icon: LayoutDashboard },
   { href: "/import", label: "Import", icon: Upload },
+  { href: "/product-info", label: "Infos produits", icon: Tag },
   { href: "/comparison", label: "Comparaison", icon: GitCompareArrows },
   { href: "/allocation", label: "Répartition", icon: Calculator },
   { href: "/deliveries", label: "Livraisons", icon: Truck },

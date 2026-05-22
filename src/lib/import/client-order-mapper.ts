@@ -10,6 +10,10 @@ export interface ColumnMapping {
   color: string;
   colorCode?: string;
   orderType?: string;
+  status?: string;
+  deliveryWindow?: string;
+  category?: string;
+  sizeTypeCode?: string;
 }
 
 export async function importClientOrders(
@@ -20,6 +24,10 @@ export async function importClientOrders(
   const sizeColumns = detectSizeColumns(sheet.headers);
   const errors: string[] = [];
   let imported = 0;
+
+  // Pre-load size types for resolving size correspondences
+  const sizeTypes = await prisma.sizeType.findMany();
+  const sizeTypeMap = new Map(sizeTypes.map((st) => [st.code, JSON.parse(st.sizes) as string[]]));
 
   const orderGroups = new Map<string, typeof sheet.rows>();
   for (const row of sheet.rows) {
@@ -56,14 +64,32 @@ export async function importClientOrders(
         ? String(firstRow[mapping.orderType] || "COMMANDE").trim()
         : "COMMANDE";
 
+      // New fields: status & delivery window
+      const status = mapping.status
+        ? String(firstRow[mapping.status] || "EN_COURS").trim().toUpperCase()
+        : "EN_COURS";
+
+      const deliveryWindow = mapping.deliveryWindow
+        ? String(firstRow[mapping.deliveryWindow] || "").trim() || null
+        : null;
+
       const clientOrder = await prisma.clientOrder.upsert({
         where: { orderNumber_seasonId: { orderNumber, seasonId } },
-        update: {},
+        update: {
+          status: ["EN_COURS", "VALIDEE", "SOLDEE", "ANNULEE"].includes(status)
+            ? status
+            : "EN_COURS",
+          deliveryWindow,
+        },
         create: {
           orderNumber,
           seasonId,
           clientId: client.id,
           orderType: orderType === "VSS" ? "VSS" : "COMMANDE",
+          status: ["EN_COURS", "VALIDEE", "SOLDEE", "ANNULEE"].includes(status)
+            ? status
+            : "EN_COURS",
+          deliveryWindow,
         },
       });
 
@@ -75,7 +101,43 @@ export async function importClientOrders(
           continue;
         }
 
-        const quantities = extractSizeQuantities(row, sizeColumns);
+        // Category and size type code
+        const category = mapping.category
+          ? String(row[mapping.category] || "").trim() || null
+          : null;
+        const sizeTypeCode = mapping.sizeTypeCode
+          ? String(row[mapping.sizeTypeCode] || "").trim() || null
+          : null;
+
+        // Extract quantities - if we have a sizeTypeCode, resolve the real size names
+        let quantities = extractSizeQuantities(row, sizeColumns);
+        let resolvedSizeScale = sizeColumns.join(",");
+
+        if (sizeTypeCode && sizeTypeMap.has(sizeTypeCode)) {
+          const realSizes = sizeTypeMap.get(sizeTypeCode)!;
+          // Map numbered columns (1, 2, 3...) to real sizes (XS, S, M...)
+          const resolvedQuantities: Record<string, number> = {};
+          const sortedCols = [...sizeColumns].sort((a, b) => {
+            const numA = parseInt(a);
+            const numB = parseInt(b);
+            if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+            return a.localeCompare(b);
+          });
+
+          for (let i = 0; i < sortedCols.length && i < realSizes.length; i++) {
+            const val = row[sortedCols[i]];
+            const qty = typeof val === "number" ? val : parseInt(String(val || "0"), 10);
+            if (!isNaN(qty) && qty > 0) {
+              resolvedQuantities[realSizes[i]] = qty;
+            }
+          }
+
+          if (Object.keys(resolvedQuantities).length > 0) {
+            quantities = resolvedQuantities;
+            resolvedSizeScale = realSizes.join(",");
+          }
+        }
+
         if (Object.keys(quantities).length === 0) continue;
 
         const product = await prisma.product.upsert({
@@ -85,7 +147,7 @@ export async function importClientOrders(
             reference,
             color,
             colorCode: mapping.colorCode ? String(row[mapping.colorCode] || "") : undefined,
-            sizeScale: sizeColumns.join(","),
+            sizeScale: resolvedSizeScale,
           },
         });
 
@@ -99,12 +161,16 @@ export async function importClientOrders(
           update: {
             quantitiesBySize: stringifySizeQuantities(quantities),
             totalQuantity: sumQuantities(quantities),
+            category,
+            sizeTypeCode,
           },
           create: {
             clientOrderId: clientOrder.id,
             productId: product.id,
             quantitiesBySize: stringifySizeQuantities(quantities),
             totalQuantity: sumQuantities(quantities),
+            category,
+            sizeTypeCode,
           },
         });
 

@@ -67,8 +67,9 @@ model Supplier {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  supplierOrders SupplierOrder[]
-  receptions     SupplierReception[]
+  supplierOrders     SupplierOrder[]
+  receptions         SupplierReception[]
+  supplierProductRefs SupplierProductRef[]
 }
 
 model Product {
@@ -100,6 +101,29 @@ model ProductSizeEan {
 
   @@unique([reference, color, size])
   @@index([reference, color])
+}
+
+// Correspondance type de taille → numéros de taille
+model SizeType {
+  id        String   @id @default(cuid())
+  code      String   @unique // ex: "A", "B", "C" — code du type de taille
+  label     String?  // ex: "Standard Femme"
+  sizes     String   // JSON ordered array: ["XS","S","M","L","XL","XXL"]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Correspondance fournisseur ↔ référence produit
+model SupplierProductRef {
+  id           String   @id @default(cuid())
+  supplierId   String
+  reference    String
+  createdAt    DateTime @default(now())
+
+  supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  @@unique([supplierId, reference])
+  @@index([reference])
 }
 
 model SupplierOrder {
@@ -165,14 +189,16 @@ model ReceptionLine {
 }
 
 model ClientOrder {
-  id          String    @id @default(cuid())
-  orderNumber String
-  seasonId    String
-  clientId    String
-  orderDate   DateTime?
-  orderType   String    @default("COMMANDE") // COMMANDE or VSS
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id              String    @id @default(cuid())
+  orderNumber     String
+  seasonId        String
+  clientId        String
+  orderDate       DateTime?
+  orderType       String    @default("COMMANDE") // COMMANDE or VSS
+  status          String    @default("EN_COURS") // EN_COURS, VALIDEE, SOLDEE, ANNULEE
+  deliveryWindow  String?   // ex: "S22-S26", fenêtre de livraison
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   season Season          @relation(fields: [seasonId], references: [id], onDelete: Cascade)
   client Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
@@ -181,6 +207,7 @@ model ClientOrder {
   @@unique([orderNumber, seasonId])
   @@index([seasonId])
   @@index([clientId])
+  @@index([status])
 }
 
 model ClientOrderLine {
@@ -189,6 +216,8 @@ model ClientOrderLine {
   productId        String
   quantitiesBySize String   // JSON
   totalQuantity    Int
+  category         String?  // catégorie produit
+  sizeTypeCode     String?  // code du type de taille (lien vers SizeType)
   createdAt        DateTime @default(now())
 
   clientOrder ClientOrder @relation(fields: [clientOrderId], references: [id], onDelete: Cascade)
@@ -295,7 +324,7 @@ model EanExport {
 model ImportLog {
   id         String   @id @default(cuid())
   seasonId   String
-  importType String   // CLIENT_ORDER, SUPPLIER_ORDER, RECEPTION, STOCK
+  importType String   // CLIENT_ORDER, SUPPLIER_ORDER, RECEPTION, STOCK, SIZE_TYPE, SUPPLIER_REF, EAN
   fileName   String
   rowCount   Int
   errorCount Int      @default(0)
