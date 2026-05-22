@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { parseExcelBuffer } from "@/lib/import/parser";
 
-// GET — list all EAN entries (paginated)
+// GET — list all EAN entries (paginated, sorted by size type position)
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = request.nextUrl;
@@ -10,27 +10,46 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get("page") || "1");
     const limit = 100;
 
-    const where = search
-      ? {
-          OR: [
-            { reference: { contains: search, mode: "insensitive" as const } },
-            { color: { contains: search, mode: "insensitive" as const } },
-            { ean: { contains: search } },
-          ],
-        }
-      : {};
+    // Use raw SQL to sort sizes by their position in product.sizeScale
+    const offset = (page - 1) * limit;
 
-    const [eans, total] = await Promise.all([
-      prisma.productSizeEan.findMany({
-        where,
-        orderBy: [{ reference: "asc" }, { color: "asc" }, { size: "asc" }],
-        take: limit,
-        skip: (page - 1) * limit,
-      }),
-      prisma.productSizeEan.count({ where }),
-    ]);
+    let whereClause = "";
+    const params: string[] = [];
 
-    return NextResponse.json({ data: eans, total, page, limit });
+    if (search) {
+      whereClause = `WHERE (e.reference ILIKE $1 OR e.color ILIKE $1 OR e.ean LIKE $2)`;
+      params.push(`%${search}%`, `%${search}%`);
+    }
+
+    const countQuery = `SELECT count(*) FROM "ProductSizeEan" e ${whereClause}`;
+    const countResult = await prisma.$queryRawUnsafe<[{ count: bigint }]>(
+      countQuery,
+      ...params
+    );
+    const total = Number(countResult[0].count);
+
+    // Main query with size ordering from Product.sizeScale
+    const dataQuery = `
+      SELECT e.id, e.reference, e.color, e.size, e.ean,
+        COALESCE(
+          array_position(string_to_array(p."sizeScale", ','), e.size),
+          999
+        ) as size_pos
+      FROM "ProductSizeEan" e
+      LEFT JOIN "Product" p ON p.reference = e.reference AND p.color = e.color
+      ${whereClause}
+      ORDER BY e.reference ASC, e.color ASC, size_pos ASC
+      LIMIT ${limit} OFFSET ${offset}
+    `;
+
+    const eans = await prisma.$queryRawUnsafe<
+      { id: string; reference: string; color: string; size: string; ean: string; size_pos: number }[]
+    >(dataQuery, ...params);
+
+    // Strip internal size_pos from response
+    const data = eans.map(({ size_pos, ...rest }) => rest);
+
+    return NextResponse.json({ data, total, page, limit });
   } catch (e) {
     return NextResponse.json(
       { error: `Erreur: ${String(e)}` },
@@ -80,10 +99,8 @@ export async function POST(request: NextRequest) {
 
       try {
         await prisma.productSizeEan.upsert({
-          where: {
-            reference_color_size: { reference, color, size },
-          },
-          update: { ean },
+          where: { ean },
+          update: { reference, color, size },
           create: { reference, color, size, ean },
         });
         imported++;
