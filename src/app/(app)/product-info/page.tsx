@@ -23,6 +23,16 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Ruler,
   Factory,
   Barcode,
@@ -31,6 +41,7 @@ import {
   Loader2,
   RefreshCw,
   Search,
+  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
@@ -68,6 +79,8 @@ function SizeTypesTab() {
   } | null>(null);
   const [sizeTypes, setSizeTypes] = useState<SizeTypeData[]>([]);
   const [loadingData, setLoadingData] = useState(true);
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<SizeTypeData | null>(null);
 
   const loadData = useCallback(async () => {
     try {
@@ -138,6 +151,26 @@ function SizeTypesTab() {
       toast.error("Erreur réseau");
     } finally {
       setImporting(false);
+    }
+  };
+
+  const handleDelete = async (id: string, code: string) => {
+    setDeleting(id);
+    try {
+      const res = await fetch(`/api/product-info/size-types?id=${id}`, {
+        method: "DELETE",
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        toast.error(json.error || "Erreur de suppression");
+        return;
+      }
+      toast.success(`Type "${code}" supprime`);
+      loadData();
+    } catch {
+      toast.error("Erreur reseau");
+    } finally {
+      setDeleting(null);
     }
   };
 
@@ -224,6 +257,42 @@ function SizeTypesTab() {
         </>
       )}
 
+      {/* Confirmation suppression */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Supprimer le type de taille ?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteTarget && (
+                <>
+                  Le type <strong>{deleteTarget.code}</strong>
+                  {deleteTarget.label ? ` (${deleteTarget.label})` : ""} et ses{" "}
+                  {deleteTarget.mappings.length} taille
+                  {deleteTarget.mappings.length > 1 ? "s" : ""} seront
+                  definitivement supprimes. Cette action est irreversible.
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setDeleteTarget(null)}>
+              Annuler
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (deleteTarget) {
+                  handleDelete(deleteTarget.id, deleteTarget.code);
+                  setDeleteTarget(null);
+                }
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Supprimer
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Existing data */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
@@ -251,9 +320,22 @@ function SizeTypesTab() {
                     {st.label && (
                       <span className="text-sm text-muted-foreground">{st.label}</span>
                     )}
-                    <span className="text-xs text-muted-foreground ml-auto">
+                    <span className="text-xs text-muted-foreground ml-auto mr-2">
                       {st.mappings.length} taille{st.mappings.length > 1 ? "s" : ""}
                     </span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                      disabled={deleting === st.id}
+                      onClick={() => setDeleteTarget(st)}
+                    >
+                      {deleting === st.id ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-3.5 w-3.5" />
+                      )}
+                    </Button>
                   </div>
                   <Table>
                     <TableHeader>

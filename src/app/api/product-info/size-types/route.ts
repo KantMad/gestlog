@@ -2,6 +2,34 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { parseExcelBuffer } from "@/lib/import/parser";
 
+// DELETE — remove a size type by id (cascade deletes mappings)
+export async function DELETE(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get("id");
+
+    if (!id) {
+      return NextResponse.json({ error: "ID requis" }, { status: 400 });
+    }
+
+    // Check if it exists first
+    const sizeType = await prisma.sizeType.findUnique({ where: { id } });
+    if (!sizeType) {
+      return NextResponse.json({ error: "Type de taille introuvable" }, { status: 404 });
+    }
+
+    // Delete (cascade will remove mappings)
+    await prisma.sizeType.delete({ where: { id } });
+
+    return NextResponse.json({ success: true, deleted: sizeType.code });
+  } catch (e) {
+    return NextResponse.json(
+      { error: `Erreur suppression: ${String(e)}` },
+      { status: 500 }
+    );
+  }
+}
+
 // GET — list all size types with their mappings
 export async function GET() {
   try {
