@@ -44,23 +44,46 @@ export async function POST(request: NextRequest) {
             // Build externalId from B2B IDs (product_id + color_id)
             const extId = prod.externalId ? String(prod.externalId) : undefined;
 
-            await tx.product.upsert({
-              where: { reference_color: { reference: String(reference), color: colorStr } },
-              update: { colorCode: colorCode || undefined, sizeScale: sizeScale || undefined, externalId: extId || undefined },
-              create: { reference: String(reference), color: colorStr, colorCode: colorCode || undefined, sizeScale, externalId: extId || undefined },
-            });
+            // Upsert by externalId if available (allows updating color/reference)
+            // Otherwise fallback to reference+color unique key
+            if (extId) {
+              const existing = await tx.product.findUnique({ where: { externalId: extId } });
+              if (existing) {
+                await tx.product.update({
+                  where: { externalId: extId },
+                  data: { reference: String(reference), color: colorStr, colorCode: colorCode || undefined, sizeScale: sizeScale || undefined },
+                });
+              } else {
+                await tx.product.create({
+                  data: { reference: String(reference), color: colorStr, colorCode: colorCode || undefined, sizeScale, externalId: extId },
+                });
+              }
+            } else {
+              await tx.product.upsert({
+                where: { reference_color: { reference: String(reference), color: colorStr } },
+                update: { colorCode: colorCode || undefined, sizeScale: sizeScale || undefined },
+                create: { reference: String(reference), color: colorStr, colorCode: colorCode || undefined, sizeScale },
+              });
+            }
 
             if (Array.isArray(variations)) {
               for (const v of variations) {
                 if (v.ean && v.size) {
                   try {
-                    await tx.productSizeEan.upsert({
-                      where: { reference_color_size: { reference: String(reference), color: colorStr, size: String(v.size) } },
-                      update: { ean: String(v.ean) },
-                      create: { reference: String(reference), color: colorStr, size: String(v.size), ean: String(v.ean) },
-                    });
+                    // Try to update existing EAN by ean (unique), otherwise create
+                    const existingEan = await tx.productSizeEan.findUnique({ where: { ean: String(v.ean) } });
+                    if (existingEan) {
+                      await tx.productSizeEan.update({
+                        where: { ean: String(v.ean) },
+                        data: { reference: String(reference), color: colorStr, size: String(v.size) },
+                      });
+                    } else {
+                      await tx.productSizeEan.create({
+                        data: { reference: String(reference), color: colorStr, size: String(v.size), ean: String(v.ean) },
+                      });
+                    }
                   } catch {
-                    // EAN duplicate — skip
+                    // Duplicate — skip
                   }
                 }
               }
