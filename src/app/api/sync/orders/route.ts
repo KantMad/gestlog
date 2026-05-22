@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { parseSeasonFromCatalog } from "@/lib/utils";
+
+// Allow up to 60s for sync operations
+export const maxDuration = 60;
 
 // POST — Receive client orders from n8n
 // Expects JSON array of orders with their lines
@@ -17,6 +21,10 @@ export async function POST(request: NextRequest) {
     const errors: string[] = [];
     let imported = 0;
 
+    // Cache for seasons and catalogs to avoid repeated DB queries
+    const seasonCache = new Map<string, { id: string }>();
+    const catalogCache = new Map<string, { id: string }>();
+
     for (const order of orders) {
       try {
         const {
@@ -24,33 +32,84 @@ export async function POST(request: NextRequest) {
           clientCode,
           clientName,
           clientEmail,
-          seasonName,
+          seasonName, // catalog label from B2B (e.g. "MCS Homme W26")
           status,
           deliveryWindowStart,
           deliveryWindowEnd,
           orderType,
-          lines, // array of { reference, color, colorLabel, sizeTypeCode, quantities: {size: qty}, category }
+          lines,
         } = order;
 
-        if (!orderNumber || !clientCode || !seasonName) {
-          errors.push(`Commande ${orderNumber || "?"}: donnees manquantes`);
+        if (!orderNumber || !seasonName) {
+          errors.push(`Commande ${orderNumber || "?"}: donnees manquantes (orderNumber ou seasonName)`);
           continue;
         }
 
-        // Find or skip season
-        const season = await prisma.season.findFirst({
-          where: { name: seasonName },
-        });
+        // Use clientCode or derive from orderNumber if missing
+        const effectiveClientCode = clientCode || `UNKNOWN_${orderNumber}`;
+        const effectiveClientName = clientName || effectiveClientCode;
+
+        // Parse season from catalog label (W26 → AH 2026, S26 → PE 2026, H26 → AH 2026)
+        const parsed = parseSeasonFromCatalog(seasonName);
+        const seasonType = parsed?.type || "AH";
+        const seasonYear = parsed?.year || new Date().getFullYear();
+        const canonicalName = parsed?.canonicalName || `AH${String(seasonYear).slice(-2)}`;
+        const seasonKey = `${seasonYear}_${seasonType}`;
+
+        // Find or auto-create season (cached)
+        let season = seasonCache.get(seasonKey) || null;
         if (!season) {
-          errors.push(`Commande ${orderNumber}: saison "${seasonName}" non trouvee`);
-          continue;
+          let dbSeason = await prisma.season.findFirst({
+            where: { year: seasonYear, type: seasonType },
+          });
+          if (!dbSeason) {
+            try {
+              dbSeason = await prisma.season.create({
+                data: { name: canonicalName, year: seasonYear, type: seasonType, isActive: true },
+              });
+            } catch {
+              dbSeason = await prisma.season.findFirst({
+                where: { year: seasonYear, type: seasonType },
+              });
+              if (!dbSeason) {
+                errors.push(`Commande ${orderNumber}: saison "${seasonName}" impossible a creer`);
+                continue;
+              }
+            }
+          }
+          season = { id: dbSeason.id };
+          seasonCache.set(seasonKey, season);
+        }
+
+        // Find or auto-create catalog (cached)
+        const catalogName = String(seasonName).trim();
+        let catalog = catalogCache.get(catalogName) || null;
+        if (!catalog) {
+          let dbCatalog = await prisma.catalog.findUnique({
+            where: { name: catalogName },
+          });
+          if (!dbCatalog) {
+            try {
+              dbCatalog = await prisma.catalog.create({
+                data: { name: catalogName, seasonId: season.id },
+              });
+            } catch {
+              dbCatalog = await prisma.catalog.findUnique({
+                where: { name: catalogName },
+              });
+            }
+          }
+          if (dbCatalog) {
+            catalog = { id: dbCatalog.id };
+            catalogCache.set(catalogName, catalog);
+          }
         }
 
         // Upsert client
         const client = await prisma.client.upsert({
-          where: { code: clientCode },
-          update: { name: clientName || clientCode, email: clientEmail || undefined },
-          create: { code: clientCode, name: clientName || clientCode, email: clientEmail || undefined },
+          where: { code: effectiveClientCode },
+          update: { name: effectiveClientName, email: clientEmail || undefined },
+          create: { code: effectiveClientCode, name: effectiveClientName, email: clientEmail || undefined },
         });
 
         // Upsert client season
@@ -77,18 +136,20 @@ export async function POST(request: NextRequest) {
         };
         const mappedStatus = statusMap[status] || "EN_COURS";
 
-        // Upsert order
+        // Upsert order with catalog
         const clientOrder = await prisma.clientOrder.upsert({
           where: { orderNumber_seasonId: { orderNumber: String(orderNumber), seasonId: season.id } },
           update: {
             status: mappedStatus,
             deliveryWindow,
             orderType: orderType === "VSS" ? "VSS" : "COMMANDE",
+            catalogId: catalog?.id || undefined,
           },
           create: {
             orderNumber: String(orderNumber),
             seasonId: season.id,
             clientId: client.id,
+            catalogId: catalog?.id || undefined,
             status: mappedStatus,
             deliveryWindow,
             orderType: orderType === "VSS" ? "VSS" : "COMMANDE",
