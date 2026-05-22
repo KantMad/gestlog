@@ -4,16 +4,31 @@ import { parseSizeQuantities, sumQuantities } from "@/lib/utils";
 
 export async function GET(request: NextRequest) {
   const seasonId = request.nextUrl.searchParams.get("seasonId");
+  const catalogId = request.nextUrl.searchParams.get("catalogId");
 
   if (!seasonId) {
     return NextResponse.json({ error: "seasonId requis" }, { status: 400 });
   }
 
   try {
+    // Build where clause — if catalogId provided, filter deliveries that have
+    // a clientOrder belonging to that catalog
+    const where: Record<string, unknown> = {
+      allocationSession: { seasonId },
+    };
+    if (catalogId) {
+      where.clientOrderId = {
+        in: (
+          await prisma.clientOrder.findMany({
+            where: { seasonId, catalogId },
+            select: { id: true },
+          })
+        ).map((o) => o.id),
+      };
+    }
+
     const deliveries = await prisma.delivery.findMany({
-      where: {
-        allocationSession: { seasonId },
-      },
+      where,
       include: {
         client: true,
         lines: { include: { product: true } },
@@ -21,6 +36,20 @@ export async function GET(request: NextRequest) {
       },
       orderBy: { deliveryNumber: "asc" },
     });
+
+    // Also fetch catalog info for each delivery's client order
+    const orderIds = deliveries
+      .map((d) => d.clientOrderId)
+      .filter((id): id is string => !!id);
+    const orders = orderIds.length > 0
+      ? await prisma.clientOrder.findMany({
+          where: { id: { in: orderIds } },
+          select: { id: true, catalogId: true, catalog: { select: { id: true, name: true } } },
+        })
+      : [];
+    const orderCatalogMap = new Map(
+      orders.map((o) => [o.id, o.catalog ? { id: o.catalog.id, name: o.catalog.name } : null])
+    );
 
     const data = deliveries.map((d) => {
       const totalQuantity = d.lines.reduce((sum, l) => {
@@ -35,6 +64,7 @@ export async function GET(request: NextRequest) {
         clientCode: d.client.code,
         status: d.status,
         colorCode: d.colorCode,
+        catalog: d.clientOrderId ? orderCatalogMap.get(d.clientOrderId) || null : null,
         eanExportGenerated: d.eanExportGenerated,
         eanExportCount: d._count.eanExports,
         lineCount: d.lines.length,

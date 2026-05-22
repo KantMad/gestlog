@@ -49,6 +49,7 @@ const IMPORT_TABS = [
       { key: "reference", label: "Référence", required: true },
       { key: "color", label: "Couleur", required: true },
       { key: "colorCode", label: "Code couleur" },
+      { key: "catalog", label: "Catalogue" },
       { key: "status", label: "Statut commande" },
       { key: "deliveryWindow", label: "Fenêtre de livraison" },
       { key: "category", label: "Catégorie" },

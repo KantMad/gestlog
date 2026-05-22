@@ -60,3 +60,22 @@ export function formatPercent(n: number): string {
     maximumFractionDigits: 1,
   }).format(n / 100);
 }
+
+/**
+ * Parse a catalog label to extract season type and year.
+ * Patterns: W26 / S26 / H26 → AH/PE + 2026
+ * W = Winter = AH, H = Hiver = AH, S = Summer/été = PE
+ */
+export function parseSeasonFromCatalog(catalogLabel: string): {
+  type: string;
+  year: number;
+  canonicalName: string;
+} | null {
+  const match = String(catalogLabel).match(/([WSH])(\d{2})(?:\s|$|[^a-z])/i);
+  if (!match) return null;
+  const letter = match[1].toUpperCase();
+  const type = letter === "S" ? "PE" : "AH";
+  const year = 2000 + parseInt(match[2], 10);
+  const canonicalName = `${type}${match[2]}`;
+  return { type, year, canonicalName };
+}

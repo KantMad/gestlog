@@ -17,6 +17,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Calculator,
   Play,
   CheckCircle,
@@ -76,6 +83,12 @@ interface SessionEntry {
   sessionDate: string;
   notes: string | null;
   _count: { lines: number };
+}
+
+interface CatalogEntry {
+  id: string;
+  name: string;
+  orderCount: number;
 }
 
 function ImpactCard({ impact }: { impact: ClientImpact }) {
@@ -316,6 +329,8 @@ export default function AllocationPage() {
   const [clientImpacts, setClientImpacts] = useState<ClientImpact[]>([]);
   const [summary, setSummary] = useState<SimulationSummary | null>(null);
   const [sessions, setSessions] = useState<SessionEntry[]>([]);
+  const [catalogs, setCatalogs] = useState<CatalogEntry[]>([]);
+  const [selectedCatalog, setSelectedCatalog] = useState<string>("ALL");
   const [simulating, setSimulating] = useState(false);
   const [validating, setValidating] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
@@ -331,22 +346,37 @@ export default function AllocationPage() {
     } catch {}
   }, [activeSeason]);
 
+  const loadCatalogs = useCallback(async () => {
+    if (!activeSeason) return;
+    try {
+      const res = await fetch(`/api/catalogs?seasonId=${activeSeason.id}`);
+      const data = await res.json();
+      setCatalogs(data.data || []);
+    } catch {}
+  }, [activeSeason]);
+
   useEffect(() => {
     setLines([]);
     setWarnings([]);
     setClientImpacts([]);
     setSummary(null);
+    setSelectedCatalog("ALL");
     loadSessions();
-  }, [activeSeason, loadSessions]);
+    loadCatalogs();
+  }, [activeSeason, loadSessions, loadCatalogs]);
 
   const runSimulation = async () => {
     if (!activeSeason) return;
     setSimulating(true);
     try {
+      const payload: Record<string, string> = { seasonId: activeSeason.id };
+      if (selectedCatalog !== "ALL") {
+        payload.catalogId = selectedCatalog;
+      }
       const res = await fetch("/api/allocation/simulate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ seasonId: activeSeason.id }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Erreur");
@@ -518,6 +548,24 @@ export default function AllocationPage() {
                   configurées
                 </p>
               </div>
+              {catalogs.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">Catalogue :</span>
+                  <Select value={selectedCatalog} onValueChange={(v: string | null) => v && setSelectedCatalog(v)}>
+                    <SelectTrigger className="w-[240px] text-sm">
+                      <SelectValue placeholder="Tous les catalogues" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ALL">Tous les catalogues</SelectItem>
+                      {catalogs.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.name} ({c.orderCount} cmd)
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <Button
                 onClick={runSimulation}
                 disabled={simulating}

@@ -67,6 +67,7 @@ export const CLIENT_ORDER_PATTERNS: Record<string, RegExp[]> = {
   reference: [/r[eé]f[eé]rence/i, /^ref$/i, /^r[eé]f$/i, /article/i],
   color: [/couleur/i, /color/i, /coloris/i],
   colorCode: [/code.*couleur/i, /color.*code/i],
+  catalog: [/catalogue/i, /catalog/i, /collection/i, /^cat\.$/i],
   status: [/statut/i, /status/i, /^etat$/i, /^état$/i],
   deliveryWindow: [/fen[eê]tre/i, /livraison/i, /delivery.*window/i, /semaine/i],
   category: [/cat[eé]gorie/i, /category/i, /^cat$/i, /famille/i],

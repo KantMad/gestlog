@@ -27,10 +27,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { seasonId } = parsed.data;
+    const { seasonId, catalogId } = parsed.data;
+
+    // Build filter — optionally restrict to a specific catalog
+    const orderWhere: Record<string, unknown> = { seasonId };
+    if (catalogId) {
+      orderWhere.catalogId = catalogId;
+    }
 
     const clientOrders = await prisma.clientOrder.findMany({
-      where: { seasonId },
+      where: orderWhere,
       include: {
         lines: { include: { product: true } },
         client: true,

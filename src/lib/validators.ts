@@ -31,6 +31,7 @@ export const updateDeliveryStatusSchema = z.object({
 
 export const allocationSimulateSchema = z.object({
   seasonId: z.string().min(1),
+  catalogId: z.string().optional(),
   supplierOrderId: z.string().optional(),
   productIds: z.array(z.string()).optional(),
 });

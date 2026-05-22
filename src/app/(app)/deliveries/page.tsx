@@ -56,6 +56,7 @@ interface DeliveryData {
   clientCode: string;
   status: string;
   colorCode: string;
+  catalog: { id: string; name: string } | null;
   eanExportGenerated: boolean;
   eanExportCount: number;
   lineCount: number;
@@ -63,6 +64,12 @@ interface DeliveryData {
   shippedAt: string | null;
   createdAt: string;
   lines: DeliveryLine[];
+}
+
+interface CatalogEntry {
+  id: string;
+  name: string;
+  orderCount: number;
 }
 
 interface SessionEntry {
@@ -251,9 +258,11 @@ export default function DeliveriesPage() {
   const { activeSeason } = useSeason();
   const [deliveries, setDeliveries] = useState<DeliveryData[]>([]);
   const [sessions, setSessions] = useState<SessionEntry[]>([]);
+  const [catalogs, setCatalogs] = useState<CatalogEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>("ALL");
+  const [filterCatalog, setFilterCatalog] = useState<string>("ALL");
 
   const loadDeliveries = useCallback(async () => {
     if (!activeSeason) return;
@@ -282,12 +291,24 @@ export default function DeliveriesPage() {
     } catch {}
   }, [activeSeason]);
 
+  const loadCatalogs = useCallback(async () => {
+    if (!activeSeason) return;
+    try {
+      const res = await fetch(`/api/catalogs?seasonId=${activeSeason.id}`);
+      const data = await res.json();
+      setCatalogs(data.data || []);
+    } catch {}
+  }, [activeSeason]);
+
   useEffect(() => {
     setDeliveries([]);
     setSessions([]);
+    setCatalogs([]);
+    setFilterCatalog("ALL");
     loadDeliveries();
     loadSessions();
-  }, [activeSeason, loadDeliveries, loadSessions]);
+    loadCatalogs();
+  }, [activeSeason, loadDeliveries, loadSessions, loadCatalogs]);
 
   const generateFromSession = async (sessionId: string) => {
     setGenerating(true);
@@ -355,10 +376,11 @@ export default function DeliveriesPage() {
     }
   };
 
-  const filtered =
-    filterStatus === "ALL"
-      ? deliveries
-      : deliveries.filter((d) => d.status === filterStatus);
+  const filtered = deliveries.filter((d) => {
+    if (filterStatus !== "ALL" && d.status !== filterStatus) return false;
+    if (filterCatalog !== "ALL" && d.catalog?.id !== filterCatalog) return false;
+    return true;
+  });
 
   const stats = {
     total: deliveries.length,
@@ -476,25 +498,48 @@ export default function DeliveriesPage() {
               </Card>
             </div>
 
-            {/* Filter */}
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">Filtrer :</span>
-              {[
-                { value: "ALL", label: "Tout" },
-                { value: "PLANIFIEE", label: "Planifiées" },
-                { value: "EN_PREPARATION", label: "En préparation" },
-                { value: "EXPEDIEE", label: "Expédiées" },
-              ].map((f) => (
-                <Button
-                  key={f.value}
-                  variant={filterStatus === f.value ? "default" : "outline"}
-                  size="sm"
-                  className="text-xs h-7"
-                  onClick={() => setFilterStatus(f.value)}
-                >
-                  {f.label}
-                </Button>
-              ))}
+            {/* Filters */}
+            <div className="flex items-center gap-4 flex-wrap">
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Statut :</span>
+                {[
+                  { value: "ALL", label: "Tout" },
+                  { value: "PLANIFIEE", label: "Planifiées" },
+                  { value: "EN_PREPARATION", label: "En préparation" },
+                  { value: "EXPEDIEE", label: "Expédiées" },
+                ].map((f) => (
+                  <Button
+                    key={f.value}
+                    variant={filterStatus === f.value ? "default" : "outline"}
+                    size="sm"
+                    className="text-xs h-7"
+                    onClick={() => setFilterStatus(f.value)}
+                  >
+                    {f.label}
+                  </Button>
+                ))}
+              </div>
+              {catalogs.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">Catalogue :</span>
+                  <Select
+                    value={filterCatalog}
+                    onValueChange={(v: string | null) => v && setFilterCatalog(v)}
+                  >
+                    <SelectTrigger className="h-7 w-[220px] text-xs">
+                      <SelectValue placeholder="Tous les catalogues" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ALL">Tous les catalogues</SelectItem>
+                      {catalogs.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.name} ({c.orderCount})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
 
             {/* Delivery cards */}

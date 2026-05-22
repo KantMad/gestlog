@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { stringifySizeQuantities, sumQuantities } from "@/lib/utils";
+import { stringifySizeQuantities, sumQuantities, parseSeasonFromCatalog } from "@/lib/utils";
 import { detectSizeColumns, extractSizeQuantities, type ParsedSheet } from "./parser";
 
 export interface ColumnMapping {
@@ -9,6 +9,7 @@ export interface ColumnMapping {
   reference: string;
   color: string;
   colorCode?: string;
+  catalog?: string;
   orderType?: string;
   status?: string;
   deliveryWindow?: string;
@@ -68,6 +69,29 @@ export async function importClientOrders(
         ? String(firstRow[mapping.orderType] || "COMMANDE").trim()
         : "COMMANDE";
 
+      // Catalog: find or create from label
+      let catalogId: string | null = null;
+      if (mapping.catalog) {
+        const catalogLabel = String(firstRow[mapping.catalog] || "").trim();
+        if (catalogLabel) {
+          let catalog = await prisma.catalog.findUnique({
+            where: { name: catalogLabel },
+          });
+          if (!catalog) {
+            try {
+              catalog = await prisma.catalog.create({
+                data: { name: catalogLabel, seasonId },
+              });
+            } catch {
+              catalog = await prisma.catalog.findUnique({
+                where: { name: catalogLabel },
+              });
+            }
+          }
+          catalogId = catalog?.id || null;
+        }
+      }
+
       // New fields: status & delivery window
       const status = mapping.status
         ? String(firstRow[mapping.status] || "EN_COURS").trim().toUpperCase()
@@ -77,23 +101,25 @@ export async function importClientOrders(
         ? String(firstRow[mapping.deliveryWindow] || "").trim() || null
         : null;
 
+      const validStatus = ["EN_COURS", "VALIDEE", "SOLDEE", "ANNULEE"].includes(status)
+        ? status
+        : "EN_COURS";
+
       const clientOrder = await prisma.clientOrder.upsert({
         where: { orderNumber_seasonId: { orderNumber, seasonId } },
         update: {
-          status: ["EN_COURS", "VALIDEE", "SOLDEE", "ANNULEE"].includes(status)
-            ? status
-            : "EN_COURS",
+          status: validStatus,
           deliveryWindow,
+          catalogId: catalogId || undefined,
         },
         create: {
           orderNumber,
           seasonId,
           clientId: client.id,
           orderType: orderType === "VSS" ? "VSS" : "COMMANDE",
-          status: ["EN_COURS", "VALIDEE", "SOLDEE", "ANNULEE"].includes(status)
-            ? status
-            : "EN_COURS",
+          status: validStatus,
           deliveryWindow,
+          catalogId: catalogId || undefined,
         },
       });
 
