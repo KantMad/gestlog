@@ -153,6 +153,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
+      version: "v3-findunique",
       data: { imported, errors, total: products.length },
     });
   } catch (e) {
