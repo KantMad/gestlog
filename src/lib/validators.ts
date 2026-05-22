@@ -26,7 +26,24 @@ export const createSupplierSchema = z.object({
 });
 
 export const updateDeliveryStatusSchema = z.object({
-  status: z.enum(["PLANIFIEE", "EN_PREPARATION", "EXPEDIEE"]),
+  status: z.enum(["PLANIFIEE", "EN_PREPARATION", "ENVOYEE_DEPOT", "VALIDEE_DEPOT", "EXPEDIEE"]),
+});
+
+export const updateDeliveryDetailsSchema = z.object({
+  status: z.enum(["PLANIFIEE", "EN_PREPARATION", "ENVOYEE_DEPOT", "VALIDEE_DEPOT", "EXPEDIEE"]).optional(),
+  nbColis: z.number().int().min(0).optional().nullable(),
+  nbPieces: z.number().int().min(0).optional().nullable(),
+  blNumber: z.string().optional().nullable(),
+  carrier: z.string().optional().nullable(),
+  depotStatus: z.enum(["EN_ATTENTE", "RECU", "VALIDE", "ANOMALIE"]).optional().nullable(),
+  comment: z.string().optional().nullable(),
+  shipmentGroupId: z.string().optional().nullable(),
+});
+
+export const createShipmentGroupSchema = z.object({
+  name: z.string().min(1, "Le nom est requis"),
+  carrier: z.string().optional(),
+  deliveryIds: z.array(z.string()).optional(),
 });
 
 export const allocationSimulateSchema = z.object({

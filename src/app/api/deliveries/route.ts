@@ -32,6 +32,7 @@ export async function GET(request: NextRequest) {
       include: {
         client: true,
         lines: { include: { product: true } },
+        shipmentGroup: true,
         _count: { select: { eanExports: true } },
       },
       orderBy: { deliveryNumber: "asc" },
@@ -71,6 +72,17 @@ export async function GET(request: NextRequest) {
         totalQuantity,
         shippedAt: d.shippedAt,
         createdAt: d.createdAt,
+        // Depot workflow fields
+        nbColis: d.nbColis,
+        nbPieces: d.nbPieces,
+        blNumber: d.blNumber,
+        carrier: d.carrier,
+        depotStatus: d.depotStatus,
+        comment: d.comment,
+        sentToDepotAt: d.sentToDepotAt,
+        validatedAt: d.validatedAt,
+        shipmentGroupId: d.shipmentGroupId,
+        shipmentGroupName: d.shipmentGroup?.name || null,
         lines: d.lines.map((l) => ({
           id: l.id,
           productId: l.productId,

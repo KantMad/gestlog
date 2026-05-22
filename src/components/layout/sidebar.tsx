@@ -16,6 +16,8 @@ import {
   Shield,
   User,
   Tag,
+  ClipboardList,
+  Warehouse,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
@@ -27,6 +29,8 @@ const NAV_ITEMS = [
   { href: "/comparison", label: "Comparaison", icon: GitCompareArrows },
   { href: "/allocation", label: "Répartition", icon: Calculator },
   { href: "/deliveries", label: "Livraisons", icon: Truck },
+  { href: "/recap", label: "Récap clients", icon: ClipboardList },
+  { href: "/depot", label: "Vue dépôt", icon: Warehouse },
   { href: "/configuration", label: "Configuration", icon: Settings },
   { href: "/statistics", label: "Statistiques", icon: BarChart3 },
 ];

@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useSeason } from "@/lib/season-context";
 import { Topbar } from "@/components/layout/topbar";
 import { PageHeader } from "@/components/layout/page-header";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -15,6 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
@@ -24,6 +25,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import {
   Truck,
   Package,
   Download,
@@ -31,9 +40,13 @@ import {
   ChevronDown,
   ChevronRight,
   Plus,
-  CheckCircle,
   Clock,
   Send,
+  Warehouse,
+  CheckCircle2,
+  MessageSquare,
+  PackageOpen,
+  Layers,
 } from "lucide-react";
 import { cn, formatNumber, parseSizeScale, type SizeQuantities } from "@/lib/utils";
 import { toast } from "sonner";
@@ -63,6 +76,17 @@ interface DeliveryData {
   totalQuantity: number;
   shippedAt: string | null;
   createdAt: string;
+  // New depot fields
+  nbColis: number | null;
+  nbPieces: number | null;
+  blNumber: string | null;
+  carrier: string | null;
+  depotStatus: string | null;
+  comment: string | null;
+  sentToDepotAt: string | null;
+  validatedAt: string | null;
+  shipmentGroupId: string | null;
+  shipmentGroupName: string | null;
   lines: DeliveryLine[];
 }
 
@@ -79,42 +103,106 @@ interface SessionEntry {
   _count: { lines: number };
 }
 
+interface ShipmentGroupEntry {
+  id: string;
+  name: string;
+  carrier: string | null;
+  _count: { deliveries: number };
+}
+
 function StatusBadge({ status }: { status: string }) {
-  if (status === "PLANIFIEE")
-    return (
-      <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100 gap-1">
-        <Clock className="h-3 w-3" />
-        Planifiée
-      </Badge>
-    );
-  if (status === "EN_PREPARATION")
-    return (
-      <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100 gap-1">
-        <Package className="h-3 w-3" />
-        En préparation
-      </Badge>
-    );
+  const map: Record<
+    string,
+    { label: string; icon: React.ReactNode; className: string }
+  > = {
+    PLANIFIEE: {
+      label: "Planifiée",
+      icon: <Clock className="h-3 w-3" />,
+      className: "bg-blue-100 text-blue-700 hover:bg-blue-100",
+    },
+    EN_PREPARATION: {
+      label: "En préparation",
+      icon: <Package className="h-3 w-3" />,
+      className: "bg-amber-100 text-amber-700 hover:bg-amber-100",
+    },
+    ENVOYEE_DEPOT: {
+      label: "Envoyée au dépôt",
+      icon: <Warehouse className="h-3 w-3" />,
+      className: "bg-purple-100 text-purple-700 hover:bg-purple-100",
+    },
+    VALIDEE_DEPOT: {
+      label: "Validée dépôt",
+      icon: <CheckCircle2 className="h-3 w-3" />,
+      className: "bg-teal-100 text-teal-700 hover:bg-teal-100",
+    },
+    EXPEDIEE: {
+      label: "Expédiée",
+      icon: <Send className="h-3 w-3" />,
+      className: "bg-emerald-100 text-emerald-700 hover:bg-emerald-100",
+    },
+  };
+  const info = map[status] || {
+    label: status,
+    icon: null,
+    className: "bg-zinc-100 text-zinc-700",
+  };
   return (
-    <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 gap-1">
-      <Send className="h-3 w-3" />
-      Expédiée
+    <Badge className={cn("gap-1", info.className)}>
+      {info.icon}
+      {info.label}
+    </Badge>
+  );
+}
+
+function DepotStatusBadge({ status }: { status: string | null }) {
+  if (!status) return null;
+  const map: Record<string, { label: string; className: string }> = {
+    EN_ATTENTE: { label: "En attente", className: "bg-zinc-100 text-zinc-600" },
+    RECU: { label: "Reçu", className: "bg-blue-100 text-blue-700" },
+    VALIDE: { label: "Validé", className: "bg-emerald-100 text-emerald-700" },
+    ANOMALIE: { label: "Anomalie", className: "bg-red-100 text-red-700" },
+  };
+  const info = map[status] || { label: status, className: "bg-zinc-100 text-zinc-600" };
+  return (
+    <Badge variant="outline" className={cn("text-xs", info.className)}>
+      {info.label}
     </Badge>
   );
 }
 
 function DeliveryCard({
   delivery,
-  onStatusChange,
+  onUpdate,
   onExportEan,
+  shipmentGroups,
 }: {
   delivery: DeliveryData;
-  onStatusChange: (id: string, status: string) => void;
+  onUpdate: (id: string, data: Record<string, unknown>) => Promise<void>;
   onExportEan: (id: string) => void;
+  shipmentGroups: ShipmentGroupEntry[];
 }) {
   const [expanded, setExpanded] = useState(false);
-  const sizes = delivery.lines.length > 0
-    ? parseSizeScale(delivery.lines[0].sizeScale)
-    : [];
+  const [editingField, setEditingField] = useState<string | null>(null);
+  const [fieldValue, setFieldValue] = useState("");
+  const sizes =
+    delivery.lines.length > 0
+      ? parseSizeScale(delivery.lines[0].sizeScale)
+      : [];
+
+  const saveField = async (field: string, value: unknown) => {
+    await onUpdate(delivery.id, { [field]: value });
+    setEditingField(null);
+  };
+
+  const canSendToDepot =
+    delivery.status === "EN_PREPARATION" && delivery.eanExportGenerated;
+
+  const handleSendToDepot = async () => {
+    await onUpdate(delivery.id, {
+      status: "ENVOYEE_DEPOT",
+      depotStatus: "EN_ATTENTE",
+    });
+  };
 
   return (
     <Card className="overflow-hidden">
@@ -139,75 +227,368 @@ function DeliveryCard({
               {delivery.deliveryNumber}
             </div>
             <div>
-              <span className="font-medium text-sm">{delivery.clientName}</span>
-              <span className="text-muted-foreground text-xs ml-2">
-                ({delivery.clientCode})
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="font-medium text-sm">
+                  {delivery.clientName}
+                </span>
+                <span className="text-muted-foreground text-xs">
+                  ({delivery.clientCode})
+                </span>
+                {delivery.shipmentGroupName && (
+                  <Badge
+                    variant="outline"
+                    className="text-xs gap-1 border-indigo-300 text-indigo-700"
+                  >
+                    <Layers className="h-3 w-3" />
+                    {delivery.shipmentGroupName}
+                  </Badge>
+                )}
+              </div>
+              {delivery.blNumber && (
+                <span className="text-xs text-muted-foreground">
+                  BL: {delivery.blNumber}
+                </span>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-3">
+            {delivery.nbColis != null && (
+              <span className="text-xs text-muted-foreground">
+                {delivery.nbColis} colis
+              </span>
+            )}
             <span className="text-sm text-muted-foreground">
-              {delivery.lineCount} réf. · {formatNumber(delivery.totalQuantity)} pcs
+              {delivery.lineCount} réf. ·{" "}
+              {formatNumber(delivery.totalQuantity)} pcs
             </span>
             <StatusBadge status={delivery.status} />
+            <DepotStatusBadge status={delivery.depotStatus} />
           </div>
         </div>
       </div>
 
       {expanded && (
         <div className="border-t">
-          <div className="px-4 py-3 bg-muted/30 flex items-center justify-between">
-            <div className="flex items-center gap-4 text-xs text-muted-foreground">
-              <span>
-                Créée le{" "}
-                {new Date(delivery.createdAt).toLocaleDateString("fr-FR")}
-              </span>
-              {delivery.shippedAt && (
+          <div className="px-4 py-3 bg-muted/30 space-y-3">
+            {/* Top row: dates + actions */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
                 <span>
-                  Expédiée le{" "}
-                  {new Date(delivery.shippedAt).toLocaleDateString("fr-FR")}
+                  Créée le{" "}
+                  {new Date(delivery.createdAt).toLocaleDateString("fr-FR")}
                 </span>
-              )}
-              {delivery.eanExportGenerated && (
-                <Badge
+                {delivery.sentToDepotAt && (
+                  <span>
+                    Envoyée dépôt :{" "}
+                    {new Date(delivery.sentToDepotAt).toLocaleDateString(
+                      "fr-FR"
+                    )}
+                  </span>
+                )}
+                {delivery.validatedAt && (
+                  <span>
+                    Validée :{" "}
+                    {new Date(delivery.validatedAt).toLocaleDateString("fr-FR")}
+                  </span>
+                )}
+                {delivery.shippedAt && (
+                  <span>
+                    Expédiée :{" "}
+                    {new Date(delivery.shippedAt).toLocaleDateString("fr-FR")}
+                  </span>
+                )}
+                {delivery.eanExportGenerated && (
+                  <Badge
+                    variant="outline"
+                    className="text-xs border-emerald-300 text-emerald-700"
+                  >
+                    <FileSpreadsheet className="h-3 w-3 mr-1" />
+                    EAN exporté
+                  </Badge>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                {canSendToDepot && (
+                  <Button
+                    variant="default"
+                    size="sm"
+                    className="h-8 gap-1 text-xs bg-purple-600 hover:bg-purple-700"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleSendToDepot();
+                    }}
+                  >
+                    <Warehouse className="h-3 w-3" />
+                    Envoyer au dépôt
+                  </Button>
+                )}
+                {delivery.status !== "EXPEDIEE" && (
+                  <Select
+                    value={delivery.status}
+                    onValueChange={(v) =>
+                      v && onUpdate(delivery.id, { status: v })
+                    }
+                  >
+                    <SelectTrigger className="h-8 w-[180px] text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="PLANIFIEE">Planifiée</SelectItem>
+                      <SelectItem value="EN_PREPARATION">
+                        En préparation
+                      </SelectItem>
+                      <SelectItem value="ENVOYEE_DEPOT">
+                        Envoyée au dépôt
+                      </SelectItem>
+                      <SelectItem value="VALIDEE_DEPOT">
+                        Validée dépôt
+                      </SelectItem>
+                      <SelectItem value="EXPEDIEE">Expédiée</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
+                <Button
                   variant="outline"
-                  className="text-xs border-emerald-300 text-emerald-700"
+                  size="sm"
+                  className="h-8 gap-1 text-xs"
+                  onClick={() => onExportEan(delivery.id)}
                 >
-                  <FileSpreadsheet className="h-3 w-3 mr-1" />
-                  EAN exporté
-                </Badge>
-              )}
+                  <Download className="h-3 w-3" />
+                  Export EAN
+                </Button>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              {delivery.status !== "EXPEDIEE" && (
+
+            {/* Editable depot fields */}
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {/* BL Number */}
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">N° BL</Label>
+                {editingField === "blNumber" ? (
+                  <div className="flex gap-1">
+                    <Input
+                      className="h-7 text-xs"
+                      value={fieldValue}
+                      onChange={(e) => setFieldValue(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter")
+                          saveField("blNumber", fieldValue || null);
+                        if (e.key === "Escape") setEditingField(null);
+                      }}
+                      autoFocus
+                    />
+                    <Button
+                      size="sm"
+                      className="h-7 text-xs px-2"
+                      onClick={() =>
+                        saveField("blNumber", fieldValue || null)
+                      }
+                    >
+                      OK
+                    </Button>
+                  </div>
+                ) : (
+                  <button
+                    className="text-sm text-left w-full px-2 py-1 rounded hover:bg-accent transition-colors"
+                    onClick={() => {
+                      setFieldValue(delivery.blNumber || "");
+                      setEditingField("blNumber");
+                    }}
+                  >
+                    {delivery.blNumber || (
+                      <span className="text-muted-foreground italic">
+                        Non renseigné
+                      </span>
+                    )}
+                  </button>
+                )}
+              </div>
+
+              {/* Nb colis */}
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">
+                  Nb colis
+                </Label>
+                {editingField === "nbColis" ? (
+                  <div className="flex gap-1">
+                    <Input
+                      type="number"
+                      className="h-7 text-xs"
+                      value={fieldValue}
+                      onChange={(e) => setFieldValue(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter")
+                          saveField(
+                            "nbColis",
+                            fieldValue ? parseInt(fieldValue) : null
+                          );
+                        if (e.key === "Escape") setEditingField(null);
+                      }}
+                      autoFocus
+                    />
+                    <Button
+                      size="sm"
+                      className="h-7 text-xs px-2"
+                      onClick={() =>
+                        saveField(
+                          "nbColis",
+                          fieldValue ? parseInt(fieldValue) : null
+                        )
+                      }
+                    >
+                      OK
+                    </Button>
+                  </div>
+                ) : (
+                  <button
+                    className="text-sm text-left w-full px-2 py-1 rounded hover:bg-accent transition-colors"
+                    onClick={() => {
+                      setFieldValue(
+                        delivery.nbColis != null
+                          ? String(delivery.nbColis)
+                          : ""
+                      );
+                      setEditingField("nbColis");
+                    }}
+                  >
+                    {delivery.nbColis != null ? (
+                      delivery.nbColis
+                    ) : (
+                      <span className="text-muted-foreground italic">—</span>
+                    )}
+                  </button>
+                )}
+              </div>
+
+              {/* Transporteur */}
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">
+                  Transporteur
+                </Label>
+                {editingField === "carrier" ? (
+                  <div className="flex gap-1">
+                    <Input
+                      className="h-7 text-xs"
+                      value={fieldValue}
+                      onChange={(e) => setFieldValue(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter")
+                          saveField("carrier", fieldValue || null);
+                        if (e.key === "Escape") setEditingField(null);
+                      }}
+                      autoFocus
+                    />
+                    <Button
+                      size="sm"
+                      className="h-7 text-xs px-2"
+                      onClick={() =>
+                        saveField("carrier", fieldValue || null)
+                      }
+                    >
+                      OK
+                    </Button>
+                  </div>
+                ) : (
+                  <button
+                    className="text-sm text-left w-full px-2 py-1 rounded hover:bg-accent transition-colors"
+                    onClick={() => {
+                      setFieldValue(delivery.carrier || "");
+                      setEditingField("carrier");
+                    }}
+                  >
+                    {delivery.carrier || (
+                      <span className="text-muted-foreground italic">—</span>
+                    )}
+                  </button>
+                )}
+              </div>
+
+              {/* Groupe d'envoi */}
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">
+                  Groupe d&apos;envoi
+                </Label>
                 <Select
-                  value={delivery.status}
-                  onValueChange={(v) => v && onStatusChange(delivery.id, v)}
+                  value={delivery.shipmentGroupId || "NONE"}
+                  onValueChange={(v) =>
+                    onUpdate(delivery.id, {
+                      shipmentGroupId: v === "NONE" ? null : v,
+                    })
+                  }
                 >
-                  <SelectTrigger className="h-8 w-[160px] text-xs">
-                    <SelectValue />
+                  <SelectTrigger className="h-7 text-xs">
+                    <SelectValue placeholder="Aucun" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="PLANIFIEE">Planifiée</SelectItem>
-                    <SelectItem value="EN_PREPARATION">
-                      En préparation
-                    </SelectItem>
-                    <SelectItem value="EXPEDIEE">Expédiée</SelectItem>
+                    <SelectItem value="NONE">Aucun</SelectItem>
+                    {shipmentGroups.map((g) => (
+                      <SelectItem key={g.id} value={g.id}>
+                        {g.name}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
-              )}
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 gap-1 text-xs"
-                onClick={() => onExportEan(delivery.id)}
-              >
-                <Download className="h-3 w-3" />
-                Export EAN
-              </Button>
+              </div>
             </div>
+
+            {/* Comment */}
+            {(delivery.comment || editingField === "comment") && (
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground flex items-center gap-1">
+                  <MessageSquare className="h-3 w-3" />
+                  Commentaire
+                </Label>
+                {editingField === "comment" ? (
+                  <div className="flex gap-1">
+                    <Input
+                      className="h-7 text-xs flex-1"
+                      value={fieldValue}
+                      onChange={(e) => setFieldValue(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter")
+                          saveField("comment", fieldValue || null);
+                        if (e.key === "Escape") setEditingField(null);
+                      }}
+                      autoFocus
+                    />
+                    <Button
+                      size="sm"
+                      className="h-7 text-xs px-2"
+                      onClick={() =>
+                        saveField("comment", fieldValue || null)
+                      }
+                    >
+                      OK
+                    </Button>
+                  </div>
+                ) : (
+                  <button
+                    className="text-sm text-left w-full px-2 py-1 rounded hover:bg-accent transition-colors"
+                    onClick={() => {
+                      setFieldValue(delivery.comment || "");
+                      setEditingField("comment");
+                    }}
+                  >
+                    {delivery.comment}
+                  </button>
+                )}
+              </div>
+            )}
+            {!delivery.comment && editingField !== "comment" && (
+              <button
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+                onClick={() => {
+                  setFieldValue("");
+                  setEditingField("comment");
+                }}
+              >
+                <Plus className="h-3 w-3" />
+                Ajouter un commentaire
+              </button>
+            )}
           </div>
 
+          {/* Product lines table */}
           <ScrollArea>
             <Table>
               <TableHeader>
@@ -232,10 +613,7 @@ function DeliveryCard({
                       </TableCell>
                       <TableCell className="text-sm">{line.color}</TableCell>
                       {(sizes.length > 0 ? sizes : lineSizes).map((size) => (
-                        <TableCell
-                          key={size}
-                          className="text-center text-sm"
-                        >
+                        <TableCell key={size} className="text-center text-sm">
                           {line.quantities[size] || "-"}
                         </TableCell>
                       ))}
@@ -254,11 +632,94 @@ function DeliveryCard({
   );
 }
 
+function CreateShipmentGroupDialog({
+  onCreated,
+}: {
+  onCreated: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [carrier, setCarrier] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const handleCreate = async () => {
+    if (!name.trim()) return;
+    setSaving(true);
+    try {
+      const res = await fetch("/api/shipment-groups", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: name.trim(), carrier: carrier.trim() || undefined }),
+      });
+      if (!res.ok) throw new Error("Erreur création");
+      toast.success("Groupe créé");
+      setOpen(false);
+      setName("");
+      setCarrier("");
+      onCreated();
+    } catch (e) {
+      toast.error(String(e));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <>
+      <Button
+        variant="outline"
+        size="sm"
+        className="gap-1 text-xs"
+        onClick={() => setOpen(true)}
+      >
+        <Layers className="h-3.5 w-3.5" />
+        Nouveau groupe d&apos;envoi
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Créer un groupe d&apos;envoi</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Nom du groupe</Label>
+              <Input
+                placeholder="ex: PAMAZO S22"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Transporteur (optionnel)</Label>
+              <Input
+                placeholder="ex: Chronopost"
+                value={carrier}
+                onChange={(e) => setCarrier(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpen(false)}>
+              Annuler
+            </Button>
+            <Button onClick={handleCreate} disabled={!name.trim() || saving}>
+              {saving ? "Création..." : "Créer"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 export default function DeliveriesPage() {
   const { activeSeason } = useSeason();
   const [deliveries, setDeliveries] = useState<DeliveryData[]>([]);
   const [sessions, setSessions] = useState<SessionEntry[]>([]);
   const [catalogs, setCatalogs] = useState<CatalogEntry[]>([]);
+  const [shipmentGroups, setShipmentGroups] = useState<ShipmentGroupEntry[]>(
+    []
+  );
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>("ALL");
@@ -271,7 +732,8 @@ export default function DeliveriesPage() {
       const res = await fetch(`/api/deliveries?seasonId=${activeSeason.id}`);
       const data = await res.json();
       setDeliveries(data.data || []);
-    } catch {} finally {
+    } catch {
+    } finally {
       setLoading(false);
     }
   }, [activeSeason]);
@@ -300,6 +762,14 @@ export default function DeliveriesPage() {
     } catch {}
   }, [activeSeason]);
 
+  const loadShipmentGroups = useCallback(async () => {
+    try {
+      const res = await fetch("/api/shipment-groups");
+      const data = await res.json();
+      setShipmentGroups(data.data || []);
+    } catch {}
+  }, []);
+
   useEffect(() => {
     setDeliveries([]);
     setSessions([]);
@@ -308,7 +778,14 @@ export default function DeliveriesPage() {
     loadDeliveries();
     loadSessions();
     loadCatalogs();
-  }, [activeSeason, loadDeliveries, loadSessions, loadCatalogs]);
+    loadShipmentGroups();
+  }, [
+    activeSeason,
+    loadDeliveries,
+    loadSessions,
+    loadCatalogs,
+    loadShipmentGroups,
+  ]);
 
   const generateFromSession = async (sessionId: string) => {
     setGenerating(true);
@@ -331,15 +808,18 @@ export default function DeliveriesPage() {
     }
   };
 
-  const updateStatus = async (deliveryId: string, status: string) => {
+  const updateDelivery = async (
+    deliveryId: string,
+    data: Record<string, unknown>
+  ) => {
     try {
       const res = await fetch(`/api/deliveries/${deliveryId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status }),
+        body: JSON.stringify(data),
       });
       if (!res.ok) throw new Error("Erreur mise à jour");
-      toast.success("Statut mis à jour");
+      toast.success("Livraison mise à jour");
       loadDeliveries();
     } catch (e) {
       toast.error("Erreur", { description: String(e) });
@@ -378,7 +858,8 @@ export default function DeliveriesPage() {
 
   const filtered = deliveries.filter((d) => {
     if (filterStatus !== "ALL" && d.status !== filterStatus) return false;
-    if (filterCatalog !== "ALL" && d.catalog?.id !== filterCatalog) return false;
+    if (filterCatalog !== "ALL" && d.catalog?.id !== filterCatalog)
+      return false;
     return true;
   });
 
@@ -386,6 +867,9 @@ export default function DeliveriesPage() {
     total: deliveries.length,
     planned: deliveries.filter((d) => d.status === "PLANIFIEE").length,
     inPrep: deliveries.filter((d) => d.status === "EN_PREPARATION").length,
+    atDepot: deliveries.filter(
+      (d) => d.status === "ENVOYEE_DEPOT" || d.status === "VALIDEE_DEPOT"
+    ).length,
     shipped: deliveries.filter((d) => d.status === "EXPEDIEE").length,
     totalPcs: deliveries.reduce((s, d) => s + d.totalQuantity, 0),
   };
@@ -396,32 +880,42 @@ export default function DeliveriesPage() {
       <div className="p-8 space-y-6">
         <PageHeader
           title="Livraisons"
-          description="Suivez les livraisons, gérez les statuts et exportez les fichiers EAN"
+          description="Gérez le flux livraison : préparation, envoi au dépôt, expédition et export EAN"
           action={
-            sessions.length > 0 ? (
-              <Select
-                onValueChange={(v: string | null) => v && generateFromSession(v)}
-              >
-                <SelectTrigger className="w-[260px] gap-2" disabled={generating}>
-                  <Plus className="h-4 w-4" />
-                  <SelectValue
-                    placeholder={
-                      generating
-                        ? "Génération..."
-                        : "Générer depuis une session"
-                    }
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {sessions.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>
-                      {new Date(s.sessionDate).toLocaleDateString("fr-FR")} —{" "}
-                      {s._count.lines} lignes
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            ) : undefined
+            <div className="flex items-center gap-2">
+              <CreateShipmentGroupDialog
+                onCreated={loadShipmentGroups}
+              />
+              {sessions.length > 0 && (
+                <Select
+                  onValueChange={(v: string | null) =>
+                    v && generateFromSession(v)
+                  }
+                >
+                  <SelectTrigger
+                    className="w-[260px] gap-2"
+                    disabled={generating}
+                  >
+                    <Plus className="h-4 w-4" />
+                    <SelectValue
+                      placeholder={
+                        generating
+                          ? "Génération..."
+                          : "Générer depuis une session"
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {sessions.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>
+                        {new Date(s.sessionDate).toLocaleDateString("fr-FR")} —{" "}
+                        {s._count.lines} lignes
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
           }
         />
 
@@ -453,13 +947,11 @@ export default function DeliveriesPage() {
         ) : (
           <>
             {/* Stats */}
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
               <Card>
                 <CardContent className="pt-6">
                   <div className="text-2xl font-bold">{stats.total}</div>
-                  <p className="text-sm text-muted-foreground">
-                    Total livraisons
-                  </p>
+                  <p className="text-sm text-muted-foreground">Total</p>
                 </CardContent>
               </Card>
               <Card>
@@ -482,6 +974,14 @@ export default function DeliveriesPage() {
               </Card>
               <Card>
                 <CardContent className="pt-6">
+                  <div className="text-2xl font-bold text-purple-600">
+                    {stats.atDepot}
+                  </div>
+                  <p className="text-sm text-muted-foreground">Au dépôt</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="pt-6">
                   <div className="text-2xl font-bold text-emerald-600">
                     {stats.shipped}
                   </div>
@@ -493,7 +993,7 @@ export default function DeliveriesPage() {
                   <div className="text-2xl font-bold">
                     {formatNumber(stats.totalPcs)}
                   </div>
-                  <p className="text-sm text-muted-foreground">Pièces total</p>
+                  <p className="text-sm text-muted-foreground">Pièces</p>
                 </CardContent>
               </Card>
             </div>
@@ -505,7 +1005,8 @@ export default function DeliveriesPage() {
                 {[
                   { value: "ALL", label: "Tout" },
                   { value: "PLANIFIEE", label: "Planifiées" },
-                  { value: "EN_PREPARATION", label: "En préparation" },
+                  { value: "EN_PREPARATION", label: "En prép." },
+                  { value: "ENVOYEE_DEPOT", label: "Au dépôt" },
                   { value: "EXPEDIEE", label: "Expédiées" },
                 ].map((f) => (
                   <Button
@@ -521,16 +1022,22 @@ export default function DeliveriesPage() {
               </div>
               {catalogs.length > 0 && (
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">Catalogue :</span>
+                  <span className="text-sm text-muted-foreground">
+                    Catalogue :
+                  </span>
                   <Select
                     value={filterCatalog}
-                    onValueChange={(v: string | null) => v && setFilterCatalog(v)}
+                    onValueChange={(v: string | null) =>
+                      v && setFilterCatalog(v)
+                    }
                   >
                     <SelectTrigger className="h-7 w-[220px] text-xs">
                       <SelectValue placeholder="Tous les catalogues" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="ALL">Tous les catalogues</SelectItem>
+                      <SelectItem value="ALL">
+                        Tous les catalogues
+                      </SelectItem>
                       {catalogs.map((c) => (
                         <SelectItem key={c.id} value={c.id}>
                           {c.name} ({c.orderCount})
@@ -548,8 +1055,9 @@ export default function DeliveriesPage() {
                 <DeliveryCard
                   key={delivery.id}
                   delivery={delivery}
-                  onStatusChange={updateStatus}
+                  onUpdate={updateDelivery}
                   onExportEan={exportEan}
+                  shipmentGroups={shipmentGroups}
                 />
               ))}
               {filtered.length === 0 && (

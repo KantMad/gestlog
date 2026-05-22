@@ -230,6 +230,11 @@ model ClientOrder {
   orderType       String    @default("COMMANDE") // COMMANDE or VSS
   status          String    @default("EN_COURS") // EN_COURS, VALIDEE, SOLDEE, ANNULEE
   deliveryWindow  String?   // ex: "S22-S26", fenêtre de livraison
+  paymentStatus   String    @default("EN_ATTENTE") // EN_ATTENTE, VALIDE, REFUSE
+  tioOrderNumber  String?   // Take In Order reference number
+  deliveryDateStart DateTime?
+  deliveryDateEnd   DateTime?
+  totalAmount     Float?    // montant total commande
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
@@ -312,26 +317,48 @@ model AllocationLine {
   @@index([productId])
 }
 
+model ShipmentGroup {
+  id          String   @id @default(cuid())
+  name        String   // ex: "PAMAZO S22"
+  carrier     String?  // transporteur
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  deliveries Delivery[]
+}
+
 model Delivery {
   id                  String    @id @default(cuid())
   deliveryNumber      Int
   clientId            String
   clientOrderId       String?
   allocationSessionId String?
-  status              String    @default("PLANIFIEE") // PLANIFIEE, EN_PREPARATION, EXPEDIEE
+  shipmentGroupId     String?
+  status              String    @default("PLANIFIEE") // PLANIFIEE, EN_PREPARATION, ENVOYEE_DEPOT, VALIDEE_DEPOT, EXPEDIEE
   colorCode           String
   eanExportGenerated  Boolean   @default(false)
+  // Depot workflow fields
+  nbColis             Int?
+  nbPieces            Int?
+  blNumber            String?   // numéro BL
+  carrier             String?   // transporteur
+  depotStatus         String?   // EN_ATTENTE, RECU, VALIDE, ANOMALIE
+  comment             String?   // commentaire libre
+  sentToDepotAt       DateTime?
+  validatedAt         DateTime?
   shippedAt           DateTime?
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
   client            Client              @relation(fields: [clientId], references: [id], onDelete: Cascade)
   allocationSession AllocationSession?  @relation(fields: [allocationSessionId], references: [id])
+  shipmentGroup     ShipmentGroup?      @relation(fields: [shipmentGroupId], references: [id])
   lines             DeliveryLine[]
   eanExports        EanExport[]
 
   @@index([clientId])
   @@index([status])
+  @@index([shipmentGroupId])
 }
 
 model DeliveryLine {
