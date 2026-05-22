@@ -103,14 +103,30 @@ model ProductSizeEan {
   @@index([reference, color])
 }
 
-// Correspondance type de taille → numéros de taille
+// Type de taille (ex: "A" = Standard Femme)
 model SizeType {
   id        String   @id @default(cuid())
-  code      String   @unique // ex: "A", "B", "C" — code du type de taille
+  code      String   @unique // ex: "A", "B", "C"
   label     String?  // ex: "Standard Femme"
-  sizes     String   // JSON ordered array: ["XS","S","M","L","XL","XXL"]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  mappings SizeTypeMapping[]
+}
+
+// Mapping : type de taille → numéro de taille → valeur taille
+// Ex: type "A", position 1 → "XS" ; type "A", position 2 → "S" ; etc.
+model SizeTypeMapping {
+  id           String @id @default(cuid())
+  sizeTypeId   String
+  position     Int    // numéro de taille (1, 2, 3, 4...)
+  sizeName     String // valeur taille ("XS", "S", "M", "L"...)
+
+  sizeType SizeType @relation(fields: [sizeTypeId], references: [id], onDelete: Cascade)
+
+  @@unique([sizeTypeId, position])
+  @@unique([sizeTypeId, sizeName])
+  @@index([sizeTypeId])
 }
 
 // Correspondance fournisseur ↔ référence produit

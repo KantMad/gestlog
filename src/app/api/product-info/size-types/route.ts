@@ -2,18 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { parseExcelBuffer } from "@/lib/import/parser";
 
-// GET — list all size types
+// GET — list all size types with their mappings
 export async function GET() {
   try {
     const sizeTypes = await prisma.sizeType.findMany({
+      include: {
+        mappings: { orderBy: { position: "asc" } },
+      },
       orderBy: { code: "asc" },
     });
-    return NextResponse.json({
-      data: sizeTypes.map((st) => ({
-        ...st,
-        sizes: JSON.parse(st.sizes),
-      })),
-    });
+    return NextResponse.json({ data: sizeTypes });
   } catch (e) {
     return NextResponse.json(
       { error: `Erreur: ${String(e)}` },
@@ -22,13 +20,15 @@ export async function GET() {
   }
 }
 
-// POST — import size types from CSV/Excel
-// Expected columns: code (type de taille), label (optionnel), then size columns (1, 2, 3... or named)
+// POST — import size type mappings from CSV/Excel
+// Expected columns: sizeTypeCode (type de taille), sizeName (valeur taille), position (numéro de taille)
+// OR: sizeTypeCode, label, then numbered columns (1, 2, 3...) containing size names
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
     const file = formData.get("file") as File | null;
     const mappingJson = formData.get("mapping") as string | null;
+    const format = formData.get("format") as string | null; // "rows" or "columns"
 
     if (!file) {
       return NextResponse.json({ error: "Fichier requis" }, { status: 400 });
@@ -45,64 +45,92 @@ export async function POST(request: NextRequest) {
 
     const sheet = sheets[0];
     const mapping = mappingJson ? JSON.parse(mappingJson) : {};
-    const codeCol = mapping.code || "code";
-    const labelCol = mapping.label || "label";
-
-    // All columns that are not code/label are size columns (in order)
-    const sizeColumns = sheet.headers.filter(
-      (h) => h !== codeCol && h !== labelCol
-    );
-
     const errors: string[] = [];
     let imported = 0;
 
-    for (const row of sheet.rows) {
-      const code = String(row[codeCol] || "").trim();
-      if (!code) {
-        errors.push(`Ligne ignorée: code de type de taille manquant`);
-        continue;
+    if (format === "rows") {
+      // Format ligne par ligne: sizeTypeCode | sizeName | position
+      for (const row of sheet.rows) {
+        const code = String(row[mapping.sizeTypeCode] || "").trim();
+        const sizeName = String(row[mapping.sizeName] || "").trim();
+        const posStr = String(row[mapping.position] || "").trim();
+        const position = parseInt(posStr);
+        const label = mapping.label ? String(row[mapping.label] || "").trim() || null : null;
+
+        if (!code || !sizeName || isNaN(position)) {
+          errors.push(`Ligne ignorée: code=${code}, taille=${sizeName}, n°=${posStr}`);
+          continue;
+        }
+
+        try {
+          const sizeType = await prisma.sizeType.upsert({
+            where: { code },
+            update: { ...(label ? { label } : {}) },
+            create: { code, label },
+          });
+
+          await prisma.sizeTypeMapping.upsert({
+            where: {
+              sizeTypeId_position: { sizeTypeId: sizeType.id, position },
+            },
+            update: { sizeName },
+            create: { sizeTypeId: sizeType.id, position, sizeName },
+          });
+          imported++;
+        } catch (e) {
+          errors.push(`${code}/${position}: ${String(e)}`);
+        }
       }
+    } else {
+      // Format colonnes: code | label | 1 | 2 | 3 | 4 | ...
+      // Les colonnes non-mappées contiennent les noms de taille
+      const codeCol = mapping.sizeTypeCode || "code";
+      const labelCol = mapping.label || "label";
 
-      const label = String(row[labelCol] || "").trim() || null;
+      const sizeColumns = sheet.headers.filter(
+        (h) => h !== codeCol && h !== labelCol
+      );
 
-      // Collect size names from column headers, in order
-      // The cell values are the size labels for that type
-      const sizes: string[] = [];
-      for (const col of sizeColumns) {
-        const val = String(row[col] || "").trim();
-        if (val) sizes.push(val);
+      for (const row of sheet.rows) {
+        const code = String(row[codeCol] || "").trim();
+        if (!code) {
+          errors.push("Ligne ignorée: code type de taille manquant");
+          continue;
+        }
+
+        const label = String(row[labelCol] || "").trim() || null;
+
+        try {
+          const sizeType = await prisma.sizeType.upsert({
+            where: { code },
+            update: { ...(label ? { label } : {}) },
+            create: { code, label },
+          });
+
+          // Delete existing mappings for this type to replace
+          await prisma.sizeTypeMapping.deleteMany({
+            where: { sizeTypeId: sizeType.id },
+          });
+
+          let position = 1;
+          for (const col of sizeColumns) {
+            const sizeName = String(row[col] || "").trim();
+            if (!sizeName) continue;
+
+            await prisma.sizeTypeMapping.create({
+              data: {
+                sizeTypeId: sizeType.id,
+                position,
+                sizeName,
+              },
+            });
+            position++;
+          }
+          imported++;
+        } catch (e) {
+          errors.push(`Type ${code}: ${String(e)}`);
+        }
       }
-
-      if (sizes.length === 0) {
-        errors.push(`Type ${code}: aucune taille trouvée`);
-        continue;
-      }
-
-      try {
-        await prisma.sizeType.upsert({
-          where: { code },
-          update: { label, sizes: JSON.stringify(sizes) },
-          create: { code, label, sizes: JSON.stringify(sizes) },
-        });
-        imported++;
-      } catch (e) {
-        errors.push(`Type ${code}: ${String(e)}`);
-      }
-    }
-
-    // Log the import
-    const seasonId = formData.get("seasonId") as string | null;
-    if (seasonId) {
-      await prisma.importLog.create({
-        data: {
-          seasonId,
-          importType: "SIZE_TYPE",
-          fileName: file.name,
-          rowCount: imported,
-          errorCount: errors.length,
-          errors: errors.length > 0 ? JSON.stringify(errors) : null,
-        },
-      });
     }
 
     return NextResponse.json({

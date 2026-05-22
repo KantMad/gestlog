@@ -25,9 +25,13 @@ export async function importClientOrders(
   const errors: string[] = [];
   let imported = 0;
 
-  // Pre-load size types for resolving size correspondences
-  const sizeTypes = await prisma.sizeType.findMany();
-  const sizeTypeMap = new Map(sizeTypes.map((st) => [st.code, JSON.parse(st.sizes) as string[]]));
+  // Pre-load size type mappings for resolving size correspondences
+  const sizeTypes = await prisma.sizeType.findMany({
+    include: { mappings: { orderBy: { position: "asc" } } },
+  });
+  const sizeTypeMap = new Map(
+    sizeTypes.map((st) => [st.code, st.mappings.map((m) => m.sizeName)])
+  );
 
   const orderGroups = new Map<string, typeof sheet.rows>();
   for (const row of sheet.rows) {

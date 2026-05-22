@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
-import { useSeason } from "@/lib/season-context";
 import { Topbar } from "@/components/layout/topbar";
 import { PageHeader } from "@/components/layout/page-header";
 import { Dropzone } from "@/components/import/dropzone";
@@ -43,23 +42,26 @@ interface ParsedData {
 
 // ─── Size Types Import ───────────────────────────────────────
 
-const SIZE_TYPE_PATTERNS: Record<string, RegExp[]> = {
-  code: [/^code$/i, /type.*taille/i, /size.*type/i, /^type$/i],
-  label: [/^label$/i, /^libell[eé]$/i, /^nom$/i, /description/i],
+const SIZE_TYPE_ROW_PATTERNS: Record<string, RegExp[]> = {
+  sizeTypeCode: [/^code$/i, /type.*taille/i, /size.*type/i, /^type$/i],
+  sizeName: [/valeur/i, /taille/i, /size.*name/i, /^nom$/i, /^size$/i],
+  position: [/num[eé]ro/i, /position/i, /^n°$/i, /^no$/i, /^#$/i, /^num$/i],
+  label: [/^label$/i, /^libell[eé]$/i, /description/i],
 };
 
 interface SizeTypeData {
   id: string;
   code: string;
   label: string | null;
-  sizes: string[];
+  mappings: { id: string; position: number; sizeName: string }[];
 }
 
-function SizeTypesTab({ seasonId }: { seasonId: string }) {
+function SizeTypesTab() {
   const [parsed, setParsed] = useState<ParsedData | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [mapping, setMapping] = useState<Record<string, string>>({});
   const [importing, setImporting] = useState(false);
+  const [importFormat, setImportFormat] = useState<"rows" | "columns">("rows");
   const [result, setResult] = useState<{
     imported: number;
     errors: string[];
@@ -96,7 +98,7 @@ function SizeTypesTab({ seasonId }: { seasonId: string }) {
         >(sheet, { defval: null });
         const headers = data.length > 0 ? Object.keys(data[0]) : [];
         setParsed({ headers, rows: data });
-        setMapping(autoDetectMapping(headers, SIZE_TYPE_PATTERNS));
+        setMapping(autoDetectMapping(headers, SIZE_TYPE_ROW_PATTERNS));
       } catch {
         toast.error("Impossible de lire le fichier");
       }
@@ -106,16 +108,20 @@ function SizeTypesTab({ seasonId }: { seasonId: string }) {
 
   const handleImport = async () => {
     if (!file || !parsed) return;
-    if (!mapping.code) {
-      toast.error("La colonne 'Code' est requise");
+    if (importFormat === "rows" && (!mapping.sizeTypeCode || !mapping.sizeName || !mapping.position)) {
+      toast.error("Colonnes Type, Valeur taille et Numéro requis");
+      return;
+    }
+    if (importFormat === "columns" && !mapping.sizeTypeCode) {
+      toast.error("La colonne 'Code type' est requise");
       return;
     }
     setImporting(true);
     try {
       const formData = new FormData();
       formData.append("file", file);
-      formData.append("seasonId", seasonId);
       formData.append("mapping", JSON.stringify(mapping));
+      formData.append("format", importFormat);
       const res = await fetch("/api/product-info/size-types", {
         method: "POST",
         body: formData,
@@ -126,7 +132,7 @@ function SizeTypesTab({ seasonId }: { seasonId: string }) {
         return;
       }
       setResult(json.data);
-      toast.success(`${json.data.imported} types de taille importés`);
+      toast.success(`${json.data.imported} entrées importées`);
       loadData();
     } catch {
       toast.error("Erreur réseau");
@@ -142,14 +148,50 @@ function SizeTypesTab({ seasonId }: { seasonId: string }) {
     setResult(null);
   };
 
+  const rowFields = [
+    { key: "sizeTypeCode", label: "Type de taille", required: true },
+    { key: "sizeName", label: "Valeur taille", required: true },
+    { key: "position", label: "Numéro de taille", required: true },
+    { key: "label", label: "Libellé type" },
+  ];
+
+  const colFields = [
+    { key: "sizeTypeCode", label: "Code type de taille", required: true },
+    { key: "label", label: "Libellé" },
+  ];
+
   return (
     <div className="space-y-6">
-      <div className="rounded-lg border bg-muted/30 p-4">
-        <p className="text-sm text-muted-foreground">
-          <strong>Format attendu :</strong> Un fichier avec une colonne{" "}
-          <code className="bg-muted px-1 rounded">code</code> (type de taille) et
-          les colonnes suivantes contiennent les noms des tailles dans l&apos;ordre.
-          Ex : code | 1 | 2 | 3 | 4 → A | XS | S | M | L
+      <div className="rounded-lg border bg-muted/30 p-4 space-y-2">
+        <p className="text-sm font-medium">Format d&apos;import</p>
+        <div className="flex gap-2">
+          <Button
+            variant={importFormat === "rows" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setImportFormat("rows")}
+          >
+            Ligne par ligne
+          </Button>
+          <Button
+            variant={importFormat === "columns" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setImportFormat("columns")}
+          >
+            Colonnes
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          {importFormat === "rows" ? (
+            <>
+              <strong>Ligne par ligne :</strong> Chaque ligne = 1 mapping.
+              Ex : <code className="bg-muted px-1 rounded">A | XS | 1</code>, <code className="bg-muted px-1 rounded">A | S | 2</code>, <code className="bg-muted px-1 rounded">B | 36 | 1</code>
+            </>
+          ) : (
+            <>
+              <strong>Colonnes :</strong> Chaque ligne = 1 type de taille, les colonnes = numéros.
+              Ex : <code className="bg-muted px-1 rounded">A | XS | S | M | L</code>
+            </>
+          )}
         </p>
       </div>
 
@@ -163,17 +205,16 @@ function SizeTypesTab({ seasonId }: { seasonId: string }) {
               <ImportPreview headers={parsed.headers} rows={parsed.rows} />
               <ColumnMapper
                 headers={parsed.headers}
-                fields={[
-                  { key: "code", label: "Code type de taille", required: true },
-                  { key: "label", label: "Libellé" },
-                ]}
+                fields={importFormat === "rows" ? rowFields : colFields}
                 mapping={mapping}
                 onMappingChange={setMapping}
               />
-              <p className="text-xs text-muted-foreground">
-                Les colonnes non mappées seront interprétées comme des tailles
-                (dans l&apos;ordre).
-              </p>
+              {importFormat === "columns" && (
+                <p className="text-xs text-muted-foreground">
+                  Les colonnes non mappées seront interprétées comme des tailles
+                  (dans l&apos;ordre : position 1, 2, 3...).
+                </p>
+              )}
               <Button onClick={handleImport} disabled={importing} className="w-full">
                 {importing && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
                 {importing ? "Import en cours..." : `Importer ${parsed.rows.length} lignes`}
@@ -187,7 +228,7 @@ function SizeTypesTab({ seasonId }: { seasonId: string }) {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-base">
-            Types de taille importés
+            Types de taille
             <Badge variant="secondary" className="ml-2">{sizeTypes.length}</Badge>
           </CardTitle>
           <Button variant="ghost" size="sm" onClick={loadData}>
@@ -200,32 +241,41 @@ function SizeTypesTab({ seasonId }: { seasonId: string }) {
           ) : sizeTypes.length === 0 ? (
             <p className="text-sm text-muted-foreground">Aucun type de taille importé</p>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Code</TableHead>
-                  <TableHead>Libellé</TableHead>
-                  <TableHead>Tailles</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {sizeTypes.map((st) => (
-                  <TableRow key={st.id}>
-                    <TableCell className="font-mono font-medium">{st.code}</TableCell>
-                    <TableCell>{st.label || "—"}</TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1">
-                        {st.sizes.map((s, i) => (
-                          <Badge key={i} variant="outline" className="text-xs">
-                            {s}
-                          </Badge>
-                        ))}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <div className="space-y-4">
+              {sizeTypes.map((st) => (
+                <div key={st.id} className="rounded-lg border p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Badge className="bg-violet-100 text-violet-700 hover:bg-violet-100">
+                      {st.code}
+                    </Badge>
+                    {st.label && (
+                      <span className="text-sm text-muted-foreground">{st.label}</span>
+                    )}
+                    <span className="text-xs text-muted-foreground ml-auto">
+                      {st.mappings.length} taille{st.mappings.length > 1 ? "s" : ""}
+                    </span>
+                  </div>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-24">N° taille</TableHead>
+                        <TableHead>Valeur</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {st.mappings.map((m) => (
+                        <TableRow key={m.id}>
+                          <TableCell className="font-mono font-medium">{m.position}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="text-xs">{m.sizeName}</Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              ))}
+            </div>
           )}
         </CardContent>
       </Card>
@@ -247,7 +297,7 @@ interface SupplierRefData {
   supplier: { code: string; name: string };
 }
 
-function SupplierRefsTab({ seasonId }: { seasonId: string }) {
+function SupplierRefsTab() {
   const [parsed, setParsed] = useState<ParsedData | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [mapping, setMapping] = useState<Record<string, string>>({});
@@ -307,7 +357,6 @@ function SupplierRefsTab({ seasonId }: { seasonId: string }) {
     try {
       const formData = new FormData();
       formData.append("file", file);
-      formData.append("seasonId", seasonId);
       formData.append("mapping", JSON.stringify(mapping));
       const res = await fetch("/api/product-info/supplier-refs", {
         method: "POST",
@@ -453,7 +502,7 @@ interface EanData {
   ean: string;
 }
 
-function EansTab({ seasonId }: { seasonId: string }) {
+function EansTab() {
   const [parsed, setParsed] = useState<ParsedData | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [mapping, setMapping] = useState<Record<string, string>>({});
@@ -515,14 +564,13 @@ function EansTab({ seasonId }: { seasonId: string }) {
       (k) => !mapping[k]
     );
     if (missing.length > 0) {
-      toast.error(`Colonnes requises manquantes`);
+      toast.error("Colonnes requises manquantes");
       return;
     }
     setImporting(true);
     try {
       const formData = new FormData();
       formData.append("file", file);
-      formData.append("seasonId", seasonId);
       formData.append("mapping", JSON.stringify(mapping));
       const res = await fetch("/api/product-info/eans", {
         method: "POST",
@@ -646,7 +694,7 @@ function EansTab({ seasonId }: { seasonId: string }) {
               {total > 100 && (
                 <div className="flex items-center justify-between mt-3">
                   <p className="text-xs text-muted-foreground">
-                    Page {page} / {Math.ceil(total / 100)} ({total} EAN au total)
+                    Page {page} / {Math.ceil(total / 100)} ({total} EAN)
                   </p>
                   <div className="flex gap-1">
                     <Button
@@ -701,7 +749,7 @@ function ImportResult({
         )}
         <div>
           <p className="font-semibold">
-            {result.imported} ligne{result.imported > 1 ? "s" : ""} importée
+            {result.imported} entrée{result.imported > 1 ? "s" : ""} importée
             {result.imported > 1 ? "s" : ""}
           </p>
           {result.errors.length > 0 && (
@@ -727,65 +775,47 @@ function ImportResult({
   );
 }
 
-// ─── Main Page ───────────────────────────────────────────────
+// ─── Main Page (TRANS-SAISON — pas besoin de saison) ─────────
 
 export default function ProductInfoPage() {
-  const { activeSeason } = useSeason();
-
   return (
     <div>
       <Topbar title="Infos produits" />
       <div className="p-8 space-y-8">
         <PageHeader
           title="Infos produits"
-          description="Importez les types de taille, correspondances fournisseurs et EAN pour alimenter la base produits"
+          description="Données globales trans-saison : types de taille, correspondances fournisseurs et codes EAN"
         />
 
-        {!activeSeason ? (
-          <Card className="border-dashed">
-            <CardContent className="flex flex-col items-center justify-center py-16">
-              <p className="text-sm text-muted-foreground">
-                Sélectionnez une saison pour commencer
-              </p>
-            </CardContent>
-          </Card>
-        ) : (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
-                Saison {activeSeason.name}
-                <Badge variant="secondary">Active</Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Tabs defaultValue="size-types">
-                <TabsList className="w-full justify-start">
-                  <TabsTrigger value="size-types" className="gap-2">
-                    <Ruler className="h-4 w-4" />
-                    Types de taille
-                  </TabsTrigger>
-                  <TabsTrigger value="supplier-refs" className="gap-2">
-                    <Factory className="h-4 w-4" />
-                    Fournisseur → Réf
-                  </TabsTrigger>
-                  <TabsTrigger value="eans" className="gap-2">
-                    <Barcode className="h-4 w-4" />
-                    EAN
-                  </TabsTrigger>
-                </TabsList>
-                <TabsContent value="size-types" className="mt-6">
-                  <SizeTypesTab seasonId={activeSeason.id} />
-                </TabsContent>
-                <TabsContent value="supplier-refs" className="mt-6">
-                  <SupplierRefsTab seasonId={activeSeason.id} />
-                </TabsContent>
-                <TabsContent value="eans" className="mt-6">
-                  <EansTab seasonId={activeSeason.id} />
-                </TabsContent>
-              </Tabs>
-            </CardContent>
-          </Card>
-        )}
+        <Card>
+          <CardContent className="pt-6">
+            <Tabs defaultValue="size-types">
+              <TabsList className="w-full justify-start">
+                <TabsTrigger value="size-types" className="gap-2">
+                  <Ruler className="h-4 w-4" />
+                  Types de taille
+                </TabsTrigger>
+                <TabsTrigger value="supplier-refs" className="gap-2">
+                  <Factory className="h-4 w-4" />
+                  Fournisseur → Réf
+                </TabsTrigger>
+                <TabsTrigger value="eans" className="gap-2">
+                  <Barcode className="h-4 w-4" />
+                  EAN
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="size-types" className="mt-6">
+                <SizeTypesTab />
+              </TabsContent>
+              <TabsContent value="supplier-refs" className="mt-6">
+                <SupplierRefsTab />
+              </TabsContent>
+              <TabsContent value="eans" className="mt-6">
+                <EansTab />
+              </TabsContent>
+            </Tabs>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
