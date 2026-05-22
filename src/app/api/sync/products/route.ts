@@ -138,7 +138,6 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      version: "v4-rawsql",
       data: { imported, errors, total: products.length },
     });
   } catch (e) {
