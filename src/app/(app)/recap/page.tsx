@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import Link from "next/link";
 import { useSeason } from "@/lib/season-context";
 import { Topbar } from "@/components/layout/topbar";
 import { PageHeader } from "@/components/layout/page-header";
@@ -27,6 +28,7 @@ import {
   ChevronRight,
   FileText,
   ClipboardList,
+  ExternalLink,
 } from "lucide-react";
 import { cn, formatNumber } from "@/lib/utils";
 
@@ -181,6 +183,15 @@ function ClientRecapCard({ client }: { client: ClientRecap }) {
             </div>
             <Progress value={deliveryPercent} className="h-2" />
           </div>
+          <Link
+            href={`/recap/${client.clientId}`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Button variant="ghost" size="sm" className="gap-1 text-xs text-muted-foreground">
+              <ExternalLink className="h-3 w-3" />
+              Détail
+            </Button>
+          </Link>
         </div>
       </div>
 
