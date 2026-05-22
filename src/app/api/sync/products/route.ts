@@ -4,6 +4,11 @@ import { prisma } from "@/lib/prisma";
 // Allow up to 60s for sync operations
 export const maxDuration = 60;
 
+// Generate a cuid-like ID
+function genId() {
+  return `sync_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
 // POST — Receive products + EANs from n8n (batched)
 export async function POST(request: NextRequest) {
   try {
@@ -37,106 +42,86 @@ export async function POST(request: NextRequest) {
         const sizeScale = variations
           ? (variations as { size: string }[]).map((v) => v.size).join(",")
           : "";
-
         const extId = prod.externalId ? String(prod.externalId) : null;
 
-        // Upsert product by reference+color — use findUnique + update/create
-        // to avoid PrismaPg adapter issues with upsert
-        const existing = await prisma.product.findUnique({
-          where: { reference_color: { reference: String(reference), color: colorStr } },
-        });
+        // Raw SQL upsert — bypasses PrismaPg adapter bug
+        await prisma.$executeRawUnsafe(
+          `INSERT INTO "Product" (id, reference, color, "colorCode", "sizeScale", "externalId", "createdAt", "updatedAt")
+           VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+           ON CONFLICT (reference, color)
+           DO UPDATE SET
+             "colorCode" = COALESCE(NULLIF($4, ''), "Product"."colorCode"),
+             "sizeScale" = COALESCE(NULLIF($5, ''), "Product"."sizeScale"),
+             "externalId" = COALESCE($6, "Product"."externalId"),
+             "updatedAt" = NOW()`,
+          genId(),
+          String(reference),
+          colorStr,
+          colorCode || null,
+          sizeScale || null,
+          extId
+        );
 
-        if (existing) {
-          await prisma.product.update({
-            where: { id: existing.id },
-            data: {
-              colorCode: colorCode || existing.colorCode,
-              sizeScale: sizeScale || existing.sizeScale,
-              externalId: extId || existing.externalId,
-            },
-          });
-        } else {
-          await prisma.product.create({
-            data: {
-              reference: String(reference),
-              color: colorStr,
-              colorCode: colorCode || null,
-              sizeScale: sizeScale || "",
-              externalId: extId,
-            },
-          });
-        }
-
-        // Upsert EAN entries — use findUnique + update/create
+        // Upsert EAN entries via raw SQL
         if (Array.isArray(variations)) {
           for (const v of variations) {
             if (v.ean && v.size) {
               try {
-                const existingEan = await prisma.productSizeEan.findUnique({
-                  where: { ean: String(v.ean) },
-                });
-
-                if (existingEan) {
-                  await prisma.productSizeEan.update({
-                    where: { id: existingEan.id },
-                    data: {
-                      reference: String(reference),
-                      color: colorStr,
-                      size: String(v.size),
-                    },
-                  });
-                } else {
-                  await prisma.productSizeEan.create({
-                    data: {
-                      reference: String(reference),
-                      color: colorStr,
-                      size: String(v.size),
-                      ean: String(v.ean),
-                    },
-                  });
-                }
+                await prisma.$executeRawUnsafe(
+                  `INSERT INTO "ProductSizeEan" (id, reference, color, size, ean)
+                   VALUES ($1, $2, $3, $4, $5)
+                   ON CONFLICT (ean)
+                   DO UPDATE SET reference = $2, color = $3, size = $4`,
+                  genId(),
+                  String(reference),
+                  colorStr,
+                  String(v.size),
+                  String(v.ean)
+                );
               } catch {
-                // Duplicate or constraint error — skip
+                // Constraint error — skip
               }
             }
           }
         }
 
-        // Upsert size type mappings
+        // Upsert size type + mappings via raw SQL
         if (sizeTypeCode && Array.isArray(variations) && variations.length > 0) {
           try {
-            let sizeType = await prisma.sizeType.findUnique({
-              where: { code: String(sizeTypeCode) },
-            });
+            const stId = genId();
+            await prisma.$executeRawUnsafe(
+              `INSERT INTO "SizeType" (id, code, "createdAt", "updatedAt")
+               VALUES ($1, $2, NOW(), NOW())
+               ON CONFLICT (code) DO NOTHING`,
+              stId,
+              String(sizeTypeCode)
+            );
 
-            if (!sizeType) {
-              sizeType = await prisma.sizeType.create({
-                data: { code: String(sizeTypeCode) },
-              });
-            }
+            // Get the actual sizeType id
+            const stRows = await prisma.$queryRawUnsafe<{ id: string }[]>(
+              `SELECT id FROM "SizeType" WHERE code = $1`,
+              String(sizeTypeCode)
+            );
 
-            for (let i = 0; i < variations.length; i++) {
-              const v = variations[i];
-              if (v.size) {
-                try {
-                  const existingMapping = await prisma.sizeTypeMapping.findUnique({
-                    where: { sizeTypeId_position: { sizeTypeId: sizeType.id, position: i + 1 } },
-                  });
-
-                  if (existingMapping) {
-                    if (existingMapping.sizeName !== String(v.size)) {
-                      await prisma.sizeTypeMapping.update({
-                        where: { id: existingMapping.id },
-                        data: { sizeName: String(v.size) },
-                      });
-                    }
-                  } else {
-                    await prisma.sizeTypeMapping.create({
-                      data: { sizeTypeId: sizeType.id, position: i + 1, sizeName: String(v.size) },
-                    });
+            if (stRows.length > 0) {
+              const sizeTypeId = stRows[0].id;
+              for (let i = 0; i < variations.length; i++) {
+                const v = variations[i];
+                if (v.size) {
+                  try {
+                    await prisma.$executeRawUnsafe(
+                      `INSERT INTO "SizeTypeMapping" (id, "sizeTypeId", position, "sizeName")
+                       VALUES ($1, $2, $3, $4)
+                       ON CONFLICT ("sizeTypeId", position)
+                       DO UPDATE SET "sizeName" = $4`,
+                      genId(),
+                      sizeTypeId,
+                      i + 1,
+                      String(v.size)
+                    );
+                  } catch {
+                    // Duplicate sizeName — skip
                   }
-                } catch {
-                  // Duplicate sizeName for this type — skip
                 }
               }
             }
@@ -153,7 +138,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      version: "v3-findunique",
+      version: "v4-rawsql",
       data: { imported, errors, total: products.length },
     });
   } catch (e) {
