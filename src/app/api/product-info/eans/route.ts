@@ -28,26 +28,31 @@ export async function GET(request: NextRequest) {
     );
     const total = Number(countResult[0].count);
 
-    // Main query with size ordering from Product.sizeScale
+    // Main query with size ordering from Product.sizeScale + stock from StockEntry
     const dataQuery = `
       SELECT e.id, e.reference, e.color, e.size, e.ean,
         COALESCE(
           array_position(string_to_array(p."sizeScale", ','), e.size),
           999
-        ) as size_pos
+        ) as size_pos,
+        COALESCE(
+          (s."quantitiesBySize"::jsonb ->> e.size)::int,
+          0
+        ) as stock
       FROM "ProductSizeEan" e
       LEFT JOIN "Product" p ON p.reference = e.reference AND p.color = e.color
+      LEFT JOIN "StockEntry" s ON s."productId" = p.id
       ${whereClause}
       ORDER BY e.reference ASC, e.color ASC, size_pos ASC
       LIMIT ${limit} OFFSET ${offset}
     `;
 
     const eans = await prisma.$queryRawUnsafe<
-      { id: string; reference: string; color: string; size: string; ean: string; size_pos: number }[]
+      { id: string; reference: string; color: string; size: string; ean: string; size_pos: number; stock: number }[]
     >(dataQuery, ...params);
 
-    // Strip internal size_pos from response
-    const data = eans.map(({ size_pos, ...rest }) => rest);
+    // Strip internal size_pos from response, keep stock
+    const data = eans.map(({ size_pos, ...rest }) => ({ ...rest, stock: Number(rest.stock) || 0 }));
 
     return NextResponse.json({ data, total, page, limit });
   } catch (e) {

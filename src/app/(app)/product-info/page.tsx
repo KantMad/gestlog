@@ -44,6 +44,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import * as XLSX from "xlsx";
 
 interface ParsedData {
@@ -582,6 +583,7 @@ interface EanData {
   color: string;
   size: string;
   ean: string;
+  stock: number;
 }
 
 function EansTab() {
@@ -751,6 +753,7 @@ function EansTab() {
                       <TableHead>Couleur</TableHead>
                       <TableHead>Taille</TableHead>
                       <TableHead>EAN</TableHead>
+                      <TableHead className="text-right">Stock</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -767,6 +770,18 @@ function EansTab() {
                         </TableCell>
                         <TableCell className="font-mono text-sm">
                           {e.ean}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <span
+                            className={cn(
+                              "font-medium text-sm tabular-nums",
+                              e.stock > 0
+                                ? "text-emerald-600"
+                                : "text-zinc-400"
+                            )}
+                          >
+                            {e.stock}
+                          </span>
                         </TableCell>
                       </TableRow>
                     ))}
