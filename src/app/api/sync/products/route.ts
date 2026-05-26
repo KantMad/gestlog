@@ -85,6 +85,44 @@ export async function POST(request: NextRequest) {
           }
         }
 
+        // Save stock from variations (if stock data present)
+        if (Array.isArray(variations)) {
+          const stockBySize: Record<string, number> = {};
+          let hasStock = false;
+          for (const v of variations) {
+            if (v.size && v.stock !== undefined && v.stock !== null) {
+              const qty = Number(v.stock) || 0;
+              stockBySize[String(v.size)] = qty;
+              hasStock = true;
+            }
+          }
+          if (hasStock) {
+            // Find productId
+            const prodRows = await prisma.$queryRawUnsafe<{ id: string }[]>(
+              `SELECT id FROM "Product" WHERE reference = $1 AND color = $2 LIMIT 1`,
+              String(reference),
+              colorStr
+            );
+            if (prodRows.length > 0) {
+              const pid = prodRows[0].id;
+              const totalStock = Object.values(stockBySize).reduce((s, v) => s + v, 0);
+              // Replace stock entry
+              await prisma.$executeRawUnsafe(
+                `DELETE FROM "StockEntry" WHERE "productId" = $1`,
+                pid
+              );
+              await prisma.$executeRawUnsafe(
+                `INSERT INTO "StockEntry" (id, "productId", "quantitiesBySize", "totalQuantity", "importDate", "createdAt")
+                 VALUES ($1, $2, $3, $4, NOW(), NOW())`,
+                genId(),
+                pid,
+                JSON.stringify(stockBySize),
+                totalStock
+              );
+            }
+          }
+        }
+
         // Upsert size type + mappings via raw SQL
         if (sizeTypeCode && Array.isArray(variations) && variations.length > 0) {
           try {
