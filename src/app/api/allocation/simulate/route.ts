@@ -96,21 +96,14 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const input: AllocationInput = {
-      seasonId,
-      available,
-      demands,
-      clientConfigs,
-    };
-
-    const result = runAllocation(input);
-
-    const clientMap = new Map<string, string>();
+    // Build display-name maps for human-readable warnings
+    const clientNames = new Map<string, string>();
     for (const cs of clientSeasons) {
-      clientMap.set(cs.clientId, cs.client.name);
+      clientNames.set(cs.clientId, cs.client.name);
     }
 
     const productMap = new Map<string, { reference: string; color: string; sizeScale: string }>();
+    const productNames = new Map<string, string>();
     for (const order of clientOrders) {
       for (const line of order.lines) {
         if (!productMap.has(line.productId)) {
@@ -119,13 +112,28 @@ export async function POST(request: NextRequest) {
             color: line.product.color,
             sizeScale: line.product.sizeScale,
           });
+          productNames.set(
+            line.productId,
+            `${line.product.reference} / ${line.product.color}`
+          );
         }
       }
     }
 
+    const input: AllocationInput = {
+      seasonId,
+      available,
+      demands,
+      clientConfigs,
+      clientNames,
+      productNames,
+    };
+
+    const result = runAllocation(input);
+
     const enrichedLines = result.lines.map((line) => ({
       ...line,
-      clientName: clientMap.get(line.clientId) || line.clientId,
+      clientName: clientNames.get(line.clientId) || line.clientId,
       productReference: productMap.get(line.productId)?.reference || "",
       productColor: productMap.get(line.productId)?.color || "",
       sizeScale: parseSizeScale(

@@ -15,8 +15,12 @@ import type {
 } from "./types";
 
 export function runAllocation(input: AllocationInput): AllocationResult {
-  const { available, demands, clientConfigs } = input;
+  const { available, demands, clientConfigs, clientNames, productNames } = input;
   const warnings: string[] = [];
+
+  // Helpers to display human-readable names instead of IDs
+  const cName = (id: string) => clientNames?.get(id) || id;
+  const pName = (id: string) => productNames?.get(id) || id;
   const lines: AllocationResultLine[] = [];
 
   // Group demands by product
@@ -153,7 +157,7 @@ export function runAllocation(input: AllocationInput): AllocationResult {
         }
         if (restored < needToRestore) {
           warnings.push(
-            `Client ${d.clientId}: impossible de respecter le cap ligne ${config.maxReductionLine}% pour le produit ${productId}`
+            `Client ${cName(d.clientId)}: impossible de respecter le cap ligne ${config.maxReductionLine}% pour le produit ${pName(productId)}`
           );
         }
       }
@@ -168,7 +172,7 @@ export function runAllocation(input: AllocationInput): AllocationResult {
       const actualReduction = lineOriginal - sumQuantities(alloc);
       if (actualReduction > maxOrderRed) {
         warnings.push(
-          `Client ${d.clientId}: réduction globale dépasse ${config.maxReductionOrder}%`
+          `Client ${cName(d.clientId)}: réduction globale dépasse ${config.maxReductionOrder}%`
         );
       }
       clientTotalReduced.set(
@@ -185,7 +189,7 @@ export function runAllocation(input: AllocationInput): AllocationResult {
       if (hadGaps) {
         allocations.set(key, adjusted);
         warnings.push(
-          `Client ${d.clientId}, produit ${productId}: trous de taille corrigés`
+          `Client ${cName(d.clientId)}, produit ${pName(productId)}: trous de taille corrigés`
         );
       }
     }
@@ -214,7 +218,7 @@ export function runAllocation(input: AllocationInput): AllocationResult {
               donor[size] = (donor[size] || 0) - 1;
               alloc[size] = (alloc[size] || 0) + 1;
               warnings.push(
-                `Client ${d.clientId}: 1 pièce transférée (Règle 2 — tous doivent recevoir)`
+                `Client ${cName(d.clientId)}: 1 pièce transférée (Règle 2 — tous doivent recevoir)`
               );
               break;
             }

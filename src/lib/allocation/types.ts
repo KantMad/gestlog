@@ -5,6 +5,10 @@ export interface AllocationInput {
   available: Map<string, SizeQuantities>;
   demands: AllocationDemand[];
   clientConfigs: Map<string, ClientConfig>;
+  /** clientId → display name (e.g. "Boutique Rivoli") */
+  clientNames?: Map<string, string>;
+  /** productId → display label (e.g. "AMBELT_P003 / 208") */
+  productNames?: Map<string, string>;
 }
 
 export interface AllocationDemand {
