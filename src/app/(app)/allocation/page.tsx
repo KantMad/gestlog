@@ -37,10 +37,8 @@ import {
   ChevronRight,
   Download,
   History,
-  Info,
   Pencil,
   X,
-  Check,
   Filter,
   Store,
   Search,
@@ -355,7 +353,6 @@ function ClientGroup({
 }
 
 function getAllSizes(lines: SimulationLine[]): string[] {
-  // Union of all sizes in order
   const sizeOrder: string[] = [];
   const seen = new Set<string>();
   for (const line of lines) {
@@ -367,6 +364,172 @@ function getAllSizes(lines: SimulationLine[]): string[] {
     }
   }
   return sizeOrder;
+}
+
+// ─── Product group (vue par produit) ─────────────────────────
+
+function ProductGroup({
+  reference,
+  color,
+  lines,
+  onLineChange,
+}: {
+  reference: string;
+  color: string;
+  lines: SimulationLine[];
+  onLineChange: (lineKey: string, size: string, value: number) => void;
+}) {
+  const [expanded, setExpanded] = useState(
+    lines.some((l) => l.reductionReason !== "NONE")
+  );
+
+  const totalOriginal = lines.reduce((s, l) => s + sumQuantities(l.original), 0);
+  const totalAllocated = lines.reduce((s, l) => s + sumQuantities(l.allocated), 0);
+  const hasReduction = totalOriginal > totalAllocated;
+  const reductionPct = totalOriginal > 0
+    ? Math.round(((totalOriginal - totalAllocated) / totalOriginal) * 100)
+    : 0;
+  const sizes = getAllSizes(lines);
+
+  return (
+    <Card className="overflow-hidden">
+      <div
+        className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-muted/50 transition-colors"
+        onClick={() => setExpanded(!expanded)}
+      >
+        <div className="flex items-center gap-3">
+          {expanded ? (
+            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+          ) : (
+            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+          )}
+          <Package className="h-4 w-4 text-muted-foreground" />
+          <div>
+            <span className="font-mono text-sm font-semibold">{reference}</span>
+            <span className="text-muted-foreground text-sm ml-2">{color}</span>
+            <span className="text-muted-foreground text-xs ml-3">
+              {lines.length} boutique{lines.length > 1 ? "s" : ""}
+            </span>
+          </div>
+        </div>
+        <div className="flex items-center gap-4 text-sm">
+          <div className="text-right">
+            <span className="text-xs text-muted-foreground">Commandé</span>
+            <span className="block font-medium">{formatNumber(totalOriginal)}</span>
+          </div>
+          <div className="text-right">
+            <span className="text-xs text-muted-foreground">Alloué</span>
+            <span className={cn("block font-medium", hasReduction ? "text-amber-600" : "text-emerald-600")}>
+              {formatNumber(totalAllocated)}
+            </span>
+          </div>
+          {hasReduction ? (
+            <Badge
+              className={cn(
+                "text-xs",
+                reductionPct <= 15 && "bg-amber-100 text-amber-700 hover:bg-amber-100",
+                reductionPct > 15 && reductionPct <= 30 && "bg-orange-100 text-orange-700 hover:bg-orange-100",
+                reductionPct > 30 && "bg-red-100 text-red-700 hover:bg-red-100"
+              )}
+            >
+              <TrendingDown className="h-3 w-3 mr-1" />
+              -{reductionPct}%
+            </Badge>
+          ) : (
+            <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 text-xs">
+              100%
+            </Badge>
+          )}
+        </div>
+      </div>
+      {expanded && (
+        <div className="border-t">
+          <ScrollArea>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[180px]">Boutique</TableHead>
+                  {sizes.map((s) => (
+                    <TableHead key={s} className="text-center w-[55px]">
+                      {s}
+                    </TableHead>
+                  ))}
+                  <TableHead className="text-right w-[70px]">Total</TableHead>
+                  <TableHead className="text-right w-[70px]">Écart</TableHead>
+                  <TableHead className="w-[90px]">Statut</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {lines.map((line) => {
+                  const lineKey = `${line.clientId}:${line.clientOrderId}:${line.productId}`;
+                  const origTotal = sumQuantities(line.original);
+                  const allocTotal = sumQuantities(line.allocated);
+                  const diff = origTotal - allocTotal;
+                  return (
+                    <TableRow
+                      key={lineKey}
+                      className={cn(
+                        diff > 0 && "bg-red-50/30",
+                        line.status === "ANNULE" && "bg-zinc-100/50 opacity-60"
+                      )}
+                    >
+                      <TableCell className="font-medium text-sm">
+                        {line.clientName}
+                      </TableCell>
+                      {sizes.map((size) => {
+                        const orig = line.original[size] || 0;
+                        const alloc = line.allocated[size] || 0;
+                        if (orig === 0 && alloc === 0) {
+                          return (
+                            <TableCell key={size} className="text-center text-sm text-muted-foreground">
+                              -
+                            </TableCell>
+                          );
+                        }
+                        return (
+                          <TableCell key={size} className="text-center text-sm p-1">
+                            <EditableCell
+                              value={alloc}
+                              original={orig}
+                              onChange={(v) => onLineChange(lineKey, size, v)}
+                            />
+                          </TableCell>
+                        );
+                      })}
+                      <TableCell className="text-right font-medium text-sm">
+                        {formatNumber(allocTotal)}
+                      </TableCell>
+                      <TableCell
+                        className={cn(
+                          "text-right text-sm",
+                          diff > 0 ? "text-red-600 font-medium" : ""
+                        )}
+                      >
+                        {diff > 0 ? `-${diff}` : "—"}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "text-xs",
+                            line.status === "LIVRABLE" && "border-emerald-300 text-emerald-700",
+                            line.status === "EN_ATTENTE" && "border-amber-300 text-amber-700",
+                            line.status === "ANNULE" && "border-zinc-300 text-zinc-500"
+                          )}
+                        >
+                          {line.status === "LIVRABLE" ? "Livrable" : line.status === "EN_ATTENTE" ? "En attente" : "Annulé"}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </ScrollArea>
+        </div>
+      )}
+    </Card>
+  );
 }
 
 // ─── Filter panel ────────────────────────────────────────────
@@ -606,7 +769,8 @@ export default function AllocationPage() {
   const [simulating, setSimulating] = useState(false);
   const [validating, setValidating] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
-  const [manualEdits, setManualEdits] = useState(0); // count of manual edits
+  const [manualEdits, setManualEdits] = useState(0);
+  const [viewMode, setViewMode] = useState<"client" | "product">("client");
 
   // Filters
   const [selectedCatalog, setSelectedCatalog] = useState<string>("ALL");
@@ -614,7 +778,7 @@ export default function AllocationPage() {
   const [selectedSuppliers, setSelectedSuppliers] = useState<string[]>([]);
   const [orderType, setOrderType] = useState<string>("COMMANDE");
   const [productSearch, setProductSearch] = useState<string>("");
-  const [clientSearch, setClientSearch] = useState<string>("");
+  const [resultSearch, setResultSearch] = useState<string>("");
 
   const loadSessions = useCallback(async () => {
     if (!activeSeason) return;
@@ -829,23 +993,56 @@ export default function AllocationPage() {
     clientGroups.get(line.clientId)!.lines.push(line);
   }
 
-  // Filter client groups by client search
-  const filteredGroups = clientSearch
-    ? Array.from(clientGroups.entries()).filter(([, g]) =>
-        g.clientName.toLowerCase().includes(clientSearch.toLowerCase())
-      )
-    : Array.from(clientGroups.entries());
+  // Group lines by product
+  const productGroups = new Map<
+    string,
+    { reference: string; color: string; lines: SimulationLine[] }
+  >();
+  for (const line of lines) {
+    if (!productGroups.has(line.productId)) {
+      productGroups.set(line.productId, {
+        reference: line.productReference,
+        color: line.productColor,
+        lines: [],
+      });
+    }
+    productGroups.get(line.productId)!.lines.push(line);
+  }
 
-  // Sort by most impacted first
-  filteredGroups.sort((a, b) => {
-    const aOrig = a[1].lines.reduce((s, l) => s + sumQuantities(l.original), 0);
-    const aAlloc = a[1].lines.reduce((s, l) => s + sumQuantities(l.allocated), 0);
-    const bOrig = b[1].lines.reduce((s, l) => s + sumQuantities(l.original), 0);
-    const bAlloc = b[1].lines.reduce((s, l) => s + sumQuantities(l.allocated), 0);
-    const aRed = aOrig > 0 ? (aOrig - aAlloc) / aOrig : 0;
-    const bRed = bOrig > 0 ? (bOrig - bAlloc) / bOrig : 0;
-    return bRed - aRed;
-  });
+  // Helper: sort groups by most impacted first
+  const sortByImpact = <T,>(entries: [string, { lines: SimulationLine[] } & T][]) => {
+    entries.sort((a, b) => {
+      const aOrig = a[1].lines.reduce((s, l) => s + sumQuantities(l.original), 0);
+      const aAlloc = a[1].lines.reduce((s, l) => s + sumQuantities(l.allocated), 0);
+      const bOrig = b[1].lines.reduce((s, l) => s + sumQuantities(l.original), 0);
+      const bAlloc = b[1].lines.reduce((s, l) => s + sumQuantities(l.allocated), 0);
+      const aRed = aOrig > 0 ? (aOrig - aAlloc) / aOrig : 0;
+      const bRed = bOrig > 0 ? (bOrig - bAlloc) / bOrig : 0;
+      return bRed - aRed;
+    });
+    return entries;
+  };
+
+  // Filter + sort client groups
+  const filteredClientGroups = sortByImpact(
+    (resultSearch && viewMode === "client"
+      ? Array.from(clientGroups.entries()).filter(([, g]) =>
+          g.clientName.toLowerCase().includes(resultSearch.toLowerCase())
+        )
+      : Array.from(clientGroups.entries())
+    ) as [string, { clientName: string; lines: SimulationLine[] }][]
+  );
+
+  // Filter + sort product groups
+  const filteredProductGroups = sortByImpact(
+    (resultSearch && viewMode === "product"
+      ? Array.from(productGroups.entries()).filter(([, g]) =>
+          g.reference.toLowerCase().includes(resultSearch.toLowerCase()) ||
+          g.color.toLowerCase().includes(resultSearch.toLowerCase())
+        )
+      : Array.from(productGroups.entries())
+    ) as [string, { reference: string; color: string; lines: SimulationLine[] }][]
+  );
 
   return (
     <div>
@@ -1091,19 +1288,48 @@ export default function AllocationPage() {
                   </Card>
                 )}
 
-                {/* Search in results */}
+                {/* View toggle + search */}
                 <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
-                    <Store className="h-4 w-4" />
-                    Répartition par boutique ({clientGroups.size} boutiques, {lines.length} lignes)
-                  </h3>
+                  <div className="flex items-center gap-2">
+                    <div className="flex rounded-lg border bg-muted p-0.5">
+                      <button
+                        onClick={() => { setViewMode("client"); setResultSearch(""); }}
+                        className={cn(
+                          "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                          viewMode === "client"
+                            ? "bg-background text-foreground shadow-sm"
+                            : "text-muted-foreground hover:text-foreground"
+                        )}
+                      >
+                        <Store className="h-3.5 w-3.5" />
+                        Par boutique
+                        <Badge variant="secondary" className="text-[10px] h-5 px-1.5">{clientGroups.size}</Badge>
+                      </button>
+                      <button
+                        onClick={() => { setViewMode("product"); setResultSearch(""); }}
+                        className={cn(
+                          "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                          viewMode === "product"
+                            ? "bg-background text-foreground shadow-sm"
+                            : "text-muted-foreground hover:text-foreground"
+                        )}
+                      >
+                        <Package className="h-3.5 w-3.5" />
+                        Par produit
+                        <Badge variant="secondary" className="text-[10px] h-5 px-1.5">{productGroups.size}</Badge>
+                      </button>
+                    </div>
+                    <span className="text-xs text-muted-foreground ml-2">
+                      {lines.length} lignes · cliquez sur une quantité pour la modifier
+                    </span>
+                  </div>
                   <div className="flex items-center gap-2">
                     <div className="relative">
                       <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                       <Input
-                        placeholder="Filtrer les boutiques..."
-                        value={clientSearch}
-                        onChange={(e) => setClientSearch(e.target.value)}
+                        placeholder={viewMode === "client" ? "Filtrer les boutiques..." : "Filtrer les produits..."}
+                        value={resultSearch}
+                        onChange={(e) => setResultSearch(e.target.value)}
                         className="pl-9 w-56 h-9 text-sm"
                       />
                     </div>
@@ -1120,28 +1346,55 @@ export default function AllocationPage() {
                   </div>
                 </div>
 
-                {/* Client groups */}
-                <div className="space-y-3">
-                  {filteredGroups.length === 0 ? (
-                    <Card className="border-dashed">
-                      <CardContent className="flex items-center justify-center py-8">
-                        <p className="text-sm text-muted-foreground">
-                          Aucune boutique ne correspond à la recherche
-                        </p>
-                      </CardContent>
-                    </Card>
-                  ) : (
-                    filteredGroups.map(([clientId, group]) => (
-                      <ClientGroup
-                        key={clientId}
-                        clientId={clientId}
-                        clientName={group.clientName}
-                        lines={group.lines}
-                        onLineChange={handleLineChange}
-                      />
-                    ))
-                  )}
-                </div>
+                {/* Client view */}
+                {viewMode === "client" && (
+                  <div className="space-y-3">
+                    {filteredClientGroups.length === 0 ? (
+                      <Card className="border-dashed">
+                        <CardContent className="flex items-center justify-center py-8">
+                          <p className="text-sm text-muted-foreground">
+                            Aucune boutique ne correspond à la recherche
+                          </p>
+                        </CardContent>
+                      </Card>
+                    ) : (
+                      filteredClientGroups.map(([clientId, group]) => (
+                        <ClientGroup
+                          key={clientId}
+                          clientId={clientId}
+                          clientName={group.clientName}
+                          lines={group.lines}
+                          onLineChange={handleLineChange}
+                        />
+                      ))
+                    )}
+                  </div>
+                )}
+
+                {/* Product view */}
+                {viewMode === "product" && (
+                  <div className="space-y-3">
+                    {filteredProductGroups.length === 0 ? (
+                      <Card className="border-dashed">
+                        <CardContent className="flex items-center justify-center py-8">
+                          <p className="text-sm text-muted-foreground">
+                            Aucun produit ne correspond à la recherche
+                          </p>
+                        </CardContent>
+                      </Card>
+                    ) : (
+                      filteredProductGroups.map(([productId, group]) => (
+                        <ProductGroup
+                          key={productId}
+                          reference={group.reference}
+                          color={group.color}
+                          lines={group.lines}
+                          onLineChange={handleLineChange}
+                        />
+                      ))
+                    )}
+                  </div>
+                )}
               </>
             )}
           </>
