@@ -51,6 +51,10 @@ export const allocationSimulateSchema = z.object({
   catalogId: z.string().optional(),
   supplierOrderId: z.string().optional(),
   productIds: z.array(z.string()).optional(),
+  clientIds: z.array(z.string()).optional(),
+  supplierIds: z.array(z.string()).optional(),
+  productReferences: z.array(z.string()).optional(),
+  orderType: z.enum(["COMMANDE", "VSS", "ALL"]).optional(), // default COMMANDE
 });
 
 export const allocationAdjustSchema = z.object({

@@ -27,12 +27,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { seasonId, catalogId } = parsed.data;
+    const { seasonId, catalogId, clientIds, supplierIds, productReferences, orderType } = parsed.data;
 
-    // Build filter — optionally restrict to a specific catalog
+    // Build filter — restrict by catalog, clients, order type
     const orderWhere: Record<string, unknown> = { seasonId };
     if (catalogId) {
       orderWhere.catalogId = catalogId;
+    }
+    if (clientIds && clientIds.length > 0) {
+      orderWhere.clientId = { in: clientIds };
+    }
+    // Default: only COMMANDE (exclude VSS/réassort), unless explicitly "ALL" or "VSS"
+    const effectiveOrderType = orderType || "COMMANDE";
+    if (effectiveOrderType !== "ALL") {
+      orderWhere.orderType = effectiveOrderType;
     }
 
     const clientOrders = await prisma.clientOrder.findMany({
@@ -43,8 +51,14 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    // Build supplier filter
+    const supplierWhere: Record<string, unknown> = { seasonId };
+    if (supplierIds && supplierIds.length > 0) {
+      supplierWhere.supplierId = { in: supplierIds };
+    }
+
     const supplierOrders = await prisma.supplierOrder.findMany({
-      where: { seasonId },
+      where: supplierWhere,
       include: {
         receptions: { include: { lines: true } },
         lines: true,
@@ -72,9 +86,16 @@ export async function POST(request: NextRequest) {
       available.set(productId, qty);
     }
 
+    // Build a set of product references to filter (if any)
+    const refFilter = productReferences && productReferences.length > 0
+      ? new Set(productReferences)
+      : null;
+
     const demands: AllocationDemand[] = [];
     for (const order of clientOrders) {
       for (const line of order.lines) {
+        // Skip products not in the reference filter
+        if (refFilter && !refFilter.has(line.product.reference)) continue;
         demands.push({
           clientId: order.clientId,
           clientOrderId: order.id,
@@ -185,6 +206,12 @@ export async function POST(request: NextRequest) {
           : 0;
     }
 
+    // Collect unique product references for filter display
+    const uniqueRefs = new Set<string>();
+    for (const p of productMap.values()) {
+      uniqueRefs.add(p.reference);
+    }
+
     return NextResponse.json({
       lines: enrichedLines,
       warnings: result.warnings,
@@ -202,6 +229,7 @@ export async function POST(request: NextRequest) {
           0
         ),
       },
+      availableProductRefs: Array.from(uniqueRefs).sort(),
     });
   } catch (e) {
     return NextResponse.json(
