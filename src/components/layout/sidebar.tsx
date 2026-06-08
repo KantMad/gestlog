@@ -18,6 +18,7 @@ import {
   Tag,
   ClipboardList,
   Warehouse,
+  ShoppingBag,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
@@ -33,6 +34,7 @@ const NAV_ITEMS = [
   { href: "/depot", label: "Vue dépôt", icon: Warehouse },
   { href: "/configuration", label: "Configuration", icon: Settings },
   { href: "/statistics", label: "Statistiques", icon: BarChart3 },
+  { href: "/btoc", label: "BtoC", icon: ShoppingBag },
 ];
 
 const ADMIN_NAV_ITEMS = [
