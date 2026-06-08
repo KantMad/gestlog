@@ -414,3 +414,116 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
+
+// ─── BtoC (WooCommerce) — Données séparées du BtoB ──────────
+
+model BtocCustomer {
+  id            String   @id @default(cuid())
+  wooId         Int      @unique  // WooCommerce customer ID
+  email         String
+  firstName     String
+  lastName      String
+  company       String?
+  phone         String?
+  billingCity   String?
+  billingCountry String?
+  shippingCity  String?
+  shippingCountry String?
+  totalSpent    Float    @default(0)
+  ordersCount   Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  orders BtocOrder[]
+
+  @@index([email])
+}
+
+model BtocProduct {
+  id            String   @id @default(cuid())
+  wooId         Int      @unique  // WooCommerce product ID
+  sku           String?
+  name          String
+  type          String   @default("simple") // simple, variable, variation
+  parentId      Int?     // parent product ID for variations
+  status        String   @default("publish")
+  price         Float?
+  regularPrice  Float?
+  salePrice     Float?
+  stockQuantity Int?
+  stockStatus   String?  // instock, outofstock, onbackorder
+  category      String?  // main category name
+  imageUrl      String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  orderLines BtocOrderLine[]
+
+  @@index([sku])
+  @@index([parentId])
+}
+
+model BtocOrder {
+  id              String    @id @default(cuid())
+  wooId           Int       @unique  // WooCommerce order ID
+  orderNumber     String
+  status          String    // pending, processing, on-hold, completed, cancelled, refunded, failed
+  customerId      String?
+  customerEmail   String?
+  customerName    String?
+  billingCity     String?
+  shippingCity    String?
+  total           Float
+  subtotal        Float?
+  totalTax        Float?
+  shippingTotal   Float?
+  discountTotal   Float?
+  paymentMethod   String?
+  paymentTitle    String?
+  currency        String   @default("EUR")
+  itemCount       Int      @default(0)
+  couponCodes     String?  // JSON array of coupon codes
+  customerNote    String?
+  orderDate       DateTime
+  completedAt     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  customer BtocCustomer? @relation(fields: [customerId], references: [id])
+  lines    BtocOrderLine[]
+
+  @@index([status])
+  @@index([orderDate])
+  @@index([customerId])
+}
+
+model BtocOrderLine {
+  id            String  @id @default(cuid())
+  orderId       String
+  productId     String?
+  wooProductId  Int     // WooCommerce product or variation ID
+  name          String
+  sku           String?
+  quantity      Int
+  price         Float   // unit price
+  total         Float   // line total
+  size          String? // extracted from variation attributes
+  color         String? // extracted from variation attributes
+  createdAt     DateTime @default(now())
+
+  order   BtocOrder    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product BtocProduct? @relation(fields: [productId], references: [id])
+
+  @@index([orderId])
+  @@index([productId])
+}
+
+model BtocSyncLog {
+  id         String   @id @default(cuid())
+  syncType   String   // CUSTOMERS, PRODUCTS, ORDERS, STOCK
+  itemCount  Int
+  errorCount Int      @default(0)
+  errors     String?  // JSON
+  duration   Int?     // ms
+  syncedAt   DateTime @default(now())
+}
