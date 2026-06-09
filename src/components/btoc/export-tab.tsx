@@ -33,15 +33,22 @@ interface ProductRow {
   stockStatus: string | null;
 }
 
+interface SizeColumn {
+  position: number;
+  header: string;
+}
+
 interface OrderRow {
-  reference: string;
-  sku: string | null;
-  color: string | null;
-  category: string | null;
-  sizeQuantities: Record<string, number>;
-  orderedSizes: string[];
+  productName: string;
+  parentRef: string;
+  colorNum: string;
+  btocColor: string;
+  btobColor: string;
+  btocCategory: string;
+  sizeTypeCode: string;
   totalQuantity: number;
   totalRevenue: number;
+  quantities: Record<number, number>; // position → quantity
 }
 
 interface CustomerRow {
@@ -74,11 +81,14 @@ const PRODUCT_FIELD_LABELS: Record<string, string> = {
 const ORDER_FIELD_LABELS: Record<string, string> = {
   reference: "Référence produit",
   sku: "SKU",
-  color: "Couleur",
-  category: "Catégorie",
-  sizes: "Tailles (colonnes)",
+  colorCode: "Code Couleur",
+  colorBtob: "Couleur BtoB",
+  color: "Couleur BtoC",
+  category: "Catégorie BtoC",
+  categoryBtob: "Type produit BtoB",
   totalQuantity: "Quantité totale",
   totalRevenue: "CA total",
+  sizes: "Tailles (colonnes)",
 };
 
 const CUSTOMER_FIELD_LABELS: Record<string, string> = {
@@ -218,28 +228,30 @@ export function BtocExportTab() {
       const res = await fetch(`/api/btoc/export/orders?${params}`);
       const data = await res.json();
       const orderRows: OrderRow[] = data.rows || [];
-      const allSizes: string[] = data.allSizes || [];
+      const sizeColumns: SizeColumn[] = data.sizeColumns || [];
       const fields = fieldsConfig.orders || Object.fromEntries(
         Object.keys(ORDER_FIELD_LABELS).map((k) => [k, true])
       );
 
-      // Each row uses its OWN orderedSizes (from BtoB sizeScale)
-      // so ALL product sizes appear even if quantity = 0
+      // Build XLSX rows: fixed columns + size columns by BtoB position
       const rows = orderRows.map((o) => {
         const row: Record<string, string | number> = {};
-        if (fields.reference) row["Référence"] = o.reference;
-        if (fields.sku) row["SKU"] = o.sku || "";
-        if (fields.color) row["Couleur"] = o.color || "";
-        if (fields.category) row["Catégorie"] = o.category || "";
-        // Size columns — use the product's own size scale (all sizes)
+        // Fixed columns — Référence first
+        if (fields.reference) row["Référence"] = o.productName;
+        if (fields.sku) row["SKU"] = o.parentRef;
+        if (fields.colorCode) row["Code Couleur"] = o.colorNum;
+        if (fields.colorBtob) row["Couleur BtoB"] = o.btobColor;
+        if (fields.color) row["Couleur BtoC"] = o.btocColor;
+        if (fields.category) row["Catégorie BtoC"] = o.btocCategory;
+        if (fields.categoryBtob) row["Type BtoB"] = o.sizeTypeCode;
+        if (fields.totalQuantity) row["Total Qté"] = o.totalQuantity;
+        if (fields.totalRevenue) row["CA Total"] = o.totalRevenue;
+        // Size columns AFTER CA Total — grouped by BtoB position ranking
         if (fields.sizes) {
-          const sizesToShow = o.orderedSizes.length > 0 ? o.orderedSizes : allSizes;
-          for (const s of sizesToShow) {
-            row[s] = o.sizeQuantities[s] || 0;
+          for (const col of sizeColumns) {
+            row[col.header] = o.quantities[col.position] ?? "";
           }
         }
-        if (fields.totalQuantity) row["Total Qté"] = o.totalQuantity;
-        if (fields.totalRevenue) row["CA Total"] = Math.round(o.totalRevenue * 100) / 100;
         return row;
       });
 

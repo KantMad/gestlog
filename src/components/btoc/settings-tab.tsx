@@ -49,11 +49,14 @@ const SECTIONS: {
     fields: {
       reference: { label: "Référence", description: "Nom du produit parent" },
       sku: { label: "SKU", description: "Référence produit" },
-      color: { label: "Couleur", description: "Couleur du produit" },
-      category: { label: "Catégorie", description: "Catégorie du produit" },
-      sizes: { label: "Tailles (colonnes)", description: "Une colonne par taille avec les quantités" },
+      colorCode: { label: "Code Couleur", description: "Code couleur numérique BtoB" },
+      colorBtob: { label: "Couleur BtoB", description: "Nom couleur BtoB" },
+      color: { label: "Couleur BtoC", description: "Slug couleur WooCommerce" },
+      category: { label: "Catégorie BtoC", description: "Catégorie WooCommerce" },
+      categoryBtob: { label: "Type produit BtoB", description: "Type de taille BtoB (HAU, PAN...)" },
       totalQuantity: { label: "Quantité totale", description: "Total toutes tailles confondues" },
       totalRevenue: { label: "CA total", description: "Chiffre d'affaires total" },
+      sizes: { label: "Tailles (colonnes)", description: "Colonnes par position de taille BtoB" },
     },
   },
   {
