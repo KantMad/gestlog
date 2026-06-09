@@ -17,6 +17,7 @@ export const updateClientSeasonSchema = z.object({
   maxReductionOrder: z.number().min(0).max(100).optional(),
   maxReductionLine: z.number().min(0).max(100).optional(),
   minDeliveryThreshold: z.number().int().min(0).optional(),
+  rotationScore: z.number().int().min(0).optional(),
   isActive: z.boolean().optional(),
 });
 

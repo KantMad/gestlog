@@ -198,9 +198,13 @@ export function ClientConfigTable({ clients, onUpdate }: ClientConfigTableProps)
                   />
                 </TableCell>
                 <TableCell className="text-center">
-                  <span className="text-xs text-muted-foreground">
-                    {s.rotationScore}
-                  </span>
+                  <InlineEditCell
+                    value={s.rotationScore}
+                    seasonId={s.id}
+                    field="rotationScore"
+                    min={0}
+                    onSaved={onUpdate}
+                  />
                 </TableCell>
                 <TableCell className="text-center">
                   <Switch
