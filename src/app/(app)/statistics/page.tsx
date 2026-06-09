@@ -154,32 +154,40 @@ export default function StatisticsPage() {
             {/* Reference filter */}
             <Card>
               <CardContent className="pt-6">
-                <div className="flex items-center gap-3">
-                  <div className="relative flex-1 max-w-md">
-                    <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      placeholder="Filtrer par référence produit..."
-                      value={referenceFilter}
-                      onChange={(e) => setReferenceFilter(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && applyFilter()}
-                      className="pl-10"
-                    />
+                <div className="flex flex-wrap items-end gap-3">
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-muted-foreground">
+                      Référence produit
+                    </label>
+                    <div className="relative">
+                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Filtrer par référence..."
+                        value={referenceFilter}
+                        onChange={(e) => setReferenceFilter(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && applyFilter()}
+                        className="pl-9 w-64 h-9"
+                      />
+                    </div>
                   </div>
-                  <Button onClick={applyFilter} size="sm">
+                  <Button onClick={applyFilter} className="gap-1 h-9">
+                    <Search className="h-4 w-4" />
                     Filtrer
                   </Button>
                   {appliedFilter && (
-                    <Button onClick={clearFilter} variant="ghost" size="sm" className="gap-1">
+                    <Button onClick={clearFilter} variant="ghost" className="gap-1 h-9">
                       <X className="h-4 w-4" />
                       Effacer
                     </Button>
                   )}
-                  {appliedFilter && (
-                    <Badge variant="secondary">
-                      Filtre : {appliedFilter}
-                    </Badge>
-                  )}
                 </div>
+                {appliedFilter && (
+                  <div className="mt-3 flex items-center gap-2 flex-wrap">
+                    <Badge variant="secondary">
+                      Réf. : {appliedFilter}
+                    </Badge>
+                  </div>
+                )}
               </CardContent>
             </Card>
 

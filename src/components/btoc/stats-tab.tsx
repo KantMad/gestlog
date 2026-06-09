@@ -182,7 +182,7 @@ export function BtocStatsTab() {
                 type="date"
                 value={dateFrom}
                 onChange={(e) => setDateFrom(e.target.value)}
-                className="w-40"
+                className="w-40 h-9"
               />
             </div>
             <div className="space-y-1">
@@ -193,7 +193,7 @@ export function BtocStatsTab() {
                 type="date"
                 value={dateTo}
                 onChange={(e) => setDateTo(e.target.value)}
-                className="w-40"
+                className="w-40 h-9"
               />
             </div>
             <div className="space-y-1">
@@ -242,7 +242,7 @@ export function BtocStatsTab() {
                 </SelectContent>
               </Select>
             </div>
-            <Button onClick={applyFilters} size="sm" className="gap-1">
+            <Button onClick={applyFilters} className="gap-1 h-9">
               <Search className="h-4 w-4" />
               Filtrer
             </Button>
@@ -250,8 +250,7 @@ export function BtocStatsTab() {
               <Button
                 onClick={clearFilters}
                 variant="ghost"
-                size="sm"
-                className="gap-1"
+                className="gap-1 h-9"
               >
                 <X className="h-4 w-4" />
                 Effacer
@@ -259,7 +258,7 @@ export function BtocStatsTab() {
             )}
           </div>
           {filtersApplied && (
-            <div className="mt-3 flex gap-2 flex-wrap">
+            <div className="mt-3 flex items-center gap-2 flex-wrap">
               {dateFrom && (
                 <Badge variant="secondary">Depuis : {dateFrom}</Badge>
               )}

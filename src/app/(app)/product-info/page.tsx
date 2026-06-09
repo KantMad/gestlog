@@ -477,7 +477,7 @@ function SizeTypesTab() {
           </div>
           <div className="flex items-center gap-2">
             <div className="relative">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Rechercher code, libellé, taille..."
                 value={search}
@@ -893,7 +893,7 @@ function SupplierRefsTab() {
           </div>
           <div className="flex items-center gap-2">
             <div className="relative">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Rechercher..."
                 value={search}
@@ -1185,7 +1185,7 @@ function EansTab() {
           </div>
           <div className="flex items-center gap-2">
             <div className="relative">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Rechercher ref, couleur, EAN..."
                 value={search}

@@ -739,12 +739,12 @@ function FilterPanel({
               Références produit
             </label>
             <div className="relative">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="ex: AMBELT, JACKET..."
                 value={productSearch}
                 onChange={(e) => setProductSearch(e.target.value)}
-                className="pl-9 text-sm"
+                className="pl-9 h-9 text-sm"
               />
             </div>
             {productSearch && (
@@ -1330,7 +1330,7 @@ export default function AllocationPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="relative">
-                      <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                       <Input
                         placeholder={viewMode === "client" ? "Filtrer les boutiques..." : "Filtrer les produits..."}
                         value={resultSearch}

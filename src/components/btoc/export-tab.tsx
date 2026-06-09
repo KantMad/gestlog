@@ -17,7 +17,6 @@ import {
   Package,
   ShoppingCart,
   Users,
-  Filter,
 } from "lucide-react";
 import { formatNumber } from "@/lib/utils";
 import * as XLSX from "xlsx";
@@ -342,7 +341,7 @@ export function BtocExportTab() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-wrap items-end gap-3 mb-4">
+          <div className="flex flex-wrap items-end gap-3">
             <div className="space-y-1">
               <label className="text-xs font-medium text-muted-foreground">
                 Recherche
@@ -351,7 +350,7 @@ export function BtocExportTab() {
                 placeholder="Nom ou SKU..."
                 value={prodSearch}
                 onChange={(e) => setProdSearch(e.target.value)}
-                className="w-52"
+                className="w-52 h-9"
               />
             </div>
             <div className="space-y-1">
@@ -378,7 +377,7 @@ export function BtocExportTab() {
             <Button
               onClick={handleExportProducts}
               disabled={exportingProducts}
-              className="gap-2"
+              className="gap-2 h-9"
             >
               {exportingProducts ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -389,8 +388,7 @@ export function BtocExportTab() {
             </Button>
           </div>
           {(prodSearch || prodCategory) && (
-            <div className="flex gap-2 flex-wrap">
-              <Filter className="h-4 w-4 text-muted-foreground mt-0.5" />
+            <div className="mt-3 flex items-center gap-2 flex-wrap">
               {prodSearch && <Badge variant="secondary">Recherche : {prodSearch}</Badge>}
               {prodCategory && <Badge variant="secondary">Catégorie : {prodCategory}</Badge>}
             </div>
@@ -414,7 +412,7 @@ export function BtocExportTab() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-wrap items-end gap-3 mb-4">
+          <div className="flex flex-wrap items-end gap-3">
             <div className="space-y-1">
               <label className="text-xs font-medium text-muted-foreground">
                 Date début
@@ -423,7 +421,7 @@ export function BtocExportTab() {
                 type="date"
                 value={orderDateFrom}
                 onChange={(e) => setOrderDateFrom(e.target.value)}
-                className="w-40"
+                className="w-40 h-9"
               />
             </div>
             <div className="space-y-1">
@@ -434,7 +432,7 @@ export function BtocExportTab() {
                 type="date"
                 value={orderDateTo}
                 onChange={(e) => setOrderDateTo(e.target.value)}
-                className="w-40"
+                className="w-40 h-9"
               />
             </div>
             <div className="space-y-1">
@@ -445,7 +443,7 @@ export function BtocExportTab() {
                 placeholder="Référence..."
                 value={orderProduct}
                 onChange={(e) => setOrderProduct(e.target.value)}
-                className="w-48"
+                className="w-48 h-9"
               />
             </div>
             <div className="space-y-1">
@@ -498,13 +496,13 @@ export function BtocExportTab() {
                 placeholder="Nom du client..."
                 value={orderCustomer}
                 onChange={(e) => setOrderCustomer(e.target.value)}
-                className="w-44"
+                className="w-44 h-9"
               />
             </div>
             <Button
               onClick={handleExportOrders}
               disabled={exportingOrders}
-              className="gap-2"
+              className="gap-2 h-9"
             >
               {exportingOrders ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -515,8 +513,7 @@ export function BtocExportTab() {
             </Button>
           </div>
           {(orderDateFrom || orderDateTo || orderProduct || orderColor || orderSize || orderCustomer) && (
-            <div className="flex gap-2 flex-wrap">
-              <Filter className="h-4 w-4 text-muted-foreground mt-0.5" />
+            <div className="mt-3 flex items-center gap-2 flex-wrap">
               {orderDateFrom && <Badge variant="secondary">Depuis : {orderDateFrom}</Badge>}
               {orderDateTo && <Badge variant="secondary">{"Jusqu'au"} : {orderDateTo}</Badge>}
               {orderProduct && <Badge variant="secondary">Réf. : {orderProduct}</Badge>}
@@ -544,7 +541,7 @@ export function BtocExportTab() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-wrap items-end gap-3 mb-4">
+          <div className="flex flex-wrap items-end gap-3">
             <div className="space-y-1">
               <label className="text-xs font-medium text-muted-foreground">
                 Recherche
@@ -553,7 +550,7 @@ export function BtocExportTab() {
                 placeholder="Nom, email, entreprise..."
                 value={custSearch}
                 onChange={(e) => setCustSearch(e.target.value)}
-                className="w-52"
+                className="w-52 h-9"
               />
             </div>
             <div className="space-y-1">
@@ -564,7 +561,7 @@ export function BtocExportTab() {
                 placeholder="Référence..."
                 value={custProduct}
                 onChange={(e) => setCustProduct(e.target.value)}
-                className="w-48"
+                className="w-48 h-9"
               />
             </div>
             <div className="space-y-1">
@@ -612,7 +609,7 @@ export function BtocExportTab() {
             <Button
               onClick={handleExportCustomers}
               disabled={exportingCustomers}
-              className="gap-2"
+              className="gap-2 h-9"
             >
               {exportingCustomers ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -623,8 +620,7 @@ export function BtocExportTab() {
             </Button>
           </div>
           {(custSearch || custProduct || custSize || custCity) && (
-            <div className="flex gap-2 flex-wrap">
-              <Filter className="h-4 w-4 text-muted-foreground mt-0.5" />
+            <div className="mt-3 flex items-center gap-2 flex-wrap">
               {custSearch && <Badge variant="secondary">Recherche : {custSearch}</Badge>}
               {custProduct && <Badge variant="secondary">Réf. : {custProduct}</Badge>}
               {custSize && <Badge variant="secondary">Taille : {custSize}</Badge>}

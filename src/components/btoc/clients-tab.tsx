@@ -236,13 +236,13 @@ export function BtocClientsTab() {
                 Recherche
               </label>
               <div className="relative">
-                <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   placeholder="Nom, email, entreprise..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && applySearch()}
-                  className="pl-10 w-64"
+                  className="pl-9 w-64 h-9"
                 />
               </div>
             </div>
@@ -255,7 +255,7 @@ export function BtocClientsTab() {
                 value={productRef}
                 onChange={(e) => setProductRef(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && applySearch()}
-                className="w-52"
+                className="w-52 h-9"
               />
             </div>
             <div className="space-y-1">
@@ -310,7 +310,7 @@ export function BtocClientsTab() {
                 </SelectContent>
               </Select>
             </div>
-            <Button onClick={applySearch} size="sm" className="gap-1">
+            <Button onClick={applySearch} className="gap-1 h-9">
               <Search className="h-4 w-4" />
               Rechercher
             </Button>
@@ -318,8 +318,7 @@ export function BtocClientsTab() {
               <Button
                 onClick={clearFilters}
                 variant="ghost"
-                size="sm"
-                className="gap-1"
+                className="gap-1 h-9"
               >
                 <X className="h-4 w-4" />
                 Effacer
@@ -327,7 +326,7 @@ export function BtocClientsTab() {
             )}
           </div>
           {hasFilters && (
-            <div className="mt-3 flex gap-2 flex-wrap">
+            <div className="mt-3 flex items-center gap-2 flex-wrap">
               {search && (
                 <Badge variant="secondary">Recherche : {search}</Badge>
               )}
