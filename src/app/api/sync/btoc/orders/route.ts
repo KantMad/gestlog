@@ -121,7 +121,7 @@ export async function POST(request: NextRequest) {
 
             for (const li of o.line_items) {
               try {
-                // Resolve product by wooId
+                // Resolve product: try wooId first, then SKU prefix fallback
                 let productId: string | null = null;
                 const prodWooId = li.variation_id || li.product_id;
                 if (prodWooId) {
@@ -130,6 +130,17 @@ export async function POST(request: NextRequest) {
                     Number(prodWooId)
                   );
                   if (prodRows.length > 0) productId = prodRows[0].id;
+                }
+                // Fallback: match parent product via SKU prefix (OMACCE_C012-740-TU → OMACCE_C012)
+                if (!productId && li.sku) {
+                  const skuPrefix = String(li.sku).split("-")[0];
+                  if (skuPrefix) {
+                    const skuRows = await prisma.$queryRawUnsafe<{ id: string }[]>(
+                      `SELECT id FROM "BtocProduct" WHERE sku = $1 AND type = 'variable' LIMIT 1`,
+                      skuPrefix
+                    );
+                    if (skuRows.length > 0) productId = skuRows[0].id;
+                  }
                 }
 
                 // Extract size/color from meta_data

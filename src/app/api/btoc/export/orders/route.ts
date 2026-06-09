@@ -123,26 +123,25 @@ export async function GET(request: NextRequest) {
       }[]
     >(
       `SELECT
-        COALESCE(parent.name, p.name, ol.name) AS reference,
-        COALESCE(parent.sku, p.sku) AS "parentSku",
+        COALESCE(p.name, ol.name) AS reference,
+        COALESCE(p.sku, SPLIT_PART(ol.sku, '-', 1)) AS "parentSku",
         ol.sku AS "lineSku",
         ol.color,
-        COALESCE(parent.category, p.category) AS category,
+        p.category,
         ol.size,
         SUM(ol.quantity) AS quantity,
         SUM(ol.total) AS revenue,
         COUNT(DISTINCT o.id) AS "orderCount"
        FROM "BtocOrderLine" ol
        JOIN "BtocOrder" o ON o.id = ol."orderId"
-       LEFT JOIN "BtocProduct" p ON p.id = ol."productId"
-       LEFT JOIN "BtocProduct" parent ON parent."wooId" = p."parentId" AND parent.type = 'variable'
+       LEFT JOIN "BtocProduct" p ON p.sku = SPLIT_PART(ol.sku, '-', 1)
        ${where}
        GROUP BY
-         COALESCE(parent.name, p.name, ol.name),
-         COALESCE(parent.sku, p.sku),
+         COALESCE(p.name, ol.name),
+         COALESCE(p.sku, SPLIT_PART(ol.sku, '-', 1)),
          ol.sku,
          ol.color,
-         COALESCE(parent.category, p.category),
+         p.category,
          ol.size
        ORDER BY reference, ol.color, ol.size`,
       ...queryParams

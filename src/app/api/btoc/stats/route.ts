@@ -36,18 +36,14 @@ export async function GET(request: NextRequest) {
     let lineJoin = "";
     if (needsLineJoin) {
       lineJoin = `JOIN "BtocOrderLine" ol ON ol."orderId" = o.id
-                  JOIN "BtocProduct" p ON p.id = ol."productId"`;
+                  LEFT JOIN "BtocProduct" p ON p.sku = SPLIT_PART(ol.sku, '-', 1)`;
       if (category) {
-        orderConditions.push(`p.category = $${paramIndex}`);
+        orderConditions.push(`p.category ILIKE '%' || $${paramIndex} || '%'`);
         orderParams.push(category);
         paramIndex++;
       }
       if (parentProduct) {
-        // Filter by parent product: match lines whose product has a parentId
-        // equal to a variable product matching the given name
-        orderConditions.push(
-          `p."parentId" IN (SELECT "wooId" FROM "BtocProduct" WHERE type = 'variable' AND name ILIKE $${paramIndex})`
-        );
+        orderConditions.push(`p.name ILIKE $${paramIndex}`);
         orderParams.push(`%${parentProduct}%`);
         paramIndex++;
       }
@@ -129,14 +125,12 @@ export async function GET(request: NextRequest) {
       tpIdx++;
     }
     if (category) {
-      topProductConditions.push(`p.category = $${tpIdx}`);
+      topProductConditions.push(`p.category ILIKE '%' || $${tpIdx} || '%'`);
       topProductParams.push(category);
       tpIdx++;
     }
     if (parentProduct) {
-      topProductConditions.push(
-        `p."parentId" IN (SELECT "wooId" FROM "BtocProduct" WHERE type = 'variable' AND name ILIKE $${tpIdx})`
-      );
+      topProductConditions.push(`p.name ILIKE $${tpIdx}`);
       topProductParams.push(`%${parentProduct}%`);
       tpIdx++;
     }
@@ -156,7 +150,7 @@ export async function GET(request: NextRequest) {
         SUM(ol.total) AS revenue
       FROM "BtocOrderLine" ol
       JOIN "BtocOrder" o ON o.id = ol."orderId"
-      LEFT JOIN "BtocProduct" p ON p.id = ol."productId"
+      LEFT JOIN "BtocProduct" p ON p.sku = SPLIT_PART(ol.sku, '-', 1)
       ${tpWhere}
       GROUP BY ol.name, ol.sku
       ORDER BY revenue DESC
@@ -174,7 +168,7 @@ export async function GET(request: NextRequest) {
         SUM(ol.total) AS revenue
       FROM "BtocOrderLine" ol
       JOIN "BtocOrder" o ON o.id = ol."orderId"
-      LEFT JOIN "BtocProduct" p ON p.id = ol."productId"
+      LEFT JOIN "BtocProduct" p ON p.sku = SPLIT_PART(ol.sku, '-', 1)
       ${tpWhere}
       GROUP BY p.category
       ORDER BY revenue DESC`,
@@ -238,7 +232,7 @@ export async function GET(request: NextRequest) {
         SUM(ol.quantity) AS quantity
       FROM "BtocOrderLine" ol
       JOIN "BtocOrder" o ON o.id = ol."orderId"
-      LEFT JOIN "BtocProduct" p ON p.id = ol."productId"
+      LEFT JOIN "BtocProduct" p ON p.sku = SPLIT_PART(ol.sku, '-', 1)
       ${tpWhere.length > 0 ? tpWhere + " AND " : "WHERE "}
         ol.size IS NOT NULL AND ol.size != ''
       GROUP BY ol.size
@@ -247,15 +241,18 @@ export async function GET(request: NextRequest) {
     );
 
     // ─── Available categories (for filter dropdown) ──────────
+    // Categories can be comma-separated (multiple per product), so unnest them
     const categoryRows = await prisma.$queryRawUnsafe<
       { category: string }[]
     >(
-      `SELECT DISTINCT category
+      `SELECT DISTINCT TRIM(unnest(string_to_array(category, ','))) AS category
       FROM "BtocProduct"
       WHERE category IS NOT NULL AND category != ''
       ORDER BY category ASC`
     );
-    const availableCategories = categoryRows.map((r) => r.category);
+    const availableCategories = categoryRows
+      .map((r) => r.category)
+      .filter((c) => c.length > 0);
 
     // ─── Available parent products (for filter dropdown) ─────
     const parentProductRows = await prisma.$queryRawUnsafe<

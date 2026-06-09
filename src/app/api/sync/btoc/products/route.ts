@@ -31,10 +31,13 @@ export async function POST(request: NextRequest) {
           continue;
         }
 
-        // Extract main category
+        // Extract ALL categories (comma-separated)
         let category: string | null = null;
         if (Array.isArray(p.categories) && p.categories.length > 0) {
-          category = p.categories[0].name || null;
+          const names = p.categories
+            .map((c: { name?: string }) => c.name?.trim())
+            .filter(Boolean);
+          category = names.length > 0 ? names.join(", ") : null;
         }
 
         // Extract first image

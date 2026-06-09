@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
       idx++;
     }
     if (category) {
-      conditions.push(`p.category = $${idx}`);
+      conditions.push(`p.category ILIKE '%' || $${idx} || '%'`);
       queryParams.push(category);
       idx++;
     }
@@ -64,8 +64,12 @@ export async function GET(request: NextRequest) {
     );
 
     // Available filters
+    // Categories can be comma-separated, so unnest them for unique values
     const categories = await prisma.$queryRawUnsafe<{ category: string }[]>(
-      `SELECT DISTINCT category FROM "BtocProduct" WHERE category IS NOT NULL AND category != '' ORDER BY category`
+      `SELECT DISTINCT TRIM(unnest(string_to_array(category, ','))) AS category
+       FROM "BtocProduct"
+       WHERE category IS NOT NULL AND category != ''
+       ORDER BY category`
     );
 
     return NextResponse.json({
