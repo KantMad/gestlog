@@ -6,6 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Download,
   Loader2,
   Package,
@@ -352,16 +359,20 @@ export function BtocExportTab() {
               <label className="text-xs font-medium text-muted-foreground">
                 Catégorie
               </label>
-              <select
-                value={prodCategory}
-                onChange={(e) => setProdCategory(e.target.value)}
-                className="flex h-9 w-48 items-center rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+              <Select
+                value={prodCategory || "all"}
+                onValueChange={(v) => setProdCategory(!v || v === "all" ? "" : v)}
               >
-                <option value="">Toutes</option>
-                {prodCategories.map((c) => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
+                <SelectTrigger className="w-48 h-9">
+                  <SelectValue placeholder="Toutes" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Toutes</SelectItem>
+                  {prodCategories.map((c) => (
+                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <Button
               onClick={handleExportProducts}
@@ -440,31 +451,39 @@ export function BtocExportTab() {
               <label className="text-xs font-medium text-muted-foreground">
                 Couleur
               </label>
-              <select
-                value={orderColor}
-                onChange={(e) => setOrderColor(e.target.value)}
-                className="flex h-9 w-36 items-center rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+              <Select
+                value={orderColor || "all"}
+                onValueChange={(v) => setOrderColor(!v || v === "all" ? "" : v)}
               >
-                <option value="">Toutes</option>
-                {orderColors.map((c) => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
+                <SelectTrigger className="w-36 h-9">
+                  <SelectValue placeholder="Toutes" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Toutes</SelectItem>
+                  {orderColors.map((c) => (
+                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-1">
               <label className="text-xs font-medium text-muted-foreground">
                 Taille
               </label>
-              <select
-                value={orderSize}
-                onChange={(e) => setOrderSize(e.target.value)}
-                className="flex h-9 w-28 items-center rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+              <Select
+                value={orderSize || "all"}
+                onValueChange={(v) => setOrderSize(!v || v === "all" ? "" : v)}
               >
-                <option value="">Toutes</option>
-                {orderSizes.map((s) => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </select>
+                <SelectTrigger className="w-28 h-9">
+                  <SelectValue placeholder="Toutes" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Toutes</SelectItem>
+                  {orderSizes.map((s) => (
+                    <SelectItem key={s} value={s}>{s}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-1">
               <label className="text-xs font-medium text-muted-foreground">
@@ -547,31 +566,39 @@ export function BtocExportTab() {
               <label className="text-xs font-medium text-muted-foreground">
                 Taille
               </label>
-              <select
-                value={custSize}
-                onChange={(e) => setCustSize(e.target.value)}
-                className="flex h-9 w-28 items-center rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+              <Select
+                value={custSize || "all"}
+                onValueChange={(v) => setCustSize(!v || v === "all" ? "" : v)}
               >
-                <option value="">Toutes</option>
-                {custSizes.map((s) => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </select>
+                <SelectTrigger className="w-28 h-9">
+                  <SelectValue placeholder="Toutes" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Toutes</SelectItem>
+                  {custSizes.map((s) => (
+                    <SelectItem key={s} value={s}>{s}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-1">
               <label className="text-xs font-medium text-muted-foreground">
                 Ville
               </label>
-              <select
-                value={custCity}
-                onChange={(e) => setCustCity(e.target.value)}
-                className="flex h-9 w-40 items-center rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+              <Select
+                value={custCity || "all"}
+                onValueChange={(v) => setCustCity(!v || v === "all" ? "" : v)}
               >
-                <option value="">Toutes</option>
-                {custCities.map((c) => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
+                <SelectTrigger className="w-40 h-9">
+                  <SelectValue placeholder="Toutes" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Toutes</SelectItem>
+                  {custCities.map((c) => (
+                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <Button
               onClick={handleExportCustomers}

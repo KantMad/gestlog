@@ -6,6 +6,21 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
   Search,
   X,
   Loader2,
@@ -248,41 +263,49 @@ export function BtocClientsTab() {
               <label className="text-xs font-medium text-muted-foreground">
                 Taille commandée
               </label>
-              <select
-                value={size}
-                onChange={(e) => {
-                  setSize(e.target.value);
+              <Select
+                value={size || "all"}
+                onValueChange={(v) => {
+                  setSize(!v || v === "all" ? "" : v);
                   setPage(1);
                 }}
-                className="flex h-9 w-32 items-center rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
               >
-                <option value="">Toutes</option>
-                {data?.availableSizes.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger className="w-32 h-9">
+                  <SelectValue placeholder="Toutes" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Toutes</SelectItem>
+                  {data?.availableSizes.map((s) => (
+                    <SelectItem key={s} value={s}>
+                      {s}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-1">
               <label className="text-xs font-medium text-muted-foreground">
                 Ville
               </label>
-              <select
-                value={city}
-                onChange={(e) => {
-                  setCity(e.target.value);
+              <Select
+                value={city || "all"}
+                onValueChange={(v) => {
+                  setCity(!v || v === "all" ? "" : v);
                   setPage(1);
                 }}
-                className="flex h-9 w-40 items-center rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
               >
-                <option value="">Toutes</option>
-                {data?.availableCities.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger className="w-40 h-9">
+                  <SelectValue placeholder="Toutes" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Toutes</SelectItem>
+                  {data?.availableCities.map((c) => (
+                    <SelectItem key={c} value={c}>
+                      {c}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <Button onClick={applySearch} size="sm" className="gap-1">
               <Search className="h-4 w-4" />
@@ -369,39 +392,22 @@ export function BtocClientsTab() {
           <Card>
             <CardContent className="p-0">
               <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b bg-muted/50">
-                      <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                        Client
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                        Email
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                        Ville
-                      </th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                        Commandes
-                      </th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                        Total dépensé
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                        Dernière commande
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                        Produits commandés
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Client</TableHead>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Ville</TableHead>
+                      <TableHead className="text-right">Commandes</TableHead>
+                      <TableHead className="text-right">Total dépensé</TableHead>
+                      <TableHead>Dernière commande</TableHead>
+                      <TableHead>Produits commandés</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
                     {data.customers.map((customer) => (
-                      <tr
-                        key={customer.id}
-                        className="hover:bg-muted/30 transition-colors"
-                      >
-                        <td className="px-4 py-3">
+                      <TableRow key={customer.id}>
+                        <TableCell>
                           <div>
                             <div className="text-sm font-medium">
                               {customer.firstName} {customer.lastName}
@@ -412,27 +418,27 @@ export function BtocClientsTab() {
                               </div>
                             )}
                           </div>
-                        </td>
-                        <td className="px-4 py-3 text-sm text-muted-foreground">
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
                           {customer.email}
-                        </td>
-                        <td className="px-4 py-3 text-sm">
+                        </TableCell>
+                        <TableCell className="text-sm">
                           {customer.billingCity || "—"}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-right font-medium">
+                        </TableCell>
+                        <TableCell className="text-sm text-right font-medium tabular-nums">
                           {customer.ordersCount}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-right font-medium">
+                        </TableCell>
+                        <TableCell className="text-sm text-right font-medium tabular-nums">
                           {formatEuro(customer.totalSpent)}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-muted-foreground">
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
                           {customer.lastOrderDate
                             ? new Date(
                                 customer.lastOrderDate
                               ).toLocaleDateString("fr-FR")
                             : "—"}
-                        </td>
-                        <td className="px-4 py-3">
+                        </TableCell>
+                        <TableCell>
                           <div className="flex flex-wrap gap-1 max-w-xs">
                             {customer.orderedProducts
                               .slice(0, 3)
@@ -454,11 +460,11 @@ export function BtocClientsTab() {
                               </Badge>
                             )}
                           </div>
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     ))}
-                  </tbody>
-                </table>
+                  </TableBody>
+                </Table>
               </div>
             </CardContent>
           </Card>

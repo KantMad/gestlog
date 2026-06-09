@@ -79,7 +79,7 @@ export function Sidebar() {
             >
               <item.icon
                 className={cn(
-                  "h-4.5 w-4.5 shrink-0",
+                  "h-[18px] w-[18px] shrink-0",
                   isActive ? "text-primary" : ""
                 )}
               />

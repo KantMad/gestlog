@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { useSeason } from "@/lib/season-context";
+import { useSeason, formatSeasonLabel } from "@/lib/season-context";
 import { Topbar } from "@/components/layout/topbar";
 import { PageHeader } from "@/components/layout/page-header";
 import { Dropzone } from "@/components/import/dropzone";
@@ -277,7 +277,7 @@ export default function ImportPage() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
-                Saison {activeSeason.name}
+                {formatSeasonLabel(activeSeason)}
                 <Badge variant="secondary">Active</Badge>
               </CardTitle>
             </CardHeader>

@@ -75,3 +75,14 @@ export function SeasonProvider({ children }: { children: React.ReactNode }) {
 export function useSeason() {
   return useContext(SeasonContext);
 }
+
+const SEASON_TYPE_LABELS: Record<string, string> = {
+  AH: "Automne-Hiver",
+  PE: "Printemps-Été",
+};
+
+export function formatSeasonLabel(season: { name: string; type: string; year: number }): string {
+  const typeLabel = SEASON_TYPE_LABELS[season.type];
+  if (typeLabel) return `${typeLabel} ${season.year}`;
+  return season.name;
+}

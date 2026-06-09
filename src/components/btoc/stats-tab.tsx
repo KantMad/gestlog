@@ -6,6 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   ShoppingCart,
   Euro,
   Users,
@@ -194,35 +201,43 @@ export function BtocStatsTab() {
               <label className="text-xs font-medium text-muted-foreground">
                 Catégorie
               </label>
-              <select
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                className="flex h-9 w-48 items-center rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              <Select
+                value={category || "all"}
+                onValueChange={(v) => setCategory(!v || v === "all" ? "" : v)}
               >
-                <option value="">Toutes</option>
-                {data.availableCategories.map((cat) => (
-                  <option key={cat} value={cat}>
-                    {cat}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger className="w-48 h-9">
+                  <SelectValue placeholder="Toutes" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Toutes</SelectItem>
+                  {data.availableCategories.map((cat) => (
+                    <SelectItem key={cat} value={cat}>
+                      {cat}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-1">
               <label className="text-xs font-medium text-muted-foreground">
                 Produit parent
               </label>
-              <select
-                value={parentProduct}
-                onChange={(e) => setParentProduct(e.target.value)}
-                className="flex h-9 w-56 items-center rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              <Select
+                value={parentProduct || "all"}
+                onValueChange={(v) => setParentProduct(!v || v === "all" ? "" : v)}
               >
-                <option value="">Tous</option>
-                {data.availableParentProducts.map((p) => (
-                  <option key={p.wooId} value={p.name}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger className="w-56 h-9">
+                  <SelectValue placeholder="Tous" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Tous</SelectItem>
+                  {data.availableParentProducts.map((p) => (
+                    <SelectItem key={p.wooId} value={p.name}>
+                      {p.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <Button onClick={applyFilters} size="sm" className="gap-1">
               <Search className="h-4 w-4" />

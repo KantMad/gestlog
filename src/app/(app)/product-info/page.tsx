@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { Topbar } from "@/components/layout/topbar";
 import { PageHeader } from "@/components/layout/page-header";
 import { Dropzone } from "@/components/import/dropzone";
@@ -33,6 +33,13 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Ruler,
   Factory,
   Barcode,
@@ -42,6 +49,11 @@ import {
   RefreshCw,
   Search,
   Trash2,
+  Pencil,
+  Plus,
+  X,
+  Save,
+  GripVertical,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -52,7 +64,7 @@ interface ParsedData {
   rows: Record<string, string | number | null>[];
 }
 
-// ─── Size Types Import ───────────────────────────────────────
+// ─── Size Types Tab ─────────────────────────────────────────
 
 const SIZE_TYPE_ROW_PATTERNS: Record<string, RegExp[]> = {
   sizeTypeCode: [/^code$/i, /type.*taille/i, /size.*type/i, /^type$/i],
@@ -61,11 +73,24 @@ const SIZE_TYPE_ROW_PATTERNS: Record<string, RegExp[]> = {
   label: [/^label$/i, /^libell[eé]$/i, /description/i],
 };
 
+interface SizeTypeMapping {
+  id: string;
+  position: number;
+  sizeName: string;
+}
+
 interface SizeTypeData {
   id: string;
   code: string;
   label: string | null;
-  mappings: { id: string; position: number; sizeName: string }[];
+  mappings: SizeTypeMapping[];
+}
+
+// Editable mapping row for inline editing
+interface EditableMapping {
+  position: number;
+  sizeName: string;
+  _key: string; // local unique key for React
 }
 
 function SizeTypesTab() {
@@ -82,6 +107,14 @@ function SizeTypesTab() {
   const [loadingData, setLoadingData] = useState(true);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<SizeTypeData | null>(null);
+  const [search, setSearch] = useState("");
+  const [showImport, setShowImport] = useState(false);
+
+  // Editing state
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editLabel, setEditLabel] = useState("");
+  const [editMappings, setEditMappings] = useState<EditableMapping[]>([]);
+  const [saving, setSaving] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
@@ -90,7 +123,8 @@ function SizeTypesTab() {
         const json = await res.json();
         setSizeTypes(json.data || []);
       }
-    } catch {} finally {
+    } catch {
+    } finally {
       setLoadingData(false);
     }
   }, []);
@@ -122,7 +156,10 @@ function SizeTypesTab() {
 
   const handleImport = async () => {
     if (!file || !parsed) return;
-    if (importFormat === "rows" && (!mapping.sizeTypeCode || !mapping.sizeName || !mapping.position)) {
+    if (
+      importFormat === "rows" &&
+      (!mapping.sizeTypeCode || !mapping.sizeName || !mapping.position)
+    ) {
       toast.error("Colonnes Type, Valeur taille et Numéro requis");
       return;
     }
@@ -166,12 +203,103 @@ function SizeTypesTab() {
         toast.error(json.error || "Erreur de suppression");
         return;
       }
-      toast.success(`Type "${code}" supprime`);
+      toast.success(`Type "${code}" supprimé`);
       loadData();
     } catch {
-      toast.error("Erreur reseau");
+      toast.error("Erreur réseau");
     } finally {
       setDeleting(null);
+    }
+  };
+
+  // ─── Inline Editing ─────────────────────────
+  const startEditing = (st: SizeTypeData) => {
+    setEditingId(st.id);
+    setEditLabel(st.label || "");
+    setEditMappings(
+      st.mappings.map((m, i) => ({
+        position: m.position,
+        sizeName: m.sizeName,
+        _key: `existing-${i}`,
+      }))
+    );
+  };
+
+  const cancelEditing = () => {
+    setEditingId(null);
+    setEditLabel("");
+    setEditMappings([]);
+  };
+
+  const addMappingRow = () => {
+    const maxPos =
+      editMappings.length > 0
+        ? Math.max(...editMappings.map((m) => m.position))
+        : 0;
+    setEditMappings([
+      ...editMappings,
+      { position: maxPos + 1, sizeName: "", _key: `new-${Date.now()}` },
+    ]);
+  };
+
+  const removeMappingRow = (key: string) => {
+    setEditMappings(editMappings.filter((m) => m._key !== key));
+  };
+
+  const updateMappingField = (
+    key: string,
+    field: "position" | "sizeName",
+    value: string | number
+  ) => {
+    setEditMappings(
+      editMappings.map((m) =>
+        m._key === key ? { ...m, [field]: value } : m
+      )
+    );
+  };
+
+  const saveEditing = async () => {
+    if (!editingId) return;
+    const validMappings = editMappings.filter(
+      (m) => m.sizeName.trim() && m.position > 0
+    );
+    if (validMappings.length === 0) {
+      toast.error("Au moins une taille est requise");
+      return;
+    }
+    // Check for duplicate positions
+    const positions = validMappings.map((m) => m.position);
+    if (new Set(positions).size !== positions.length) {
+      toast.error("Les positions doivent être uniques");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const res = await fetch("/api/product-info/size-types", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: editingId,
+          label: editLabel || null,
+          mappings: validMappings.map((m) => ({
+            position: m.position,
+            sizeName: m.sizeName.trim(),
+          })),
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        toast.error(json.error || "Erreur de sauvegarde");
+        return;
+      }
+      toast.success("Type de taille mis à jour");
+      setEditingId(null);
+      loadData();
+    } catch {
+      toast.error("Erreur réseau");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -194,72 +322,118 @@ function SizeTypesTab() {
     { key: "label", label: "Libellé" },
   ];
 
+  // Filtered data
+  const filtered = search
+    ? sizeTypes.filter(
+        (st) =>
+          st.code.toLowerCase().includes(search.toLowerCase()) ||
+          (st.label || "").toLowerCase().includes(search.toLowerCase()) ||
+          st.mappings.some((m) =>
+            m.sizeName.toLowerCase().includes(search.toLowerCase())
+          )
+      )
+    : sizeTypes;
+
   return (
     <div className="space-y-6">
-      <div className="rounded-lg border bg-muted/30 p-4 space-y-2">
-        <p className="text-sm font-medium">Format d&apos;import</p>
-        <div className="flex gap-2">
-          <Button
-            variant={importFormat === "rows" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setImportFormat("rows")}
-          >
-            Ligne par ligne
-          </Button>
-          <Button
-            variant={importFormat === "columns" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setImportFormat("columns")}
-          >
-            Colonnes
-          </Button>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          {importFormat === "rows" ? (
-            <>
-              <strong>Ligne par ligne :</strong> Chaque ligne = 1 mapping.
-              Ex : <code className="bg-muted px-1 rounded">A | XS | 1</code>, <code className="bg-muted px-1 rounded">A | S | 2</code>, <code className="bg-muted px-1 rounded">B | 36 | 1</code>
-            </>
-          ) : (
-            <>
-              <strong>Colonnes :</strong> Chaque ligne = 1 type de taille, les colonnes = numéros.
-              Ex : <code className="bg-muted px-1 rounded">A | XS | S | M | L</code>
-            </>
-          )}
-        </p>
+      {/* ─── Import toggle ────────────────────────── */}
+      <div className="flex items-center justify-between">
+        <Button
+          variant={showImport ? "default" : "outline"}
+          size="sm"
+          onClick={() => setShowImport(!showImport)}
+          className="gap-2"
+        >
+          {showImport ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+          {showImport ? "Fermer l'import" : "Importer depuis fichier"}
+        </Button>
       </div>
 
-      {result ? (
-        <ImportResult result={result} onReset={reset} />
-      ) : (
-        <>
-          <Dropzone onFileSelected={handleFileSelected} />
-          {parsed && (
-            <>
-              <ImportPreview headers={parsed.headers} rows={parsed.rows} />
-              <ColumnMapper
-                headers={parsed.headers}
-                fields={importFormat === "rows" ? rowFields : colFields}
-                mapping={mapping}
-                onMappingChange={setMapping}
-              />
-              {importFormat === "columns" && (
-                <p className="text-xs text-muted-foreground">
-                  Les colonnes non mappées seront interprétées comme des tailles
-                  (dans l&apos;ordre : position 1, 2, 3...).
-                </p>
-              )}
-              <Button onClick={handleImport} disabled={importing} className="w-full">
-                {importing && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-                {importing ? "Import en cours..." : `Importer ${parsed.rows.length} lignes`}
+      {/* ─── Import section (collapsible) ─────────── */}
+      {showImport && (
+        <Card className="border-dashed">
+          <CardContent className="pt-6 space-y-4">
+            <div className="flex gap-2 items-center">
+              <span className="text-sm font-medium">Format :</span>
+              <Button
+                variant={importFormat === "rows" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setImportFormat("rows")}
+              >
+                Ligne par ligne
               </Button>
-            </>
-          )}
-        </>
+              <Button
+                variant={importFormat === "columns" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setImportFormat("columns")}
+              >
+                Colonnes
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {importFormat === "rows" ? (
+                <>
+                  <strong>Ligne par ligne :</strong> Chaque ligne = 1 mapping. Ex
+                  : <code className="bg-muted px-1 rounded">HAU | XS | 1</code>
+                </>
+              ) : (
+                <>
+                  <strong>Colonnes :</strong> Chaque ligne = 1 type, les colonnes
+                  = positions. Ex :{" "}
+                  <code className="bg-muted px-1 rounded">
+                    HAU | XS | S | M | L
+                  </code>
+                </>
+              )}
+            </p>
+
+            {result ? (
+              <ImportResult result={result} onReset={reset} />
+            ) : (
+              <>
+                <Dropzone onFileSelected={handleFileSelected} />
+                {parsed && (
+                  <>
+                    <ImportPreview headers={parsed.headers} rows={parsed.rows} />
+                    <ColumnMapper
+                      headers={parsed.headers}
+                      fields={importFormat === "rows" ? rowFields : colFields}
+                      mapping={mapping}
+                      onMappingChange={setMapping}
+                    />
+                    {importFormat === "columns" && (
+                      <p className="text-xs text-muted-foreground">
+                        Les colonnes non mappées seront interprétées comme des
+                        tailles (dans l&apos;ordre : position 1, 2, 3...).
+                      </p>
+                    )}
+                    <Button
+                      onClick={handleImport}
+                      disabled={importing}
+                      className="w-full"
+                    >
+                      {importing && (
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      )}
+                      {importing
+                        ? "Import en cours..."
+                        : `Importer ${parsed.rows.length} lignes`}
+                    </Button>
+                  </>
+                )}
+              </>
+            )}
+          </CardContent>
+        </Card>
       )}
 
-      {/* Confirmation suppression */}
-      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
+      {/* ─── Delete confirmation ────────────────────── */}
+      <AlertDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Supprimer le type de taille ?</AlertDialogTitle>
@@ -270,7 +444,7 @@ function SizeTypesTab() {
                   {deleteTarget.label ? ` (${deleteTarget.label})` : ""} et ses{" "}
                   {deleteTarget.mappings.length} taille
                   {deleteTarget.mappings.length > 1 ? "s" : ""} seront
-                  definitivement supprimes. Cette action est irreversible.
+                  définitivement supprimés. Cette action est irréversible.
                 </>
               )}
             </AlertDialogDescription>
@@ -294,74 +468,232 @@ function SizeTypesTab() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Existing data */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="text-base">
-            Types de taille
-            <Badge variant="secondary" className="ml-2">{sizeTypes.length}</Badge>
-          </CardTitle>
-          <Button variant="ghost" size="sm" onClick={loadData}>
-            <RefreshCw className="h-4 w-4" />
-          </Button>
-        </CardHeader>
-        <CardContent>
-          {loadingData ? (
-            <p className="text-sm text-muted-foreground animate-pulse">Chargement...</p>
-          ) : sizeTypes.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Aucun type de taille importé</p>
-          ) : (
-            <div className="space-y-4">
-              {sizeTypes.map((st) => (
-                <div key={st.id} className="rounded-lg border p-4">
-                  <div className="flex items-center gap-2 mb-3">
-                    <Badge className="bg-violet-100 text-violet-700 hover:bg-violet-100">
-                      {st.code}
-                    </Badge>
-                    {st.label && (
-                      <span className="text-sm text-muted-foreground">{st.label}</span>
-                    )}
-                    <span className="text-xs text-muted-foreground ml-auto mr-2">
-                      {st.mappings.length} taille{st.mappings.length > 1 ? "s" : ""}
-                    </span>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
-                      disabled={deleting === st.id}
-                      onClick={() => setDeleteTarget(st)}
-                    >
-                      {deleting === st.id ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <Trash2 className="h-3.5 w-3.5" />
-                      )}
-                    </Button>
-                  </div>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-24">N° taille</TableHead>
-                        <TableHead>Valeur</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {st.mappings.map((m) => (
-                        <TableRow key={m.id}>
-                          <TableCell className="font-mono font-medium">{m.position}</TableCell>
-                          <TableCell>
-                            <Badge variant="outline" className="text-xs">{m.sizeName}</Badge>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              ))}
+      {/* ─── Data section ───────────────────────────── */}
+      <div className="space-y-4">
+        {/* Header with search */}
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <h3 className="text-base font-semibold">Types de taille</h3>
+            <Badge variant="secondary">{sizeTypes.length}</Badge>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Rechercher code, libellé, taille..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-9 w-64 h-9"
+              />
             </div>
-          )}
-        </CardContent>
-      </Card>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => { setLoadingData(true); loadData(); }}
+              className="h-9 w-9 p-0"
+            >
+              <RefreshCw className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+
+        {/* Content */}
+        {loadingData ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            <span className="ml-2 text-sm text-muted-foreground">
+              Chargement...
+            </span>
+          </div>
+        ) : filtered.length === 0 ? (
+          <Card className="border-dashed">
+            <CardContent className="flex flex-col items-center justify-center py-12">
+              <Ruler className="h-10 w-10 text-muted-foreground/40 mb-3" />
+              <p className="text-sm text-muted-foreground">
+                {sizeTypes.length === 0
+                  ? "Aucun type de taille importé"
+                  : "Aucun résultat pour cette recherche"}
+              </p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {filtered.map((st) => {
+              const isEditing = editingId === st.id;
+
+              return (
+                <Card
+                  key={st.id}
+                  className={cn(
+                    "transition-all",
+                    isEditing && "ring-2 ring-primary shadow-md col-span-full md:col-span-2 xl:col-span-3"
+                  )}
+                >
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Badge className="bg-violet-100 text-violet-700 hover:bg-violet-100 font-mono text-xs">
+                          {st.code}
+                        </Badge>
+                        {isEditing ? (
+                          <Input
+                            value={editLabel}
+                            onChange={(e) => setEditLabel(e.target.value)}
+                            placeholder="Libellé (optionnel)"
+                            className="h-7 w-48 text-sm"
+                          />
+                        ) : (
+                          <span className="text-sm text-muted-foreground">
+                            {st.label || "—"}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {!isEditing && (
+                          <>
+                            <span className="text-xs text-muted-foreground mr-2">
+                              {st.mappings.length} taille
+                              {st.mappings.length > 1 ? "s" : ""}
+                            </span>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-7 p-0 text-muted-foreground hover:text-primary"
+                              onClick={() => startEditing(st)}
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                              disabled={deleting === st.id}
+                              onClick={() => setDeleteTarget(st)}
+                            >
+                              {deleting === st.id ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <Trash2 className="h-3.5 w-3.5" />
+                              )}
+                            </Button>
+                          </>
+                        )}
+                        {isEditing && (
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 gap-1 text-xs"
+                              onClick={cancelEditing}
+                              disabled={saving}
+                            >
+                              <X className="h-3.5 w-3.5" />
+                              Annuler
+                            </Button>
+                            <Button
+                              size="sm"
+                              className="h-7 gap-1 text-xs"
+                              onClick={saveEditing}
+                              disabled={saving}
+                            >
+                              {saving ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <Save className="h-3.5 w-3.5" />
+                              )}
+                              Enregistrer
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    {isEditing ? (
+                      /* ─── Edit mode ─── */
+                      <div className="space-y-2">
+                        <div className="grid grid-cols-[60px_1fr_36px] gap-2 text-xs font-medium text-muted-foreground px-1">
+                          <span>Position</span>
+                          <span>Taille</span>
+                          <span />
+                        </div>
+                        {editMappings
+                          .sort((a, b) => a.position - b.position)
+                          .map((m) => (
+                            <div
+                              key={m._key}
+                              className="grid grid-cols-[60px_1fr_36px] gap-2 items-center"
+                            >
+                              <Input
+                                type="number"
+                                min={1}
+                                value={m.position}
+                                onChange={(e) =>
+                                  updateMappingField(
+                                    m._key,
+                                    "position",
+                                    parseInt(e.target.value) || 1
+                                  )
+                                }
+                                className="h-8 text-center font-mono text-sm"
+                              />
+                              <Input
+                                value={m.sizeName}
+                                onChange={(e) =>
+                                  updateMappingField(
+                                    m._key,
+                                    "sizeName",
+                                    e.target.value
+                                  )
+                                }
+                                placeholder="Ex: S, M, 38..."
+                                className="h-8 text-sm"
+                              />
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
+                                onClick={() => removeMappingRow(m._key)}
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          ))}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="w-full gap-1 text-xs mt-1"
+                          onClick={addMappingRow}
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                          Ajouter une taille
+                        </Button>
+                      </div>
+                    ) : (
+                      /* ─── Read mode: compact pill layout ─── */
+                      <div className="flex flex-wrap gap-1.5">
+                        {st.mappings.map((m) => (
+                          <div
+                            key={m.id}
+                            className="inline-flex items-center gap-1 rounded-md border bg-muted/40 px-2 py-1"
+                          >
+                            <span className="text-[10px] font-mono text-muted-foreground">
+                              {m.position}
+                            </span>
+                            <span className="text-xs font-medium">
+                              {m.sizeName}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -392,6 +724,8 @@ function SupplierRefsTab() {
   const [refs, setRefs] = useState<SupplierRefData[]>([]);
   const [loadingData, setLoadingData] = useState(true);
   const [search, setSearch] = useState("");
+  const [supplierFilter, setSupplierFilter] = useState("");
+  const [showImport, setShowImport] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
@@ -400,7 +734,8 @@ function SupplierRefsTab() {
         const json = await res.json();
         setRefs(json.data || []);
       }
-    } catch {} finally {
+    } catch {
+    } finally {
       setLoadingData(false);
     }
   }, []);
@@ -467,50 +802,96 @@ function SupplierRefsTab() {
     setResult(null);
   };
 
-  const filtered = search
-    ? refs.filter(
-        (r) =>
-          r.reference.toLowerCase().includes(search.toLowerCase()) ||
-          r.supplier.code.toLowerCase().includes(search.toLowerCase()) ||
-          r.supplier.name.toLowerCase().includes(search.toLowerCase())
-      )
-    : refs;
+  // Unique suppliers for dropdown
+  const suppliers = Array.from(
+    new Map(refs.map((r) => [r.supplier.code, r.supplier])).values()
+  ).sort((a, b) => a.name.localeCompare(b.name));
+
+  const filtered = refs.filter((r) => {
+    const matchesSearch =
+      !search ||
+      r.reference.toLowerCase().includes(search.toLowerCase()) ||
+      r.supplier.code.toLowerCase().includes(search.toLowerCase()) ||
+      r.supplier.name.toLowerCase().includes(search.toLowerCase());
+    const matchesSupplier =
+      !supplierFilter || r.supplier.code === supplierFilter;
+    return matchesSearch && matchesSupplier;
+  });
 
   return (
     <div className="space-y-6">
-      {result ? (
-        <ImportResult result={result} onReset={reset} />
-      ) : (
-        <>
-          <Dropzone onFileSelected={handleFileSelected} />
-          {parsed && (
-            <>
-              <ImportPreview headers={parsed.headers} rows={parsed.rows} />
-              <ColumnMapper
-                headers={parsed.headers}
-                fields={[
-                  { key: "supplierCode", label: "Code fournisseur", required: true },
-                  { key: "supplierName", label: "Nom fournisseur" },
-                  { key: "reference", label: "Référence produit", required: true },
-                ]}
-                mapping={mapping}
-                onMappingChange={setMapping}
-              />
-              <Button onClick={handleImport} disabled={importing} className="w-full">
-                {importing && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-                {importing ? "Import en cours..." : `Importer ${parsed.rows.length} lignes`}
-              </Button>
-            </>
-          )}
-        </>
+      {/* Import toggle */}
+      <Button
+        variant={showImport ? "default" : "outline"}
+        size="sm"
+        onClick={() => setShowImport(!showImport)}
+        className="gap-2"
+      >
+        {showImport ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+        {showImport ? "Fermer l'import" : "Importer depuis fichier"}
+      </Button>
+
+      {showImport && (
+        <Card className="border-dashed">
+          <CardContent className="pt-6 space-y-4">
+            {result ? (
+              <ImportResult result={result} onReset={reset} />
+            ) : (
+              <>
+                <Dropzone onFileSelected={handleFileSelected} />
+                {parsed && (
+                  <>
+                    <ImportPreview
+                      headers={parsed.headers}
+                      rows={parsed.rows}
+                    />
+                    <ColumnMapper
+                      headers={parsed.headers}
+                      fields={[
+                        {
+                          key: "supplierCode",
+                          label: "Code fournisseur",
+                          required: true,
+                        },
+                        { key: "supplierName", label: "Nom fournisseur" },
+                        {
+                          key: "reference",
+                          label: "Référence produit",
+                          required: true,
+                        },
+                      ]}
+                      mapping={mapping}
+                      onMappingChange={setMapping}
+                    />
+                    <Button
+                      onClick={handleImport}
+                      disabled={importing}
+                      className="w-full"
+                    >
+                      {importing && (
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      )}
+                      {importing
+                        ? "Import en cours..."
+                        : `Importer ${parsed.rows.length} lignes`}
+                    </Button>
+                  </>
+                )}
+              </>
+            )}
+          </CardContent>
+        </Card>
       )}
 
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="text-base">
-            Correspondances fournisseur → référence
-            <Badge variant="secondary" className="ml-2">{refs.length}</Badge>
-          </CardTitle>
+      {/* Data section */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <h3 className="text-base font-semibold">
+              Correspondances fournisseur
+            </h3>
+            <Badge variant="secondary">{refs.length}</Badge>
+          </div>
           <div className="flex items-center gap-2">
             <div className="relative">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -521,49 +902,89 @@ function SupplierRefsTab() {
                 className="pl-9 w-48 h-9"
               />
             </div>
-            <Button variant="ghost" size="sm" onClick={loadData}>
+            <Select
+              value={supplierFilter}
+              onValueChange={(v) => setSupplierFilter(v === "all" || !v ? "" : v)}
+            >
+              <SelectTrigger className="w-48 h-9">
+                <SelectValue placeholder="Tous les fournisseurs" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tous les fournisseurs</SelectItem>
+                {suppliers.map((s) => (
+                  <SelectItem key={s.code} value={s.code}>
+                    {s.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={loadData}
+              className="h-9 w-9 p-0"
+            >
               <RefreshCw className="h-4 w-4" />
             </Button>
           </div>
-        </CardHeader>
-        <CardContent>
-          {loadingData ? (
-            <p className="text-sm text-muted-foreground animate-pulse">Chargement...</p>
-          ) : filtered.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              {refs.length === 0
-                ? "Aucune correspondance importée"
-                : "Aucun résultat"}
-            </p>
-          ) : (
-            <div className="max-h-96 overflow-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Fournisseur</TableHead>
-                    <TableHead>Code</TableHead>
-                    <TableHead>Référence</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filtered.slice(0, 100).map((r) => (
-                    <TableRow key={r.id}>
-                      <TableCell>{r.supplier.name}</TableCell>
-                      <TableCell className="font-mono text-sm">{r.supplier.code}</TableCell>
-                      <TableCell className="font-mono font-medium">{r.reference}</TableCell>
+        </div>
+
+        {loadingData ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            <span className="ml-2 text-sm text-muted-foreground">
+              Chargement...
+            </span>
+          </div>
+        ) : filtered.length === 0 ? (
+          <Card className="border-dashed">
+            <CardContent className="flex flex-col items-center justify-center py-12">
+              <Factory className="h-10 w-10 text-muted-foreground/40 mb-3" />
+              <p className="text-sm text-muted-foreground">
+                {refs.length === 0
+                  ? "Aucune correspondance importée"
+                  : "Aucun résultat"}
+              </p>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card>
+            <CardContent className="p-0">
+              <div className="max-h-[500px] overflow-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Fournisseur</TableHead>
+                      <TableHead>Code</TableHead>
+                      <TableHead>Référence</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-              {filtered.length > 100 && (
-                <p className="text-xs text-muted-foreground text-center mt-2">
-                  {filtered.length - 100} lignes supplémentaires...
-                </p>
+                  </TableHeader>
+                  <TableBody>
+                    {filtered.slice(0, 200).map((r) => (
+                      <TableRow key={r.id}>
+                        <TableCell className="text-sm">
+                          {r.supplier.name}
+                        </TableCell>
+                        <TableCell className="font-mono text-sm text-muted-foreground">
+                          {r.supplier.code}
+                        </TableCell>
+                        <TableCell className="font-mono font-medium text-sm">
+                          {r.reference}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+              {filtered.length > 200 && (
+                <div className="border-t px-4 py-2 text-xs text-muted-foreground text-center">
+                  {filtered.length - 200} lignes supplémentaires non affichées
+                </div>
               )}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+            </CardContent>
+          </Card>
+        )}
+      </div>
     </div>
   );
 }
@@ -600,6 +1021,7 @@ function EansTab() {
   const [loadingData, setLoadingData] = useState(true);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
+  const [showImport, setShowImport] = useState(false);
 
   const loadData = useCallback(async () => {
     setLoadingData(true);
@@ -612,7 +1034,8 @@ function EansTab() {
         setEans(json.data || []);
         setTotal(json.total || 0);
       }
-    } catch {} finally {
+    } catch {
+    } finally {
       setLoadingData(false);
     }
   }, [page, search]);
@@ -682,42 +1105,81 @@ function EansTab() {
     setResult(null);
   };
 
+  const totalPages = Math.ceil(total / 100);
+
   return (
     <div className="space-y-6">
-      {result ? (
-        <ImportResult result={result} onReset={reset} />
-      ) : (
-        <>
-          <Dropzone onFileSelected={handleFileSelected} />
-          {parsed && (
-            <>
-              <ImportPreview headers={parsed.headers} rows={parsed.rows} />
-              <ColumnMapper
-                headers={parsed.headers}
-                fields={[
-                  { key: "reference", label: "Référence", required: true },
-                  { key: "color", label: "Couleur", required: true },
-                  { key: "size", label: "Taille", required: true },
-                  { key: "ean", label: "EAN / Code-barres", required: true },
-                ]}
-                mapping={mapping}
-                onMappingChange={setMapping}
-              />
-              <Button onClick={handleImport} disabled={importing} className="w-full">
-                {importing && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-                {importing ? "Import en cours..." : `Importer ${parsed.rows.length} lignes`}
-              </Button>
-            </>
-          )}
-        </>
+      {/* Import toggle */}
+      <Button
+        variant={showImport ? "default" : "outline"}
+        size="sm"
+        onClick={() => setShowImport(!showImport)}
+        className="gap-2"
+      >
+        {showImport ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+        {showImport ? "Fermer l'import" : "Importer depuis fichier"}
+      </Button>
+
+      {showImport && (
+        <Card className="border-dashed">
+          <CardContent className="pt-6 space-y-4">
+            {result ? (
+              <ImportResult result={result} onReset={reset} />
+            ) : (
+              <>
+                <Dropzone onFileSelected={handleFileSelected} />
+                {parsed && (
+                  <>
+                    <ImportPreview
+                      headers={parsed.headers}
+                      rows={parsed.rows}
+                    />
+                    <ColumnMapper
+                      headers={parsed.headers}
+                      fields={[
+                        {
+                          key: "reference",
+                          label: "Référence",
+                          required: true,
+                        },
+                        { key: "color", label: "Couleur", required: true },
+                        { key: "size", label: "Taille", required: true },
+                        {
+                          key: "ean",
+                          label: "EAN / Code-barres",
+                          required: true,
+                        },
+                      ]}
+                      mapping={mapping}
+                      onMappingChange={setMapping}
+                    />
+                    <Button
+                      onClick={handleImport}
+                      disabled={importing}
+                      className="w-full"
+                    >
+                      {importing && (
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      )}
+                      {importing
+                        ? "Import en cours..."
+                        : `Importer ${parsed.rows.length} lignes`}
+                    </Button>
+                  </>
+                )}
+              </>
+            )}
+          </CardContent>
+        </Card>
       )}
 
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="text-base">
-            Base EAN
-            <Badge variant="secondary" className="ml-2">{total}</Badge>
-          </CardTitle>
+      {/* Data section */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <h3 className="text-base font-semibold">Base EAN</h3>
+            <Badge variant="secondary">{total}</Badge>
+          </div>
           <div className="flex items-center gap-2">
             <div className="relative">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -731,21 +1193,37 @@ function EansTab() {
                 className="pl-9 w-64 h-9"
               />
             </div>
-            <Button variant="ghost" size="sm" onClick={loadData}>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={loadData}
+              className="h-9 w-9 p-0"
+            >
               <RefreshCw className="h-4 w-4" />
             </Button>
           </div>
-        </CardHeader>
-        <CardContent>
-          {loadingData ? (
-            <p className="text-sm text-muted-foreground animate-pulse">Chargement...</p>
-          ) : eans.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              {total === 0 ? "Aucun EAN importé" : "Aucun résultat"}
-            </p>
-          ) : (
-            <>
-              <div className="max-h-96 overflow-auto">
+        </div>
+
+        {loadingData ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            <span className="ml-2 text-sm text-muted-foreground">
+              Chargement...
+            </span>
+          </div>
+        ) : eans.length === 0 ? (
+          <Card className="border-dashed">
+            <CardContent className="flex flex-col items-center justify-center py-12">
+              <Barcode className="h-10 w-10 text-muted-foreground/40 mb-3" />
+              <p className="text-sm text-muted-foreground">
+                {total === 0 ? "Aucun EAN importé" : "Aucun résultat"}
+              </p>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card>
+            <CardContent className="p-0">
+              <div className="max-h-[500px] overflow-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -759,16 +1237,16 @@ function EansTab() {
                   <TableBody>
                     {eans.map((e) => (
                       <TableRow key={e.id}>
-                        <TableCell className="font-mono font-medium">
+                        <TableCell className="font-mono font-medium text-sm">
                           {e.reference}
                         </TableCell>
-                        <TableCell>{e.color}</TableCell>
+                        <TableCell className="text-sm">{e.color}</TableCell>
                         <TableCell>
                           <Badge variant="outline" className="text-xs">
                             {e.size}
                           </Badge>
                         </TableCell>
-                        <TableCell className="font-mono text-sm">
+                        <TableCell className="font-mono text-sm text-muted-foreground">
                           {e.ean}
                         </TableCell>
                         <TableCell className="text-right">
@@ -788,10 +1266,10 @@ function EansTab() {
                   </TableBody>
                 </Table>
               </div>
-              {total > 100 && (
-                <div className="flex items-center justify-between mt-3">
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between border-t px-4 py-2">
                   <p className="text-xs text-muted-foreground">
-                    Page {page} / {Math.ceil(total / 100)} ({total} EAN)
+                    Page {page} / {totalPages} ({total} EAN)
                   </p>
                   <div className="flex gap-1">
                     <Button
@@ -806,19 +1284,19 @@ function EansTab() {
                       variant="outline"
                       size="sm"
                       onClick={() =>
-                        setPage((p) => Math.min(Math.ceil(total / 100), p + 1))
+                        setPage((p) => Math.min(totalPages, p + 1))
                       }
-                      disabled={page >= Math.ceil(total / 100)}
+                      disabled={page >= totalPages}
                     >
                       Suivant
                     </Button>
                   </div>
                 </div>
               )}
-            </>
-          )}
-        </CardContent>
-      </Card>
+            </CardContent>
+          </Card>
+        )}
+      </div>
     </div>
   );
 }
@@ -851,7 +1329,8 @@ function ImportResult({
           </p>
           {result.errors.length > 0 && (
             <p className="text-sm text-muted-foreground mt-1">
-              {result.errors.length} erreur{result.errors.length > 1 ? "s" : ""}
+              {result.errors.length} erreur
+              {result.errors.length > 1 ? "s" : ""}
             </p>
           )}
         </div>
@@ -872,47 +1351,43 @@ function ImportResult({
   );
 }
 
-// ─── Main Page (TRANS-SAISON — pas besoin de saison) ─────────
+// ─── Main Page ──────────────────────────────────────────────
 
 export default function ProductInfoPage() {
   return (
     <div>
       <Topbar title="Infos produits" />
-      <div className="p-8 space-y-8">
+      <div className="p-8 space-y-6">
         <PageHeader
           title="Infos produits"
           description="Données globales trans-saison : types de taille, correspondances fournisseurs et codes EAN"
         />
 
-        <Card>
-          <CardContent className="pt-6">
-            <Tabs defaultValue="size-types">
-              <TabsList className="w-full justify-start">
-                <TabsTrigger value="size-types" className="gap-2">
-                  <Ruler className="h-4 w-4" />
-                  Types de taille
-                </TabsTrigger>
-                <TabsTrigger value="supplier-refs" className="gap-2">
-                  <Factory className="h-4 w-4" />
-                  Fournisseur → Réf
-                </TabsTrigger>
-                <TabsTrigger value="eans" className="gap-2">
-                  <Barcode className="h-4 w-4" />
-                  EAN
-                </TabsTrigger>
-              </TabsList>
-              <TabsContent value="size-types" className="mt-6">
-                <SizeTypesTab />
-              </TabsContent>
-              <TabsContent value="supplier-refs" className="mt-6">
-                <SupplierRefsTab />
-              </TabsContent>
-              <TabsContent value="eans" className="mt-6">
-                <EansTab />
-              </TabsContent>
-            </Tabs>
-          </CardContent>
-        </Card>
+        <Tabs defaultValue="size-types">
+          <TabsList className="w-full justify-start bg-muted/50 p-1">
+            <TabsTrigger value="size-types" className="gap-2">
+              <Ruler className="h-4 w-4" />
+              Types de taille
+            </TabsTrigger>
+            <TabsTrigger value="supplier-refs" className="gap-2">
+              <Factory className="h-4 w-4" />
+              Fournisseur → Réf
+            </TabsTrigger>
+            <TabsTrigger value="eans" className="gap-2">
+              <Barcode className="h-4 w-4" />
+              EAN
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="size-types" className="mt-6">
+            <SizeTypesTab />
+          </TabsContent>
+          <TabsContent value="supplier-refs" className="mt-6">
+            <SupplierRefsTab />
+          </TabsContent>
+          <TabsContent value="eans" className="mt-6">
+            <EansTab />
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );

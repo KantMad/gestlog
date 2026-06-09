@@ -2,6 +2,65 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { parseExcelBuffer } from "@/lib/import/parser";
 
+// PATCH — update size type label and/or mappings (positions + size names)
+export async function PATCH(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { id, label, mappings } = body as {
+      id: string;
+      label?: string | null;
+      mappings?: { position: number; sizeName: string }[];
+    };
+
+    if (!id) {
+      return NextResponse.json({ error: "ID requis" }, { status: 400 });
+    }
+
+    const sizeType = await prisma.sizeType.findUnique({ where: { id } });
+    if (!sizeType) {
+      return NextResponse.json({ error: "Type de taille introuvable" }, { status: 404 });
+    }
+
+    // Update label (use raw SQL due to Prisma adapter bug with upsert)
+    if (label !== undefined) {
+      await prisma.$executeRawUnsafe(
+        `UPDATE "SizeType" SET label = $1 WHERE id = $2`,
+        label || null,
+        id
+      );
+    }
+
+    // Update mappings if provided — delete all then recreate
+    if (mappings && Array.isArray(mappings)) {
+      await prisma.sizeTypeMapping.deleteMany({ where: { sizeTypeId: id } });
+
+      for (const m of mappings) {
+        if (!m.sizeName?.trim() || m.position == null) continue;
+        await prisma.sizeTypeMapping.create({
+          data: {
+            sizeTypeId: id,
+            position: m.position,
+            sizeName: m.sizeName.trim(),
+          },
+        });
+      }
+    }
+
+    // Return updated record
+    const updated = await prisma.sizeType.findUnique({
+      where: { id },
+      include: { mappings: { orderBy: { position: "asc" } } },
+    });
+
+    return NextResponse.json({ data: updated });
+  } catch (e) {
+    return NextResponse.json(
+      { error: `Erreur mise à jour: ${String(e)}` },
+      { status: 500 }
+    );
+  }
+}
+
 // DELETE — remove a size type by id (cascade deletes mappings)
 export async function DELETE(request: NextRequest) {
   try {

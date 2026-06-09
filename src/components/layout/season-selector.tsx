@@ -1,6 +1,6 @@
 "use client";
 
-import { useSeason } from "@/lib/season-context";
+import { useSeason, formatSeasonLabel } from "@/lib/season-context";
 import {
   Select,
   SelectContent,
@@ -33,7 +33,7 @@ export function SeasonSelector() {
 
   return (
     <Select value={activeSeasonId} onValueChange={(v) => v && setActiveSeasonId(v)}>
-      <SelectTrigger className="w-48">
+      <SelectTrigger className="w-56">
         <div className="flex items-center gap-2">
           <Calendar className="h-4 w-4 text-muted-foreground" />
           <SelectValue placeholder="Saison..." />
@@ -42,7 +42,7 @@ export function SeasonSelector() {
       <SelectContent>
         {seasons.map((season) => (
           <SelectItem key={season.id} value={season.id}>
-            {season.name}
+            {formatSeasonLabel(season)}
           </SelectItem>
         ))}
       </SelectContent>

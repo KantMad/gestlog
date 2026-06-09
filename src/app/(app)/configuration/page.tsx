@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { useSeason } from "@/lib/season-context";
+import { useSeason, formatSeasonLabel } from "@/lib/season-context";
 import { Topbar } from "@/components/layout/topbar";
 import { PageHeader } from "@/components/layout/page-header";
 import { ClientConfigTable } from "@/components/configuration/client-config-table";
@@ -57,7 +57,7 @@ export default function ConfigurationPage() {
               <div className="flex items-center justify-between">
                 <CardTitle className="text-base flex items-center gap-2">
                   <Users className="h-4 w-4" />
-                  Clients — Saison {activeSeason.name}
+                  Clients — {formatSeasonLabel(activeSeason)}
                 </CardTitle>
                 <div className="flex items-center gap-2">
                   <Badge variant="secondary">

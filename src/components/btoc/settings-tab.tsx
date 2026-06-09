@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { Loader2, Save, Check, Package, ShoppingCart, Users } from "lucide-react";
 
 interface ExportFields {
@@ -237,23 +238,23 @@ export function BtocSettingsTab() {
             <CardContent>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {Object.entries(section.fields).map(([key, meta]) => (
-                  <label
+                  <div
                     key={key}
-                    className="flex items-start gap-3 rounded-lg border p-3 cursor-pointer hover:bg-muted/30 transition-colors"
+                    className="flex items-center justify-between rounded-lg border p-3 cursor-pointer hover:bg-muted/30 transition-colors"
+                    onClick={() => handleToggle(section.type, key)}
                   >
-                    <input
-                      type="checkbox"
-                      checked={fields[key] ?? false}
-                      onChange={() => handleToggle(section.type, key)}
-                      className="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
-                    />
-                    <div>
+                    <div className="flex-1 min-w-0 mr-3">
                       <div className="text-sm font-medium">{meta.label}</div>
                       <div className="text-xs text-muted-foreground">
                         {meta.description}
                       </div>
                     </div>
-                  </label>
+                    <Switch
+                      checked={fields[key] ?? false}
+                      onCheckedChange={() => handleToggle(section.type, key)}
+                      size="sm"
+                    />
+                  </div>
                 ))}
               </div>
 

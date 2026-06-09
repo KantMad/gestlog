@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSeason } from "@/lib/season-context";
+import { useSeason, formatSeasonLabel } from "@/lib/season-context";
 import { Topbar } from "@/components/layout/topbar";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -127,7 +127,7 @@ export default function DashboardPage() {
           title="Tableau de bord"
           description={
             activeSeason
-              ? `Saison ${activeSeason.name} — Vue d'ensemble`
+              ? `${formatSeasonLabel(activeSeason)} — Vue d'ensemble`
               : "Sélectionnez une saison pour commencer"
           }
         />
