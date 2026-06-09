@@ -226,7 +226,7 @@ export function BtocExportTab() {
       const params = new URLSearchParams();
       if (orderDateFrom) params.set("dateFrom", orderDateFrom);
       if (orderDateTo) params.set("dateTo", orderDateTo);
-      if (orderProduct) params.set("productName", orderProduct);
+      if (orderProduct) params.set("productRef", orderProduct);
       if (orderColor) params.set("color", orderColor);
       if (orderSize) params.set("size", orderSize);
       if (orderCustomer) params.set("customerName", orderCustomer);
@@ -277,7 +277,7 @@ export function BtocExportTab() {
       const params = new URLSearchParams();
       params.set("limit", "200");
       if (custSearch) params.set("search", custSearch);
-      if (custProduct) params.set("productName", custProduct);
+      if (custProduct) params.set("productRef", custProduct);
       if (custSize) params.set("size", custSize);
       if (custCity) params.set("city", custCity);
 
@@ -442,7 +442,7 @@ export function BtocExportTab() {
                 Référence produit
               </label>
               <Input
-                placeholder="Nom du produit..."
+                placeholder="Référence..."
                 value={orderProduct}
                 onChange={(e) => setOrderProduct(e.target.value)}
                 className="w-48"
@@ -519,7 +519,7 @@ export function BtocExportTab() {
               <Filter className="h-4 w-4 text-muted-foreground mt-0.5" />
               {orderDateFrom && <Badge variant="secondary">Depuis : {orderDateFrom}</Badge>}
               {orderDateTo && <Badge variant="secondary">{"Jusqu'au"} : {orderDateTo}</Badge>}
-              {orderProduct && <Badge variant="secondary">Produit : {orderProduct}</Badge>}
+              {orderProduct && <Badge variant="secondary">Réf. : {orderProduct}</Badge>}
               {orderColor && <Badge variant="secondary">Couleur : {orderColor}</Badge>}
               {orderSize && <Badge variant="secondary">Taille : {orderSize}</Badge>}
               {orderCustomer && <Badge variant="secondary">Client : {orderCustomer}</Badge>}
@@ -558,10 +558,10 @@ export function BtocExportTab() {
             </div>
             <div className="space-y-1">
               <label className="text-xs font-medium text-muted-foreground">
-                Produit commandé
+                Référence produit
               </label>
               <Input
-                placeholder="Nom du produit..."
+                placeholder="Référence..."
                 value={custProduct}
                 onChange={(e) => setCustProduct(e.target.value)}
                 className="w-48"
@@ -626,7 +626,7 @@ export function BtocExportTab() {
             <div className="flex gap-2 flex-wrap">
               <Filter className="h-4 w-4 text-muted-foreground mt-0.5" />
               {custSearch && <Badge variant="secondary">Recherche : {custSearch}</Badge>}
-              {custProduct && <Badge variant="secondary">Produit : {custProduct}</Badge>}
+              {custProduct && <Badge variant="secondary">Réf. : {custProduct}</Badge>}
               {custSize && <Badge variant="secondary">Taille : {custSize}</Badge>}
               {custCity && <Badge variant="secondary">Ville : {custCity}</Badge>}
             </div>

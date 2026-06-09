@@ -7,7 +7,7 @@ export async function GET(request: NextRequest) {
     const dateFrom = params.get("dateFrom");
     const dateTo = params.get("dateTo");
     const category = params.get("category");
-    const parentProduct = params.get("parentProduct");
+    const parentProduct = params.get("parentProduct"); // now expects a SKU / reference
     const customerId = params.get("customerId");
 
     // ─── Build WHERE clauses for orders ──────────────────────
@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
         paramIndex++;
       }
       if (parentProduct) {
-        orderConditions.push(`p.name ILIKE $${paramIndex}`);
+        orderConditions.push(`p.sku ILIKE $${paramIndex}`);
         orderParams.push(`%${parentProduct}%`);
         paramIndex++;
       }
@@ -130,7 +130,7 @@ export async function GET(request: NextRequest) {
       tpIdx++;
     }
     if (parentProduct) {
-      topProductConditions.push(`p.name ILIKE $${tpIdx}`);
+      topProductConditions.push(`p.sku ILIKE $${tpIdx}`);
       topProductParams.push(`%${parentProduct}%`);
       tpIdx++;
     }
@@ -256,14 +256,15 @@ export async function GET(request: NextRequest) {
 
     // ─── Available parent products (for filter dropdown) ─────
     const parentProductRows = await prisma.$queryRawUnsafe<
-      { name: string; wooId: number }[]
+      { sku: string; name: string; wooId: number }[]
     >(
-      `SELECT name, "wooId"
+      `SELECT sku, name, "wooId"
       FROM "BtocProduct"
-      WHERE type = 'variable'
-      ORDER BY name ASC`
+      WHERE type = 'variable' AND sku IS NOT NULL AND sku != ''
+      ORDER BY sku ASC`
     );
     const availableParentProducts = parentProductRows.map((r) => ({
+      sku: r.sku,
       name: r.name,
       wooId: Number(r.wooId),
     }));

@@ -60,7 +60,7 @@ interface StatsData {
   revenueByDay: { date: string; revenue: number; orders: number }[];
   sizeDistribution: { size: string; quantity: number }[];
   availableCategories: string[];
-  availableParentProducts: { name: string; wooId: number }[];
+  availableParentProducts: { sku: string; name: string; wooId: number }[];
 }
 
 const COLORS = [
@@ -221,7 +221,7 @@ export function BtocStatsTab() {
             </div>
             <div className="space-y-1">
               <label className="text-xs font-medium text-muted-foreground">
-                Produit parent
+                Référence produit
               </label>
               <Select
                 value={parentProduct || "all"}
@@ -229,14 +229,14 @@ export function BtocStatsTab() {
               >
                 <SelectTrigger className="w-56 h-9">
                   <span className={`text-sm truncate ${!parentProduct ? "text-muted-foreground" : ""}`}>
-                    {parentProduct || "Tous"}
+                    {parentProduct || "Toutes"}
                   </span>
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Tous</SelectItem>
+                  <SelectItem value="all">Toutes</SelectItem>
                   {data.availableParentProducts.map((p) => (
-                    <SelectItem key={p.wooId} value={p.name}>
-                      {p.name}
+                    <SelectItem key={p.wooId} value={p.sku}>
+                      {p.sku}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -270,7 +270,7 @@ export function BtocStatsTab() {
                 <Badge variant="secondary">Catégorie : {category}</Badge>
               )}
               {parentProduct && (
-                <Badge variant="secondary">Produit : {parentProduct}</Badge>
+                <Badge variant="secondary">Réf. : {parentProduct}</Badge>
               )}
             </div>
           )}

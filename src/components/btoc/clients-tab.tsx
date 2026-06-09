@@ -89,7 +89,7 @@ export function BtocClientsTab() {
 
   // Filters
   const [search, setSearch] = useState("");
-  const [productName, setProductName] = useState("");
+  const [productRef, setProductRef] = useState("");
   const [size, setSize] = useState("");
   const [city, setCity] = useState("");
   const [page, setPage] = useState(1);
@@ -104,7 +104,7 @@ export function BtocClientsTab() {
       params.set("page", String(page));
       params.set("limit", "50");
       if (search) params.set("search", search);
-      if (productName) params.set("productName", productName);
+      if (productRef) params.set("productRef", productRef);
       if (size) params.set("size", size);
       if (city) params.set("city", city);
 
@@ -117,7 +117,7 @@ export function BtocClientsTab() {
     } finally {
       setLoading(false);
     }
-  }, [page, search, productName, size, city]);
+  }, [page, search, productRef, size, city]);
 
   // Load export fields on mount
   useEffect(() => {
@@ -138,13 +138,13 @@ export function BtocClientsTab() {
 
   const clearFilters = () => {
     setSearch("");
-    setProductName("");
+    setProductRef("");
     setSize("");
     setCity("");
     setPage(1);
   };
 
-  const hasFilters = search || productName || size || city;
+  const hasFilters = search || productRef || size || city;
 
   // ─── Export XLSX ──────────────────────────────────
   const handleExport = async () => {
@@ -155,7 +155,7 @@ export function BtocClientsTab() {
       params.set("page", "1");
       params.set("limit", "200");
       if (search) params.set("search", search);
-      if (productName) params.set("productName", productName);
+      if (productRef) params.set("productRef", productRef);
       if (size) params.set("size", size);
       if (city) params.set("city", city);
 
@@ -248,12 +248,12 @@ export function BtocClientsTab() {
             </div>
             <div className="space-y-1">
               <label className="text-xs font-medium text-muted-foreground">
-                Produit commandé
+                Référence produit
               </label>
               <Input
-                placeholder="Nom du produit..."
-                value={productName}
-                onChange={(e) => setProductName(e.target.value)}
+                placeholder="Référence..."
+                value={productRef}
+                onChange={(e) => setProductRef(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && applySearch()}
                 className="w-52"
               />
@@ -331,8 +331,8 @@ export function BtocClientsTab() {
               {search && (
                 <Badge variant="secondary">Recherche : {search}</Badge>
               )}
-              {productName && (
-                <Badge variant="secondary">Produit : {productName}</Badge>
+              {productRef && (
+                <Badge variant="secondary">Réf. : {productRef}</Badge>
               )}
               {size && <Badge variant="secondary">Taille : {size}</Badge>}
               {city && <Badge variant="secondary">Ville : {city}</Badge>}

@@ -116,7 +116,7 @@ export async function GET(request: NextRequest) {
     const params = request.nextUrl.searchParams;
     const dateFrom = params.get("dateFrom");
     const dateTo = params.get("dateTo");
-    const productName = params.get("productName");
+    const productRef = params.get("productRef") || params.get("productName");
     const color = params.get("color");
     const size = params.get("size");
     const customerName = params.get("customerName");
@@ -136,9 +136,9 @@ export async function GET(request: NextRequest) {
       queryParams.push(new Date(dateTo));
       idx++;
     }
-    if (productName) {
-      conditions.push(`(COALESCE(bp.name, ol.name) ILIKE $${idx})`);
-      queryParams.push(`%${productName}%`);
+    if (productRef) {
+      conditions.push(`(bp.sku ILIKE $${idx} OR SPLIT_PART(ol.sku, '-', 1) ILIKE $${idx})`);
+      queryParams.push(`%${productRef}%`);
       idx++;
     }
     if (color) {

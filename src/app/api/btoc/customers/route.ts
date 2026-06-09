@@ -5,7 +5,7 @@ export async function GET(request: NextRequest) {
   try {
     const params = request.nextUrl.searchParams;
     const search = params.get("search");
-    const productName = params.get("productName");
+    const productRef = params.get("productRef") || params.get("productName");
     const size = params.get("size");
     const minOrders = params.get("minOrders");
     const minSpent = params.get("minSpent");
@@ -49,17 +49,17 @@ export async function GET(request: NextRequest) {
       paramIndex++;
     }
 
-    // Product name and size require a subquery against order lines
-    if (productName) {
+    // Product reference filter — search by SKU (first part before '-' = parent ref)
+    if (productRef) {
       conditions.push(
         `c.id IN (
           SELECT DISTINCT o."customerId"
           FROM "BtocOrder" o
           JOIN "BtocOrderLine" ol ON ol."orderId" = o.id
-          WHERE ol.name ILIKE $${paramIndex} AND o."customerId" IS NOT NULL
+          WHERE (ol.sku ILIKE $${paramIndex} OR SPLIT_PART(ol.sku, '-', 1) ILIKE $${paramIndex}) AND o."customerId" IS NOT NULL
         )`
       );
-      queryParams.push(`%${productName}%`);
+      queryParams.push(`%${productRef}%`);
       paramIndex++;
     }
 
