@@ -41,7 +41,7 @@ export function SeasonSelector() {
       </SelectTrigger>
       <SelectContent>
         {seasons.map((season) => (
-          <SelectItem key={season.id} value={season.id}>
+          <SelectItem key={season.id} value={season.id} label={formatSeasonLabel(season)}>
             {formatSeasonLabel(season)}
           </SelectItem>
         ))}
