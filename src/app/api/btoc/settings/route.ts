@@ -37,11 +37,14 @@ const DEFAULTS: Record<ExportType, Record<string, boolean>> = {
   orders: {
     reference: true,
     sku: true,
+    colorCode: true,
+    colorBtob: true,
     color: true,
     category: true,
-    sizes: true,
+    categoryBtob: true,
     totalQuantity: true,
     totalRevenue: true,
+    sizes: true,
   },
 };
 
@@ -63,7 +66,9 @@ async function loadFields(type: ExportType): Promise<Record<string, boolean>> {
 
   if (setting.length > 0) {
     try {
-      return JSON.parse(setting[0].value);
+      const saved = JSON.parse(setting[0].value);
+      // Merge with defaults so new fields added later get their default value
+      return { ...DEFAULTS[type], ...saved };
     } catch {
       return { ...DEFAULTS[type] };
     }
