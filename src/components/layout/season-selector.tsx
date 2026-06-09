@@ -6,7 +6,6 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from "@/components/ui/select";
 import { Calendar } from "lucide-react";
 
@@ -31,12 +30,16 @@ export function SeasonSelector() {
     );
   }
 
+  const activeSeason = seasons.find((s) => s.id === activeSeasonId);
+
   return (
     <Select value={activeSeasonId} onValueChange={(v) => v && setActiveSeasonId(v)}>
       <SelectTrigger className="w-56">
         <div className="flex items-center gap-2">
           <Calendar className="h-4 w-4 text-muted-foreground" />
-          <SelectValue placeholder="Saison..." />
+          <span className="truncate text-sm">
+            {activeSeason ? formatSeasonLabel(activeSeason) : "Saison..."}
+          </span>
         </div>
       </SelectTrigger>
       <SelectContent>

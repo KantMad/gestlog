@@ -10,7 +10,6 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from "@/components/ui/select";
 import {
   Download,
@@ -364,7 +363,9 @@ export function BtocExportTab() {
                 onValueChange={(v) => setProdCategory(!v || v === "all" ? "" : v)}
               >
                 <SelectTrigger className="w-48 h-9">
-                  <SelectValue placeholder="Toutes" />
+                  <span className={`text-sm truncate ${!prodCategory ? "text-muted-foreground" : ""}`}>
+                    {prodCategory || "Toutes"}
+                  </span>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Toutes</SelectItem>
@@ -456,7 +457,9 @@ export function BtocExportTab() {
                 onValueChange={(v) => setOrderColor(!v || v === "all" ? "" : v)}
               >
                 <SelectTrigger className="w-36 h-9">
-                  <SelectValue placeholder="Toutes" />
+                  <span className={`text-sm truncate ${!orderColor ? "text-muted-foreground" : ""}`}>
+                    {orderColor || "Toutes"}
+                  </span>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Toutes</SelectItem>
@@ -475,7 +478,9 @@ export function BtocExportTab() {
                 onValueChange={(v) => setOrderSize(!v || v === "all" ? "" : v)}
               >
                 <SelectTrigger className="w-28 h-9">
-                  <SelectValue placeholder="Toutes" />
+                  <span className={`text-sm truncate ${!orderSize ? "text-muted-foreground" : ""}`}>
+                    {orderSize || "Toutes"}
+                  </span>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Toutes</SelectItem>
@@ -571,7 +576,9 @@ export function BtocExportTab() {
                 onValueChange={(v) => setCustSize(!v || v === "all" ? "" : v)}
               >
                 <SelectTrigger className="w-28 h-9">
-                  <SelectValue placeholder="Toutes" />
+                  <span className={`text-sm truncate ${!custSize ? "text-muted-foreground" : ""}`}>
+                    {custSize || "Toutes"}
+                  </span>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Toutes</SelectItem>
@@ -590,7 +597,9 @@ export function BtocExportTab() {
                 onValueChange={(v) => setCustCity(!v || v === "all" ? "" : v)}
               >
                 <SelectTrigger className="w-40 h-9">
-                  <SelectValue placeholder="Toutes" />
+                  <span className={`text-sm truncate ${!custCity ? "text-muted-foreground" : ""}`}>
+                    {custCity || "Toutes"}
+                  </span>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Toutes</SelectItem>

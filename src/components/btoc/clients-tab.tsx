@@ -10,7 +10,6 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from "@/components/ui/select";
 import {
   Table,
@@ -271,7 +270,9 @@ export function BtocClientsTab() {
                 }}
               >
                 <SelectTrigger className="w-32 h-9">
-                  <SelectValue placeholder="Toutes" />
+                  <span className={`text-sm truncate ${!size ? "text-muted-foreground" : ""}`}>
+                    {size || "Toutes"}
+                  </span>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Toutes</SelectItem>
@@ -295,7 +296,9 @@ export function BtocClientsTab() {
                 }}
               >
                 <SelectTrigger className="w-40 h-9">
-                  <SelectValue placeholder="Toutes" />
+                  <span className={`text-sm truncate ${!city ? "text-muted-foreground" : ""}`}>
+                    {city || "Toutes"}
+                  </span>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Toutes</SelectItem>

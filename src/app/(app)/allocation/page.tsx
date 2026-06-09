@@ -22,7 +22,6 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from "@/components/ui/select";
 import {
   Calculator,
@@ -604,7 +603,9 @@ function FilterPanel({
             </label>
             <Select value={orderType} onValueChange={(v: string | null) => v && setOrderType(v)}>
               <SelectTrigger className="text-sm">
-                <SelectValue />
+                <span className="text-sm truncate">
+                  {{ COMMANDE: "Commandes uniquement", VSS: "Réassorts (VSS) uniquement", ALL: "Tout" }[orderType] || orderType}
+                </span>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="COMMANDE">Commandes uniquement</SelectItem>
@@ -622,7 +623,11 @@ function FilterPanel({
               </label>
               <Select value={selectedCatalog} onValueChange={(v: string | null) => v && setSelectedCatalog(v)}>
                 <SelectTrigger className="text-sm">
-                  <SelectValue placeholder="Tous" />
+                  <span className="text-sm truncate">
+                    {selectedCatalog === "ALL"
+                      ? "Tous les catalogues"
+                      : catalogs.find((c) => c.id === selectedCatalog)?.name || "Tous"}
+                  </span>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="ALL">Tous les catalogues</SelectItem>
@@ -650,7 +655,7 @@ function FilterPanel({
               }}
             >
               <SelectTrigger className="text-sm">
-                <SelectValue placeholder="Ajouter un client..." />
+                <span className="text-sm text-muted-foreground truncate">Ajouter un client...</span>
               </SelectTrigger>
               <SelectContent>
                 {clients
@@ -696,7 +701,7 @@ function FilterPanel({
               }}
             >
               <SelectTrigger className="text-sm">
-                <SelectValue placeholder="Ajouter un fournisseur..." />
+                <span className="text-sm text-muted-foreground truncate">Ajouter un fournisseur...</span>
               </SelectTrigger>
               <SelectContent>
                 {suppliers

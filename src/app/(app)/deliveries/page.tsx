@@ -22,7 +22,6 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from "@/components/ui/select";
 import {
   Dialog,
@@ -330,7 +329,9 @@ function DeliveryCard({
                     }
                   >
                     <SelectTrigger className="h-8 w-[180px] text-xs">
-                      <SelectValue />
+                      <span className="text-xs truncate">
+                        {{ PLANIFIEE: "Planifiée", EN_PREPARATION: "En préparation", ENVOYEE_DEPOT: "Envoyée au dépôt", VALIDEE_DEPOT: "Validée dépôt", EXPEDIEE: "Expédiée" }[delivery.status] || delivery.status}
+                      </span>
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="PLANIFIEE">Planifiée</SelectItem>
@@ -517,7 +518,11 @@ function DeliveryCard({
                   }
                 >
                   <SelectTrigger className="h-7 text-xs">
-                    <SelectValue placeholder="Aucun" />
+                    <span className={`text-xs truncate ${!delivery.shipmentGroupId ? "text-muted-foreground" : ""}`}>
+                      {delivery.shipmentGroupId
+                        ? shipmentGroups.find((g) => g.id === delivery.shipmentGroupId)?.name || "Groupe"
+                        : "Aucun"}
+                    </span>
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="NONE">Aucun</SelectItem>
@@ -897,13 +902,9 @@ export default function DeliveriesPage() {
                     disabled={generating}
                   >
                     <Plus className="h-4 w-4" />
-                    <SelectValue
-                      placeholder={
-                        generating
-                          ? "Génération..."
-                          : "Générer depuis une session"
-                      }
-                    />
+                    <span className="text-sm text-muted-foreground truncate">
+                      {generating ? "Génération..." : "Générer depuis une session"}
+                    </span>
                   </SelectTrigger>
                   <SelectContent>
                     {sessions.map((s) => (
@@ -1032,7 +1033,11 @@ export default function DeliveriesPage() {
                     }
                   >
                     <SelectTrigger className="h-7 w-[220px] text-xs">
-                      <SelectValue placeholder="Tous les catalogues" />
+                      <span className="text-xs truncate">
+                        {filterCatalog === "ALL"
+                          ? "Tous les catalogues"
+                          : catalogs.find((c) => c.id === filterCatalog)?.name || "Tous"}
+                      </span>
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="ALL">

@@ -37,7 +37,6 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from "@/components/ui/select";
 import {
   Ruler,
@@ -903,11 +902,15 @@ function SupplierRefsTab() {
               />
             </div>
             <Select
-              value={supplierFilter}
+              value={supplierFilter || "all"}
               onValueChange={(v) => setSupplierFilter(v === "all" || !v ? "" : v)}
             >
               <SelectTrigger className="w-48 h-9">
-                <SelectValue placeholder="Tous les fournisseurs" />
+                <span className={`text-sm truncate ${!supplierFilter ? "text-muted-foreground" : ""}`}>
+                  {supplierFilter
+                    ? suppliers.find((s) => s.code === supplierFilter)?.name || supplierFilter
+                    : "Tous les fournisseurs"}
+                </span>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Tous les fournisseurs</SelectItem>

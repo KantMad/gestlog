@@ -10,7 +10,6 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from "@/components/ui/select";
 import {
   ShoppingCart,
@@ -206,7 +205,9 @@ export function BtocStatsTab() {
                 onValueChange={(v) => setCategory(!v || v === "all" ? "" : v)}
               >
                 <SelectTrigger className="w-48 h-9">
-                  <SelectValue placeholder="Toutes" />
+                  <span className={`text-sm truncate ${!category ? "text-muted-foreground" : ""}`}>
+                    {category || "Toutes"}
+                  </span>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Toutes</SelectItem>
@@ -227,7 +228,9 @@ export function BtocStatsTab() {
                 onValueChange={(v) => setParentProduct(!v || v === "all" ? "" : v)}
               >
                 <SelectTrigger className="w-56 h-9">
-                  <SelectValue placeholder="Tous" />
+                  <span className={`text-sm truncate ${!parentProduct ? "text-muted-foreground" : ""}`}>
+                    {parentProduct || "Tous"}
+                  </span>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Tous</SelectItem>
