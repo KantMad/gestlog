@@ -1,8 +1,41 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+// Canonical alpha size ordering (uppercased)
+const ALPHA_SIZE_ORDER = [
+  "XXS", "XS", "S", "S/M", "S-M", "M", "M/L", "L", "L/XL", "L-XL",
+  "XL", "XL/2XL", "2XL", "2XL-3XL", "3XL", "3XL/4XL", "4XL", "5XL", "6XL", "TU",
+];
+
+/** Order sizes: numeric → numerical sort, alpha → canonical order */
+function orderSizes(sizes: string[]): string[] {
+  const upper = sizes.map((s) => s.toUpperCase());
+  const allNumeric = upper.every((s) => /^\d+$/.test(s));
+
+  if (allNumeric) {
+    return [...new Set(upper)].sort((a, b) => parseInt(a) - parseInt(b));
+  }
+
+  // Paired numeric like 39-42, 43-46
+  const allPairedNumeric = upper.every((s) => /^\d+-\d+$/.test(s));
+  if (allPairedNumeric) {
+    return [...new Set(upper)].sort(
+      (a, b) => parseInt(a.split("-")[0]) - parseInt(b.split("-")[0])
+    );
+  }
+
+  return [...new Set(upper)].sort((a, b) => {
+    const idxA = ALPHA_SIZE_ORDER.indexOf(a);
+    const idxB = ALPHA_SIZE_ORDER.indexOf(b);
+    if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+    if (idxA !== -1) return -1;
+    if (idxB !== -1) return 1;
+    return a.localeCompare(b);
+  });
+}
+
 // Returns order lines grouped by parent product reference + color,
-// with quantities broken down by size (for pivot/column display)
+// with ALL sizes from BtoB sizeScale as columns (quantities for missing sizes = 0)
 export async function GET(request: NextRequest) {
   try {
     const params = request.nextUrl.searchParams;
@@ -28,7 +61,9 @@ export async function GET(request: NextRequest) {
       idx++;
     }
     if (productName) {
-      conditions.push(`(COALESCE(parent.name, p.name, ol.name) ILIKE $${idx})`);
+      conditions.push(
+        `(COALESCE(parent.name, p.name, ol.name) ILIKE $${idx})`
+      );
       queryParams.push(`%${productName}%`);
       idx++;
     }
@@ -38,7 +73,7 @@ export async function GET(request: NextRequest) {
       idx++;
     }
     if (size) {
-      conditions.push(`ol.size = $${idx}`);
+      conditions.push(`UPPER(ol.size) = UPPER($${idx})`);
       queryParams.push(size);
       idx++;
     }
@@ -48,27 +83,37 @@ export async function GET(request: NextRequest) {
       idx++;
     }
 
-    const where = conditions.length > 0 ? "WHERE " + conditions.join(" AND ") : "";
+    const where =
+      conditions.length > 0 ? "WHERE " + conditions.join(" AND ") : "";
 
-    // Get all unique sizes for column headers
-    const sizeRows = await prisma.$queryRawUnsafe<{ size: string }[]>(
-      `SELECT DISTINCT ol.size
-       FROM "BtocOrderLine" ol
-       JOIN "BtocOrder" o ON o.id = ol."orderId"
-       LEFT JOIN "BtocProduct" p ON p.id = ol."productId"
-       LEFT JOIN "BtocProduct" parent ON parent."wooId" = p."parentId" AND parent.type = 'variable'
-       ${where}
-       AND ol.size IS NOT NULL AND ol.size != ''
-       ORDER BY ol.size`,
-      ...queryParams
+    // ─── Step 1: Build a BtoB reference → best sizeScale map ──
+    // For each reference, pick the sizeScale with the most sizes
+    const btobScales = await prisma.$queryRawUnsafe<
+      { reference: string; sizeScale: string }[]
+    >(
+      `SELECT DISTINCT ON (reference) reference, "sizeScale"
+       FROM "Product"
+       WHERE "sizeScale" IS NOT NULL AND "sizeScale" != ''
+       ORDER BY reference, LENGTH("sizeScale") DESC`
     );
-    const sizes = sizeRows.map((r) => r.size);
 
-    // Get order lines grouped by parent reference + color + size
+    const sizeScaleMap = new Map<string, string[]>();
+    for (const row of btobScales) {
+      const sizes = row.sizeScale
+        .split(",")
+        .map((s) => s.trim().toUpperCase())
+        .filter(Boolean);
+      if (sizes.length > 0) {
+        sizeScaleMap.set(row.reference, orderSizes(sizes));
+      }
+    }
+
+    // ─── Step 2: Get BtoC order lines with parent info ────────
     const rows = await prisma.$queryRawUnsafe<
       {
         reference: string;
-        sku: string | null;
+        parentSku: string | null;
+        lineSku: string | null;
         color: string | null;
         category: string | null;
         size: string | null;
@@ -79,7 +124,8 @@ export async function GET(request: NextRequest) {
     >(
       `SELECT
         COALESCE(parent.name, p.name, ol.name) AS reference,
-        COALESCE(p.sku, ol.sku) AS sku,
+        COALESCE(parent.sku, p.sku) AS "parentSku",
+        ol.sku AS "lineSku",
         ol.color,
         COALESCE(parent.category, p.category) AS category,
         ol.size,
@@ -91,12 +137,18 @@ export async function GET(request: NextRequest) {
        LEFT JOIN "BtocProduct" p ON p.id = ol."productId"
        LEFT JOIN "BtocProduct" parent ON parent."wooId" = p."parentId" AND parent.type = 'variable'
        ${where}
-       GROUP BY COALESCE(parent.name, p.name, ol.name), COALESCE(p.sku, ol.sku), ol.color, COALESCE(parent.category, p.category), ol.size
+       GROUP BY
+         COALESCE(parent.name, p.name, ol.name),
+         COALESCE(parent.sku, p.sku),
+         ol.sku,
+         ol.color,
+         COALESCE(parent.category, p.category),
+         ol.size
        ORDER BY reference, ol.color, ol.size`,
       ...queryParams
     );
 
-    // Pivot: group rows by reference+color, sizes become columns
+    // ─── Step 3: Pivot by reference+color, fill ALL sizes ─────
     const pivotMap = new Map<
       string,
       {
@@ -107,52 +159,101 @@ export async function GET(request: NextRequest) {
         sizeQuantities: Record<string, number>;
         totalQuantity: number;
         totalRevenue: number;
-        orderCount: number;
+        orderedSizes: string[]; // full size scale for this product
       }
     >();
 
     for (const row of rows) {
       const key = `${row.reference}|||${row.color || ""}`;
+
       if (!pivotMap.has(key)) {
+        // Determine the full size scale for this product
+        const btobRef = row.parentSku || row.lineSku || "";
+        const btobSizes = sizeScaleMap.get(btobRef);
+
         pivotMap.set(key, {
           reference: row.reference,
-          sku: row.sku,
+          sku: row.parentSku || row.lineSku,
           color: row.color,
           category: row.category,
           sizeQuantities: {},
           totalQuantity: 0,
           totalRevenue: 0,
-          orderCount: 0,
+          orderedSizes: btobSizes || [], // will be enriched below
         });
       }
+
       const entry = pivotMap.get(key)!;
       if (row.size) {
-        entry.sizeQuantities[row.size] =
-          (entry.sizeQuantities[row.size] || 0) + Number(row.quantity);
+        const upperSize = row.size.toUpperCase();
+        entry.sizeQuantities[upperSize] =
+          (entry.sizeQuantities[upperSize] || 0) + Number(row.quantity);
+
+        // If this size isn't in the BtoB scale, add it
+        if (!entry.orderedSizes.includes(upperSize)) {
+          entry.orderedSizes.push(upperSize);
+        }
       }
       entry.totalQuantity += Number(row.quantity);
       entry.totalRevenue += Number(row.revenue);
-      entry.orderCount = Math.max(entry.orderCount, Number(row.orderCount));
     }
 
-    const pivotedRows = Array.from(pivotMap.values());
+    // ─── Step 4: Re-order sizes and fill missing with 0 ────────
+    const pivotedRows = Array.from(pivotMap.values()).map((entry) => {
+      // Re-order sizes properly
+      entry.orderedSizes = orderSizes(entry.orderedSizes);
+
+      // Fill missing sizes with 0
+      for (const s of entry.orderedSizes) {
+        if (!(s in entry.sizeQuantities)) {
+          entry.sizeQuantities[s] = 0;
+        }
+      }
+
+      return entry;
+    });
+
+    // Collect ALL unique sizes across all rows, ordered
+    const allSizesSet = new Set<string>();
+    for (const row of pivotedRows) {
+      for (const s of row.orderedSizes) {
+        allSizesSet.add(s);
+      }
+    }
+    const allSizes = orderSizes(Array.from(allSizesSet));
 
     // Available filter values
-    const availableColors = await prisma.$queryRawUnsafe<{ color: string }[]>(
+    const availableColors = await prisma.$queryRawUnsafe<
+      { color: string }[]
+    >(
       `SELECT DISTINCT color FROM "BtocOrderLine" WHERE color IS NOT NULL AND color != '' ORDER BY color`
     );
-    const availableSizes = await prisma.$queryRawUnsafe<{ size: string }[]>(
-      `SELECT DISTINCT size FROM "BtocOrderLine" WHERE size IS NOT NULL AND size != '' ORDER BY size`
+    const availableSizes = await prisma.$queryRawUnsafe<
+      { size: string }[]
+    >(
+      `SELECT DISTINCT UPPER(size) AS size FROM "BtocOrderLine" WHERE size IS NOT NULL AND size != '' ORDER BY size`
     );
 
     return NextResponse.json({
-      rows: pivotedRows,
-      sizes,
+      rows: pivotedRows.map((r) => ({
+        reference: r.reference,
+        sku: r.sku,
+        color: r.color,
+        category: r.category,
+        sizeQuantities: r.sizeQuantities,
+        orderedSizes: r.orderedSizes,
+        totalQuantity: r.totalQuantity,
+        totalRevenue: Math.round(r.totalRevenue * 100) / 100,
+      })),
+      allSizes,
       total: pivotedRows.length,
       availableColors: availableColors.map((c) => c.color),
-      availableSizes: availableSizes.map((s) => s.size),
+      availableSizes: orderSizes(availableSizes.map((s) => s.size)),
     });
   } catch (e) {
-    return NextResponse.json({ error: `Erreur: ${String(e)}` }, { status: 500 });
+    return NextResponse.json(
+      { error: `Erreur: ${String(e)}` },
+      { status: 500 }
+    );
   }
 }

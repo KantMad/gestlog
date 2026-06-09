@@ -39,9 +39,9 @@ interface OrderRow {
   color: string | null;
   category: string | null;
   sizeQuantities: Record<string, number>;
+  orderedSizes: string[];
   totalQuantity: number;
   totalRevenue: number;
-  orderCount: number;
 }
 
 interface CustomerRow {
@@ -218,20 +218,23 @@ export function BtocExportTab() {
       const res = await fetch(`/api/btoc/export/orders?${params}`);
       const data = await res.json();
       const orderRows: OrderRow[] = data.rows || [];
-      const sizes: string[] = data.sizes || [];
+      const allSizes: string[] = data.allSizes || [];
       const fields = fieldsConfig.orders || Object.fromEntries(
         Object.keys(ORDER_FIELD_LABELS).map((k) => [k, true])
       );
 
+      // Each row uses its OWN orderedSizes (from BtoB sizeScale)
+      // so ALL product sizes appear even if quantity = 0
       const rows = orderRows.map((o) => {
         const row: Record<string, string | number> = {};
         if (fields.reference) row["Référence"] = o.reference;
         if (fields.sku) row["SKU"] = o.sku || "";
         if (fields.color) row["Couleur"] = o.color || "";
         if (fields.category) row["Catégorie"] = o.category || "";
-        // Size columns
+        // Size columns — use the product's own size scale (all sizes)
         if (fields.sizes) {
-          for (const s of sizes) {
+          const sizesToShow = o.orderedSizes.length > 0 ? o.orderedSizes : allSizes;
+          for (const s of sizesToShow) {
             row[s] = o.sizeQuantities[s] || 0;
           }
         }
