@@ -238,10 +238,25 @@ export function BtocExportTab() {
         Object.keys(ORDER_FIELD_LABELS).map((k) => [k, true])
       );
 
+      // Build explicit header order — JS sorts numeric string keys before
+      // text keys, so we must force column order via the header array
+      const headers: string[] = [];
+      if (fields.reference) headers.push("Référence");
+      if (fields.sku) headers.push("SKU");
+      if (fields.colorCode) headers.push("Code Couleur");
+      if (fields.colorBtob) headers.push("Couleur BtoB");
+      if (fields.color) headers.push("Couleur BtoC");
+      if (fields.category) headers.push("Catégorie BtoC");
+      if (fields.categoryBtob) headers.push("Type BtoB");
+      if (fields.totalQuantity) headers.push("Total Qté");
+      if (fields.totalRevenue) headers.push("CA Total");
+      if (fields.sizes) {
+        for (const col of sizeColumns) headers.push(col.header);
+      }
+
       // Build XLSX rows: fixed columns + size columns by BtoB position
       const rows = orderRows.map((o) => {
         const row: Record<string, string | number> = {};
-        // Fixed columns — Référence first
         if (fields.reference) row["Référence"] = o.productName;
         if (fields.sku) row["SKU"] = o.parentRef;
         if (fields.colorCode) row["Code Couleur"] = o.colorNum;
@@ -251,7 +266,6 @@ export function BtocExportTab() {
         if (fields.categoryBtob) row["Type BtoB"] = o.sizeTypeCode;
         if (fields.totalQuantity) row["Total Qté"] = o.totalQuantity;
         if (fields.totalRevenue) row["CA Total"] = o.totalRevenue;
-        // Size columns AFTER CA Total — grouped by BtoB position ranking
         if (fields.sizes) {
           for (const col of sizeColumns) {
             row[col.header] = o.quantities[col.position] ?? "";
@@ -260,7 +274,7 @@ export function BtocExportTab() {
         return row;
       });
 
-      downloadXLSX(rows, "Ventes BtoC", `ventes-btoc-${today()}.xlsx`);
+      downloadXLSX(rows, "Ventes BtoC", `ventes-btoc-${today()}.xlsx`, headers);
     } catch (e) {
       console.error("Erreur export ventes:", e);
     } finally {
@@ -641,17 +655,21 @@ function today(): string {
 function downloadXLSX(
   rows: Record<string, string | number>[],
   sheetName: string,
-  fileName: string
+  fileName: string,
+  header?: string[]
 ) {
   if (rows.length === 0) {
     alert("Aucune donnée à exporter.");
     return;
   }
 
-  const ws = XLSX.utils.json_to_sheet(rows);
+  // When header is provided, force exact column order (bypasses JS numeric key sorting)
+  const ws = header
+    ? XLSX.utils.json_to_sheet(rows, { header })
+    : XLSX.utils.json_to_sheet(rows);
 
   // Auto-size columns
-  const colKeys = Object.keys(rows[0]);
+  const colKeys = header || Object.keys(rows[0]);
   ws["!cols"] = colKeys.map((key) => ({
     wch: Math.min(
       40,
