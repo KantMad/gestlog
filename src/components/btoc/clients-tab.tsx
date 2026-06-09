@@ -232,7 +232,7 @@ export function BtocClientsTab() {
         <CardContent className="pt-6">
           <div className="flex flex-wrap items-end gap-3">
             <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">
+              <label className="block text-xs font-medium text-muted-foreground">
                 Recherche
               </label>
               <div className="relative">
@@ -247,7 +247,7 @@ export function BtocClientsTab() {
               </div>
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">
+              <label className="block text-xs font-medium text-muted-foreground">
                 Référence produit
               </label>
               <Input
@@ -259,7 +259,7 @@ export function BtocClientsTab() {
               />
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">
+              <label className="block text-xs font-medium text-muted-foreground">
                 Taille commandée
               </label>
               <Select
@@ -285,7 +285,7 @@ export function BtocClientsTab() {
               </Select>
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">
+              <label className="block text-xs font-medium text-muted-foreground">
                 Ville
               </label>
               <Select

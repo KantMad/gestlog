@@ -343,7 +343,7 @@ export function BtocExportTab() {
         <CardContent>
           <div className="flex flex-wrap items-end gap-3">
             <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">
+              <label className="block text-xs font-medium text-muted-foreground">
                 Recherche
               </label>
               <Input
@@ -354,7 +354,7 @@ export function BtocExportTab() {
               />
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">
+              <label className="block text-xs font-medium text-muted-foreground">
                 Catégorie
               </label>
               <Select
@@ -414,7 +414,7 @@ export function BtocExportTab() {
         <CardContent>
           <div className="flex flex-wrap items-end gap-3">
             <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">
+              <label className="block text-xs font-medium text-muted-foreground">
                 Date début
               </label>
               <Input
@@ -425,7 +425,7 @@ export function BtocExportTab() {
               />
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">
+              <label className="block text-xs font-medium text-muted-foreground">
                 Date fin
               </label>
               <Input
@@ -436,7 +436,7 @@ export function BtocExportTab() {
               />
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">
+              <label className="block text-xs font-medium text-muted-foreground">
                 Référence produit
               </label>
               <Input
@@ -447,7 +447,7 @@ export function BtocExportTab() {
               />
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">
+              <label className="block text-xs font-medium text-muted-foreground">
                 Couleur
               </label>
               <Select
@@ -468,7 +468,7 @@ export function BtocExportTab() {
               </Select>
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">
+              <label className="block text-xs font-medium text-muted-foreground">
                 Taille
               </label>
               <Select
@@ -489,7 +489,7 @@ export function BtocExportTab() {
               </Select>
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">
+              <label className="block text-xs font-medium text-muted-foreground">
                 Client
               </label>
               <Input
@@ -543,7 +543,7 @@ export function BtocExportTab() {
         <CardContent>
           <div className="flex flex-wrap items-end gap-3">
             <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">
+              <label className="block text-xs font-medium text-muted-foreground">
                 Recherche
               </label>
               <Input
@@ -554,7 +554,7 @@ export function BtocExportTab() {
               />
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">
+              <label className="block text-xs font-medium text-muted-foreground">
                 Référence produit
               </label>
               <Input
@@ -565,7 +565,7 @@ export function BtocExportTab() {
               />
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">
+              <label className="block text-xs font-medium text-muted-foreground">
                 Taille
               </label>
               <Select
@@ -586,7 +586,7 @@ export function BtocExportTab() {
               </Select>
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">
+              <label className="block text-xs font-medium text-muted-foreground">
                 Ville
               </label>
               <Select
