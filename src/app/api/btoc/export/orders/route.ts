@@ -182,9 +182,18 @@ export async function GET(request: NextRequest) {
        WHERE "sizeScale" IS NOT NULL AND "sizeScale" != ''`
     );
 
-    // Map: reference → best sizeType (from longest sizeScale)
+    // The first character of a reference is a SEASON code (O, P, N, Q, R…).
+    // The same garment exists across seasons with the same "body" (ref minus
+    // the season char). BtoC sales may reference a season not present in BtoB,
+    // so we index by both the exact reference AND the season-agnostic body and
+    // fall back to body matching to recover cross-season equivalences.
+    const bodyOf = (ref: string) => (ref.length > 1 ? ref.slice(1) : ref);
+
+    // Maps: exact reference → … and body → … (body used as fallback)
     const refSizeTypeMap = new Map<string, SizeTypeInfo>();
-    const refBestScale = new Map<string, number>(); // track longest scale per ref
+    const bodySizeTypeMap = new Map<string, SizeTypeInfo>();
+    const refBestScale = new Map<string, number>(); // longest scale per ref
+    const bodyBestScale = new Map<string, number>(); // longest scale per body
     for (const prod of btobProducts) {
       const sizes = prod.sizeScale
         .split(",")
@@ -192,37 +201,58 @@ export async function GET(request: NextRequest) {
         .filter(Boolean);
       if (sizes.length === 0) continue;
 
+      const body = bodyOf(prod.reference);
       const currentBest = refBestScale.get(prod.reference) || 0;
       if (sizes.length > currentBest) {
         const st = findSizeType(sizes, sizeTypes);
         if (st) {
           refSizeTypeMap.set(prod.reference, st);
           refBestScale.set(prod.reference, sizes.length);
+          if (sizes.length > (bodyBestScale.get(body) || 0)) {
+            bodySizeTypeMap.set(body, st);
+            bodyBestScale.set(body, sizes.length);
+          }
         }
       }
     }
 
-    // Map: colorCode → { color name from BtoB }
-    // colorCode can be "740" or "REF-740" format
+    // Color: `reference|||colorNum` → color name, plus `body|||colorNum` fallback
     const btobColorMap = new Map<string, string>();
-    // Map: reference → { category, subCategory } (first non-null wins)
+    const bodyColorMap = new Map<string, string>();
+    // Category: reference → { category, subCategory }, plus body fallback
     const btobCategoryMap = new Map<string, { category: string; subCategory: string }>();
+    const bodyCategoryMap = new Map<string, { category: string; subCategory: string }>();
     for (const prod of btobProducts) {
-      // Key: reference + colorNum
       const colorNum = prod.colorCode
         ? prod.colorCode.includes("-")
           ? prod.colorCode.split("-").pop()!
           : prod.colorCode
         : prod.color;
+      const body = bodyOf(prod.reference);
       btobColorMap.set(`${prod.reference}|||${colorNum}`, prod.color);
+      if (!bodyColorMap.has(`${body}|||${colorNum}`)) {
+        bodyColorMap.set(`${body}|||${colorNum}`, prod.color);
+      }
 
-      if (!btobCategoryMap.has(prod.reference) && (prod.category || prod.subCategory)) {
-        btobCategoryMap.set(prod.reference, {
+      if (prod.category || prod.subCategory) {
+        const cat = {
           category: prod.category || "",
           subCategory: prod.subCategory || "",
-        });
+        };
+        if (!btobCategoryMap.has(prod.reference)) btobCategoryMap.set(prod.reference, cat);
+        if (!bodyCategoryMap.has(body)) bodyCategoryMap.set(body, cat);
       }
     }
+
+    // Resolvers: exact reference first, then season-agnostic body
+    const resolveSizeType = (ref: string) =>
+      refSizeTypeMap.get(ref) || bodySizeTypeMap.get(bodyOf(ref));
+    const resolveColor = (ref: string, colorNum: string) =>
+      btobColorMap.get(`${ref}|||${colorNum}`) ||
+      bodyColorMap.get(`${bodyOf(ref)}|||${colorNum}`) ||
+      "";
+    const resolveCategory = (ref: string) =>
+      btobCategoryMap.get(ref) || bodyCategoryMap.get(bodyOf(ref));
 
     // ─── Step 3: Query BtoC order lines ───────────────────
     const rows = await prisma.$queryRawUnsafe<
@@ -286,15 +316,14 @@ export async function GET(request: NextRequest) {
       const key = `${ref}|||${colorNum}`;
 
       if (!pivotMap.has(key)) {
-        // Look up BtoB color name
-        const btobColorKey = `${ref}|||${colorNum}`;
-        const btobColor = btobColorMap.get(btobColorKey) || "";
+        // Look up BtoB color name (exact ref, then season-agnostic body)
+        const btobColor = resolveColor(ref, colorNum);
 
-        // Get sizeType for this reference
-        const sizeType = refSizeTypeMap.get(ref);
+        // Get sizeType for this reference (with body fallback)
+        const sizeType = resolveSizeType(ref);
 
-        // Get BtoB category/subcategory
-        const catInfo = btobCategoryMap.get(ref);
+        // Get BtoB category/subcategory (with body fallback)
+        const catInfo = resolveCategory(ref);
 
         pivotMap.set(key, {
           productName: row.productName,
@@ -318,7 +347,7 @@ export async function GET(request: NextRequest) {
 
       // Map the size to a position using the product's sizeType
       if (row.size) {
-        const sizeType = refSizeTypeMap.get(ref);
+        const sizeType = resolveSizeType(ref);
         if (sizeType) {
           const pos = sizeType.sizeToPosition.get(row.size);
           if (pos !== undefined) {
@@ -339,7 +368,7 @@ export async function GET(request: NextRequest) {
 
     // ─── Step 5: Fill all positions for each row with 0 ───
     const pivotedRows = Array.from(pivotMap.values()).map((entry) => {
-      const sizeType = refSizeTypeMap.get(entry.parentRef);
+      const sizeType = resolveSizeType(entry.parentRef);
       if (sizeType) {
         // Fill all positions of this sizeType with 0 if missing
         for (const pos of sizeType.sizeToPosition.values()) {
