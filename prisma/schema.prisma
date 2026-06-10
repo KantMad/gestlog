@@ -579,3 +579,61 @@ model HistOrderLine {
   @@index([histOrderId])
   @@index([reference])
 }
+
+// ─── Documents entrepôt (BL / FAC importés du FTP) ──────────────────────
+// Bons de Livraison et Factures déposés par l'entrepôt (export TexasWin) sur
+// le FTP (/in/EAN/*.xlsx). Mêmes 78 colonnes pour BL et FAC ; on unifie via
+// docType. Sert à la réconciliation des livraisons par client B2B.
+// Clés de jointure outil : reference→Product.reference, ean→ProductSizeEan,
+// clientCode→Client.code.
+model WarehouseDocument {
+  id             String   @id @default(cuid())
+  source         String   @default("warehouse_ftp")
+  docType        String   // "BL" (bon de livraison) ou "FAC" (facture)
+  documentNumber String   // "N° Document" (ex: 137391)
+  season         String?  // "Saison Document" (ex: W25)
+  clientCode     String?  // "Code Client" → Client.code
+  clientName     String?  // "Raison sociale Client"
+  brandLabel     String?  // "Libellé marque" (ex: MCS)
+  documentDate   DateTime? // BL: Date livraison — FAC: Date facture
+  secondaryDate  DateTime? // BL: Date préparation — FAC: Date valeur
+  documentTotal  Float?   // "Prix du Document"
+  fileName       String
+  totalQuantity  Int      @default(0)
+  importedAt     DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  lines WarehouseDocumentLine[]
+
+  @@unique([source, docType, documentNumber])
+  @@index([clientCode])
+  @@index([docType])
+  @@index([documentDate])
+}
+
+model WarehouseDocumentLine {
+  id           String  @id @default(cuid())
+  documentId   String
+  lineNo       String? // "N° Ligne"
+  reference    String? // "Code Produit Fini" → Product.reference
+  productLabel String? // "Libellé 1 Produit Fini"
+  colorCode    String? // "Code Coloris"
+  colorLabel   String? // "Libellé Coloris"
+  size         String? // "Taille"
+  ean          String? // "Code Barre" → ProductSizeEan.ean
+  quantity     Int     @default(0) // "Qté"
+  unitPrice    Float   @default(0) // "Prix Unitaire"
+  parcelNo     String? // "N° Colis"
+  location     String? // "Code Emplacement"
+  statFamily   String? // "Libellé famille statistique"
+  statSubFamily String? // "Libellé sous famille statistique"
+  orderRef     String? // "Référence Commande"
+  rawData      String? // ligne brute complète (JSON) — on garde tout
+  createdAt    DateTime @default(now())
+
+  document WarehouseDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([documentId])
+  @@index([reference])
+  @@index([ean])
+}
