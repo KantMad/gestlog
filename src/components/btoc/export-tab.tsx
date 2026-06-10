@@ -372,6 +372,9 @@ export function BtocExportTab() {
         firstName: string;
         billingPostcode: string | null;
         billingCity: string | null;
+        ordersCount: number;
+        totalSpent: number;
+        avgBasket: number;
       }[] = data.customers || [];
 
       const rows = customers.map((c) => ({
@@ -381,6 +384,9 @@ export function BtocExportTab() {
         Prénom: c.firstName,
         "Code Postal": c.billingPostcode || "",
         Ville: c.billingCity || "",
+        "Nb commandes": c.ordersCount,
+        "Total dépensé (€)": c.totalSpent,
+        "Panier moyen (€)": c.avgBasket,
       }));
 
       downloadXLSX(rows, "Top Clients", `top-clients-btoc-${today()}.xlsx`, [
@@ -390,6 +396,9 @@ export function BtocExportTab() {
         "Prénom",
         "Code Postal",
         "Ville",
+        "Nb commandes",
+        "Total dépensé (€)",
+        "Panier moyen (€)",
       ]);
     } catch (e) {
       console.error("Erreur export top clients:", e);
@@ -755,7 +764,7 @@ export function BtocExportTab() {
             <div>
               <CardTitle className="text-base">Export Top Clients</CardTitle>
               <p className="text-sm text-muted-foreground">
-                Plus de 2 commandes ou panier moyen &gt; 150 € (live + historique) — Email, Téléphone, Nom, Prénom, Code Postal, Ville
+                Plus de 2 commandes ou panier moyen &gt; 150 € (live + historique) — Email, Téléphone, Nom, Prénom, Code Postal, Ville, Nb commandes, Total dépensé, Panier moyen
               </p>
             </div>
           </div>
