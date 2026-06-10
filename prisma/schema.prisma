@@ -74,14 +74,16 @@ model Supplier {
 }
 
 model Product {
-  id         String   @id @default(cuid())
-  reference  String
-  color      String
-  colorCode  String?
-  externalId String?  @unique // B2B product_id + color_id (e.g. "3119_53")
-  sizeScale  String   // "XS,S,M,L,XL,XXL"
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id          String   @id @default(cuid())
+  reference   String
+  color       String
+  colorCode   String?
+  externalId  String?  @unique // B2B product_id + color_id (e.g. "3119_53")
+  sizeScale   String   // "XS,S,M,L,XL,XXL"
+  category    String?  // catégorie BtoB (ex: "Pantalon")
+  subCategory String?  // sous-catégorie BtoB (ex: "Pantalon 5 poches")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   supplierOrderLines SupplierOrderLine[]
   clientOrderLines   ClientOrderLine[]

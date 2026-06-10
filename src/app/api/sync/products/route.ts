@@ -30,6 +30,8 @@ export async function POST(request: NextRequest) {
           color,
           colorCode,
           sizeTypeCode,
+          category,
+          subCategory,
           variations,
         } = prod;
 
@@ -46,20 +48,24 @@ export async function POST(request: NextRequest) {
 
         // Raw SQL upsert — bypasses PrismaPg adapter bug
         await prisma.$executeRawUnsafe(
-          `INSERT INTO "Product" (id, reference, color, "colorCode", "sizeScale", "externalId", "createdAt", "updatedAt")
-           VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+          `INSERT INTO "Product" (id, reference, color, "colorCode", "sizeScale", "externalId", category, "subCategory", "createdAt", "updatedAt")
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
            ON CONFLICT (reference, color)
            DO UPDATE SET
              "colorCode" = COALESCE(NULLIF($4, ''), "Product"."colorCode"),
              "sizeScale" = COALESCE(NULLIF($5, ''), "Product"."sizeScale"),
              "externalId" = COALESCE($6, "Product"."externalId"),
+             category = COALESCE(NULLIF($7, ''), "Product".category),
+             "subCategory" = COALESCE(NULLIF($8, ''), "Product"."subCategory"),
              "updatedAt" = NOW()`,
           genId(),
           String(reference),
           colorStr,
           colorCode || null,
           sizeScale || null,
-          extId
+          extId,
+          category || null,
+          subCategory || null
         );
 
         // Upsert EAN entries via raw SQL

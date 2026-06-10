@@ -42,6 +42,8 @@ const DEFAULTS: Record<ExportType, Record<string, boolean>> = {
     color: true,
     category: true,
     categoryBtob: true,
+    subCategoryBtob: true,
+    sizeTypeBtob: true,
     totalQuantity: true,
     totalRevenue: true,
     sizes: true,

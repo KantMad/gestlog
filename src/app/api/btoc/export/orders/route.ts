@@ -173,9 +173,11 @@ export async function GET(request: NextRequest) {
         color: string;
         colorCode: string | null;
         sizeScale: string;
+        category: string | null;
+        subCategory: string | null;
       }[]
     >(
-      `SELECT reference, color, "colorCode", "sizeScale"
+      `SELECT reference, color, "colorCode", "sizeScale", category, "subCategory"
        FROM "Product"
        WHERE "sizeScale" IS NOT NULL AND "sizeScale" != ''`
     );
@@ -203,6 +205,8 @@ export async function GET(request: NextRequest) {
     // Map: colorCode → { color name from BtoB }
     // colorCode can be "740" or "REF-740" format
     const btobColorMap = new Map<string, string>();
+    // Map: reference → { category, subCategory } (first non-null wins)
+    const btobCategoryMap = new Map<string, { category: string; subCategory: string }>();
     for (const prod of btobProducts) {
       // Key: reference + colorNum
       const colorNum = prod.colorCode
@@ -211,6 +215,13 @@ export async function GET(request: NextRequest) {
           : prod.colorCode
         : prod.color;
       btobColorMap.set(`${prod.reference}|||${colorNum}`, prod.color);
+
+      if (!btobCategoryMap.has(prod.reference) && (prod.category || prod.subCategory)) {
+        btobCategoryMap.set(prod.reference, {
+          category: prod.category || "",
+          subCategory: prod.subCategory || "",
+        });
+      }
     }
 
     // ─── Step 3: Query BtoC order lines ───────────────────
@@ -258,6 +269,8 @@ export async function GET(request: NextRequest) {
       btocColor: string;
       btobColor: string;
       btocCategory: string;
+      btobCategory: string;
+      btobSubCategory: string;
       sizeTypeCode: string;
       totalQuantity: number;
       totalRevenue: number;
@@ -280,6 +293,9 @@ export async function GET(request: NextRequest) {
         // Get sizeType for this reference
         const sizeType = refSizeTypeMap.get(ref);
 
+        // Get BtoB category/subcategory
+        const catInfo = btobCategoryMap.get(ref);
+
         pivotMap.set(key, {
           productName: row.productName,
           parentRef: ref,
@@ -287,6 +303,8 @@ export async function GET(request: NextRequest) {
           btocColor: row.btocColor || "",
           btobColor,
           btocCategory: row.btocCategory || "",
+          btobCategory: catInfo?.category || "",
+          btobSubCategory: catInfo?.subCategory || "",
           sizeTypeCode: sizeType?.code || "",
           totalQuantity: 0,
           totalRevenue: 0,

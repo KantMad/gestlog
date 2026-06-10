@@ -50,6 +50,8 @@ interface OrderRow {
   btocColor: string;
   btobColor: string;
   btocCategory: string;
+  btobCategory: string;
+  btobSubCategory: string;
   sizeTypeCode: string;
   totalQuantity: number;
   totalRevenue: number;
@@ -90,7 +92,9 @@ const ORDER_FIELD_LABELS: Record<string, string> = {
   colorBtob: "Couleur BtoB",
   color: "Couleur BtoC",
   category: "Catégorie BtoC",
-  categoryBtob: "Type produit BtoB",
+  categoryBtob: "Catégorie BtoB",
+  subCategoryBtob: "Sous-catégorie BtoB",
+  sizeTypeBtob: "Type produit BtoB",
   totalQuantity: "Quantité totale",
   totalRevenue: "CA total",
   sizes: "Tailles (colonnes)",
@@ -247,7 +251,9 @@ export function BtocExportTab() {
       if (fields.colorBtob) headers.push("Couleur BtoB");
       if (fields.color) headers.push("Couleur BtoC");
       if (fields.category) headers.push("Catégorie BtoC");
-      if (fields.categoryBtob) headers.push("Type BtoB");
+      if (fields.categoryBtob) headers.push("Catégorie BtoB");
+      if (fields.subCategoryBtob) headers.push("Sous-catégorie BtoB");
+      if (fields.sizeTypeBtob) headers.push("Type BtoB");
       if (fields.totalQuantity) headers.push("Total Qté");
       if (fields.totalRevenue) headers.push("CA Total");
       if (fields.sizes) {
@@ -263,7 +269,9 @@ export function BtocExportTab() {
         if (fields.colorBtob) row["Couleur BtoB"] = o.btobColor;
         if (fields.color) row["Couleur BtoC"] = o.btocColor;
         if (fields.category) row["Catégorie BtoC"] = o.btocCategory;
-        if (fields.categoryBtob) row["Type BtoB"] = o.sizeTypeCode;
+        if (fields.categoryBtob) row["Catégorie BtoB"] = o.btobCategory;
+        if (fields.subCategoryBtob) row["Sous-catégorie BtoB"] = o.btobSubCategory;
+        if (fields.sizeTypeBtob) row["Type BtoB"] = o.sizeTypeCode;
         if (fields.totalQuantity) row["Total Qté"] = o.totalQuantity;
         if (fields.totalRevenue) row["CA Total"] = o.totalRevenue;
         if (fields.sizes) {
