@@ -276,7 +276,7 @@ export function BtocExportTab() {
         if (fields.totalRevenue) row["CA Total"] = o.totalRevenue;
         if (fields.sizes) {
           for (const col of sizeColumns) {
-            row[col.header] = o.quantities[col.position] ?? "";
+            row[col.header] = o.quantities[col.position] ?? 0;
           }
         }
         return row;

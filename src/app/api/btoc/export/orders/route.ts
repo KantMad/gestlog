@@ -273,7 +273,7 @@ export async function GET(request: NextRequest) {
         SPLIT_PART(ol.sku, '-', 2) AS "colorNum",
         ol.color AS "btocColor",
         bp.category AS "btocCategory",
-        UPPER(ol.size) AS size,
+        COALESCE(NULLIF(UPPER(ol.size), ''), UPPER(SPLIT_PART(ol.sku, '-', 3))) AS size,
         SUM(ol.quantity) AS quantity,
         SUM(ol.total) AS revenue
        FROM "BtocOrderLine" ol
@@ -286,7 +286,7 @@ export async function GET(request: NextRequest) {
          SPLIT_PART(ol.sku, '-', 2),
          ol.color,
          bp.category,
-         UPPER(ol.size)
+         COALESCE(NULLIF(UPPER(ol.size), ''), UPPER(SPLIT_PART(ol.sku, '-', 3)))
        ORDER BY "productName", "colorNum"`,
       ...queryParams
     );
@@ -345,23 +345,23 @@ export async function GET(request: NextRequest) {
       entry.totalQuantity += Number(row.quantity);
       entry.totalRevenue += Number(row.revenue);
 
-      // Map the size to a position using the product's sizeType
+      // Map the size to a position. Prefer the product's resolved sizeType,
+      // but if that sizeType doesn't contain this size (e.g. "TU" on a product
+      // resolved to another type), fall back to any sizeType that has it.
       if (row.size) {
         const sizeType = resolveSizeType(ref);
-        if (sizeType) {
-          const pos = sizeType.sizeToPosition.get(row.size);
-          if (pos !== undefined) {
-            entry.quantities[pos] = (entry.quantities[pos] || 0) + Number(row.quantity);
-          }
-        } else {
-          // Fallback: try all sizeTypes to find a position
+        let pos = sizeType?.sizeToPosition.get(row.size);
+        if (pos === undefined) {
           for (const st of sizeTypes.values()) {
-            const pos = st.sizeToPosition.get(row.size);
-            if (pos !== undefined) {
-              entry.quantities[pos] = (entry.quantities[pos] || 0) + Number(row.quantity);
+            const p = st.sizeToPosition.get(row.size);
+            if (p !== undefined) {
+              pos = p;
               break;
             }
           }
+        }
+        if (pos !== undefined) {
+          entry.quantities[pos] = (entry.quantities[pos] || 0) + Number(row.quantity);
         }
       }
     }
