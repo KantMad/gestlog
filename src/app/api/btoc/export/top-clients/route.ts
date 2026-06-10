@@ -1,19 +1,31 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
 // ─── Top Clients export ─────────────────────────────────
 // Critère : clients ayant passé PLUS DE 2 commandes (> 2)
 // OU dont le panier moyen (total dépensé / nb commandes) dépasse 150 €.
 //
-// On agrège depuis BtocOrder (par email) — ça couvre TOUS les acheteurs, y
-// compris les invités sans compte. Les commandes annulées / remboursées /
-// échouées sont exclues (pas de vraies ventes). On joint ensuite BtocCustomer
-// (best-effort) pour récupérer téléphone, code postal et noms ; à défaut, on
-// retombe sur le nom porté par la commande.
+// On agrège les ventes de DEUX sources :
+//   • BtocOrder (boutique WooCommerce live, sync n8n)
+//   • HistOrder (historique importé d'un autre WooCommerce)
+// regroupées par email — ça couvre tous les acheteurs (invités inclus) et
+// cumule la valeur d'un même client présent dans les deux boutiques.
+//
+// Filtre date optionnel (dateFrom / dateTo) appliqué à la date de commande.
+// On joint ensuite BtocCustomer (best-effort) pour récupérer téléphone, code
+// postal et noms ; à défaut on retombe sur les infos portées par la commande.
 //
 // Colonnes finales : Email, Téléphone, Nom, Prénom, Code Postal, Ville.
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const params = request.nextUrl.searchParams;
+    const dateFrom = params.get("dateFrom");
+    const dateTo = params.get("dateTo");
+
+    const from = dateFrom ? new Date(dateFrom) : null;
+    // borne de fin inclusive (fin de journée)
+    const to = dateTo ? new Date(dateTo + "T23:59:59.999") : null;
+
     const rows = await prisma.$queryRawUnsafe<
       {
         email: string;
@@ -28,38 +40,76 @@ export async function GET() {
         avgBasket: number;
       }[]
     >(
-      `WITH agg AS (
+      `WITH sales AS (
+        -- Boutique live
         SELECT
           LOWER(o."customerEmail") AS email_key,
-          MAX(o."customerEmail")   AS email,
-          MAX(o."customerName")    AS "customerName",
-          MAX(o."billingCity")     AS order_city,
-          COUNT(*)                 AS orders_count,
-          SUM(o.total)             AS total_spent
+          o."customerEmail"        AS email,
+          o."customerName"         AS customer_name,
+          o."billingCity"          AS city,
+          NULL::text               AS hist_first,
+          NULL::text               AS hist_last,
+          NULL::text               AS hist_phone,
+          o.total                  AS total,
+          o."orderDate"            AS order_date
         FROM "BtocOrder" o
         WHERE o."customerEmail" IS NOT NULL AND o."customerEmail" != ''
           AND o.status NOT IN ('cancelled', 'refunded', 'failed')
-        GROUP BY LOWER(o."customerEmail")
+        UNION ALL
+        -- Historique importé
+        SELECT
+          LOWER(h."customerEmail"),
+          h."customerEmail",
+          NULLIF(TRIM(CONCAT_WS(' ', h."firstName", h."lastName")), ''),
+          NULL,
+          h."firstName",
+          h."lastName",
+          h.phone,
+          h.total,
+          h."orderDate"
+        FROM "HistOrder" h
+        WHERE h."customerEmail" IS NOT NULL AND h."customerEmail" != ''
+      ),
+      filtered AS (
+        SELECT * FROM sales
+        WHERE ($1::timestamp IS NULL OR order_date >= $1)
+          AND ($2::timestamp IS NULL OR order_date <= $2)
+      ),
+      agg AS (
+        SELECT
+          email_key,
+          MAX(email)         AS email,
+          MAX(customer_name) AS "customerName",
+          MAX(city)          AS order_city,
+          MAX(hist_first)    AS hist_first,
+          MAX(hist_last)     AS hist_last,
+          MAX(hist_phone)    AS hist_phone,
+          COUNT(*)           AS orders_count,
+          SUM(total)         AS total_spent
+        FROM filtered
+        GROUP BY email_key
       )
       SELECT
         a.email,
         a."customerName",
-        c."firstName",
-        c."lastName",
-        c.phone,
+        COALESCE(c."firstName", a.hist_first) AS "firstName",
+        COALESCE(c."lastName",  a.hist_last)  AS "lastName",
+        COALESCE(c.phone,       a.hist_phone) AS phone,
         c."billingPostcode",
         COALESCE(c."billingCity", a.order_city) AS "billingCity",
         a.orders_count AS "ordersCount",
         a.total_spent  AS "totalSpent",
-        ROUND((a.total_spent / a.orders_count)::numeric, 2) AS "avgBasket"
+        ROUND((a.total_spent / NULLIF(a.orders_count, 0))::numeric, 2) AS "avgBasket"
       FROM agg a
       LEFT JOIN "BtocCustomer" c ON LOWER(c.email) = a.email_key
-      WHERE a.orders_count > 2 OR (a.total_spent / a.orders_count) > 150
-      ORDER BY a.total_spent DESC`
+      WHERE a.orders_count > 2 OR (a.total_spent / NULLIF(a.orders_count, 0)) > 150
+      ORDER BY a.total_spent DESC`,
+      from,
+      to
     );
 
-    // Nom / Prénom : on privilégie la fiche client, sinon on découpe le nom
-    // porté par la commande ("Prénom Nom" → premier mot = prénom, reste = nom).
+    // Nom / Prénom : on privilégie la fiche client / l'historique, sinon on
+    // découpe le nom porté par la commande live ("Prénom Nom").
     const customers = rows.map((r) => {
       let firstName = r.firstName?.trim() || "";
       let lastName = r.lastName?.trim() || "";

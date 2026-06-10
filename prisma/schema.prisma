@@ -435,6 +435,12 @@ model BtocCustomer {
   shippingCountry String?
   totalSpent    Float    @default(0)
   ordersCount   Int      @default(0)
+  // Statut VIP persistant : sert de garde anti-doublon pour ne déclencher le
+  // scénario Brevo "client_vip" qu'UNE fois, au franchissement du seuil.
+  // Recalculé par /api/sync/btoc/vip-recompute (jamais par la sync customers,
+  // dont les total_spent/orders_count de l'API WooCommerce REST valent 0).
+  isVip         Boolean  @default(false)
+  vipSince      DateTime?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -530,4 +536,46 @@ model BtocSyncLog {
   errors     String?  // JSON
   duration   Int?     // ms
   syncedAt   DateTime @default(now())
+}
+
+// ─── Historique BtoC (import depuis un autre WooCommerce) ───────────────
+// Données legacy importées par fichier (export xlsx ligne-à-ligne). Stockées
+// à part de BtocOrder pour ne pas perturber la sync live ; les exports
+// Top Clients / Best Sellers font l'UNION des deux sources.
+model HistOrder {
+  id            String   @id @default(cuid())
+  source        String   @default("woo_legacy") // identifie la boutique source
+  orderNumber   String
+  orderDate     DateTime
+  customerEmail String?
+  firstName     String?
+  lastName      String?
+  phone         String?
+  country       String?  // code pays livraison (pas de ville/CP dans l'export)
+  total         Float    @default(0) // montant total de la commande
+  createdAt     DateTime @default(now())
+
+  lines HistOrderLine[]
+
+  @@unique([source, orderNumber])
+  @@index([customerEmail])
+  @@index([orderDate])
+}
+
+model HistOrderLine {
+  id          String   @id @default(cuid())
+  histOrderId String
+  reference   String?  // UGS parent (ou dérivé du UGS) — null si produit sans SKU
+  sku         String?  // UGS complet
+  productName String?
+  category    String?
+  quantity    Int      @default(0)
+  price       Float    @default(0) // prix unitaire
+  lineTotal   Float    @default(0) // price * quantity
+  createdAt   DateTime @default(now())
+
+  order HistOrder @relation(fields: [histOrderId], references: [id], onDelete: Cascade)
+
+  @@index([histOrderId])
+  @@index([reference])
 }

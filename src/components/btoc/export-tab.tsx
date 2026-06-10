@@ -134,6 +134,12 @@ export function BtocExportTab() {
   const [exportingTopClients, setExportingTopClients] = useState(false);
   const [exportingBestSellers, setExportingBestSellers] = useState(false);
 
+  // Top Clients / Best Sellers date filters (live + historique)
+  const [tcDateFrom, setTcDateFrom] = useState("");
+  const [tcDateTo, setTcDateTo] = useState("");
+  const [bsDateFrom, setBsDateFrom] = useState("");
+  const [bsDateTo, setBsDateTo] = useState("");
+
   // Product filters
   const [prodSearch, setProdSearch] = useState("");
   const [prodCategory, setProdCategory] = useState("");
@@ -354,7 +360,10 @@ export function BtocExportTab() {
   const handleExportTopClients = async () => {
     setExportingTopClients(true);
     try {
-      const res = await fetch("/api/btoc/export/top-clients");
+      const params = new URLSearchParams();
+      if (tcDateFrom) params.set("dateFrom", tcDateFrom);
+      if (tcDateTo) params.set("dateTo", tcDateTo);
+      const res = await fetch(`/api/btoc/export/top-clients?${params}`);
       const data = await res.json();
       const customers: {
         email: string;
@@ -394,7 +403,11 @@ export function BtocExportTab() {
   const handleExportBestSellers = async () => {
     setExportingBestSellers(true);
     try {
-      const res = await fetch("/api/btoc/export/best-sellers?limit=10");
+      const params = new URLSearchParams();
+      params.set("limit", "10");
+      if (bsDateFrom) params.set("dateFrom", bsDateFrom);
+      if (bsDateTo) params.set("dateTo", bsDateTo);
+      const res = await fetch(`/api/btoc/export/best-sellers?${params}`);
       const data = await res.json();
       const products: {
         reference: string;
@@ -742,16 +755,35 @@ export function BtocExportTab() {
             <div>
               <CardTitle className="text-base">Export Top Clients</CardTitle>
               <p className="text-sm text-muted-foreground">
-                Clients avec plus de 2 commandes ou un panier moyen supérieur à 150 €
+                Plus de 2 commandes ou panier moyen &gt; 150 € (live + historique) — Email, Téléphone, Nom, Prénom, Code Postal, Ville
               </p>
             </div>
           </div>
         </CardHeader>
         <CardContent>
           <div className="flex flex-wrap items-end gap-3">
-            <p className="text-sm text-muted-foreground">
-              Colonnes : Email, Téléphone, Nom, Prénom, Code Postal, Ville.
-            </p>
+            <div className="space-y-1">
+              <label className="block text-xs font-medium text-muted-foreground">
+                Date début
+              </label>
+              <Input
+                type="date"
+                value={tcDateFrom}
+                onChange={(e) => setTcDateFrom(e.target.value)}
+                className="w-40 h-9"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="block text-xs font-medium text-muted-foreground">
+                Date fin
+              </label>
+              <Input
+                type="date"
+                value={tcDateTo}
+                onChange={(e) => setTcDateTo(e.target.value)}
+                className="w-40 h-9"
+              />
+            </div>
             <Button
               onClick={handleExportTopClients}
               disabled={exportingTopClients}
@@ -778,16 +810,35 @@ export function BtocExportTab() {
             <div>
               <CardTitle className="text-base">Export Best Sellers</CardTitle>
               <p className="text-sm text-muted-foreground">
-                Les 10 références qui se vendent le mieux (quantité et CA)
+                Top 10 des références les plus vendues (quantité et CA) — live + historique
               </p>
             </div>
           </div>
         </CardHeader>
         <CardContent>
           <div className="flex flex-wrap items-end gap-3">
-            <p className="text-sm text-muted-foreground">
-              Colonnes : Rang, Référence, Nom produit, Quantité vendue, CA.
-            </p>
+            <div className="space-y-1">
+              <label className="block text-xs font-medium text-muted-foreground">
+                Date début
+              </label>
+              <Input
+                type="date"
+                value={bsDateFrom}
+                onChange={(e) => setBsDateFrom(e.target.value)}
+                className="w-40 h-9"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="block text-xs font-medium text-muted-foreground">
+                Date fin
+              </label>
+              <Input
+                type="date"
+                value={bsDateTo}
+                onChange={(e) => setBsDateTo(e.target.value)}
+                className="w-40 h-9"
+              />
+            </div>
             <Button
               onClick={handleExportBestSellers}
               disabled={exportingBestSellers}
