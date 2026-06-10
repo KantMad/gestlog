@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
+import { canAccessScreen } from "@/lib/screens";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Tableau de bord", icon: LayoutDashboard },
@@ -46,7 +47,9 @@ export function Sidebar() {
   const { user, logout } = useAuth();
 
   const allItems = [
-    ...NAV_ITEMS,
+    ...NAV_ITEMS.filter((item) =>
+      canAccessScreen(user?.role, user?.screenAccess, item.href)
+    ),
     ...(user?.role === "ADMIN" ? ADMIN_NAV_ITEMS : []),
   ];
 

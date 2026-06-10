@@ -7,6 +7,7 @@ interface AuthUser {
   id: string;
   name: string;
   role: string;
+  screenAccess: string[] | null;
 }
 
 interface AuthContextType {

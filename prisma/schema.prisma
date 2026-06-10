@@ -408,13 +408,14 @@ model Setting {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  name      String
-  code      String   @unique
-  role      String   @default("USER") // ADMIN or USER
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String   @id @default(cuid())
+  name         String
+  code         String   @unique
+  role         String   @default("USER") // ADMIN or USER
+  isActive     Boolean  @default(true)
+  screenAccess String?  // JSON array of allowed screen keys; null = all screens
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 // ─── BtoC (WooCommerce) — Données séparées du BtoB ──────────

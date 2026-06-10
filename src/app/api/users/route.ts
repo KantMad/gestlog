@@ -1,6 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
+import { parseScreenAccess, APP_SCREEN_KEYS } from "@/lib/screens";
+
+// Validate + normalize a screenAccess payload into a JSON string (or null).
+function normalizeScreenAccess(value: unknown): string | null {
+  if (value == null) return null;
+  if (!Array.isArray(value)) return null;
+  const valid = value.filter(
+    (v): v is string => typeof v === "string" && APP_SCREEN_KEYS.includes(v)
+  );
+  return JSON.stringify(valid);
+}
 
 export async function GET() {
   const session = await getSession();
@@ -16,11 +27,17 @@ export async function GET() {
       code: true,
       role: true,
       isActive: true,
+      screenAccess: true,
       createdAt: true,
     },
   });
 
-  return NextResponse.json({ data: users });
+  return NextResponse.json({
+    data: users.map((u) => ({
+      ...u,
+      screenAccess: parseScreenAccess(u.screenAccess),
+    })),
+  });
 }
 
 export async function POST(request: NextRequest) {
@@ -30,7 +47,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const { name, code, role } = await request.json();
+    const { name, code, role, screenAccess } = await request.json();
 
     if (!name || !code) {
       return NextResponse.json(
@@ -59,6 +76,9 @@ export async function POST(request: NextRequest) {
         name,
         code,
         role: role === "ADMIN" ? "ADMIN" : "USER",
+        // Admins always have full access — don't persist a restriction for them
+        screenAccess:
+          role === "ADMIN" ? null : normalizeScreenAccess(screenAccess),
       },
     });
 

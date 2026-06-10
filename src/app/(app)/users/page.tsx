@@ -33,9 +33,12 @@ import {
   Trash2,
   UserX,
   UserCheck,
+  Pencil,
+  Check,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { APP_SCREENS } from "@/lib/screens";
 
 interface UserData {
   id: string;
@@ -43,7 +46,68 @@ interface UserData {
   code: string;
   role: string;
   isActive: boolean;
+  screenAccess: string[] | null;
   createdAt: string;
+}
+
+// Toggle-chip grid for selecting which screens a user may access
+function ScreenSelector({
+  selected,
+  onChange,
+}: {
+  selected: string[];
+  onChange: (next: string[]) => void;
+}) {
+  const allKeys = APP_SCREENS.map((s) => s.key);
+  const allSelected = allKeys.every((k) => selected.includes(k));
+  const toggle = (key: string) =>
+    onChange(
+      selected.includes(key)
+        ? selected.filter((k) => k !== key)
+        : [...selected, key]
+    );
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <Label>Écrans accessibles</Label>
+        <button
+          type="button"
+          onClick={() => onChange(allSelected ? [] : allKeys)}
+          className="text-xs text-primary hover:underline"
+        >
+          {allSelected ? "Tout désélectionner" : "Tout sélectionner"}
+        </button>
+      </div>
+      <div className="grid grid-cols-2 gap-1.5">
+        {APP_SCREENS.map((s) => {
+          const isOn = selected.includes(s.key);
+          return (
+            <button
+              key={s.key}
+              type="button"
+              onClick={() => toggle(s.key)}
+              className={cn(
+                "flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-sm transition-colors text-left",
+                isOn
+                  ? "border-primary/40 bg-primary/10 text-foreground"
+                  : "border-border text-muted-foreground hover:bg-accent"
+              )}
+            >
+              <span
+                className={cn(
+                  "flex h-4 w-4 shrink-0 items-center justify-center rounded border",
+                  isOn ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/40"
+                )}
+              >
+                {isOn && <Check className="h-3 w-3" />}
+              </span>
+              <span className="truncate">{s.label}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 export default function UsersPage() {
@@ -52,10 +116,19 @@ export default function UsersPage() {
   const [users, setUsers] = useState<UserData[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const allKeys = APP_SCREENS.map((s) => s.key);
   const [newName, setNewName] = useState("");
   const [newCode, setNewCode] = useState("");
   const [newRole, setNewRole] = useState("USER");
+  const [newScreens, setNewScreens] = useState<string[]>(allKeys);
   const [creating, setCreating] = useState(false);
+
+  // Edit dialog state
+  const [editUser, setEditUser] = useState<UserData | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editRole, setEditRole] = useState("USER");
+  const [editScreens, setEditScreens] = useState<string[]>(allKeys);
+  const [savingEdit, setSavingEdit] = useState(false);
 
   useEffect(() => {
     if (currentUser && currentUser.role !== "ADMIN") {
@@ -89,7 +162,12 @@ export default function UsersPage() {
       const res = await fetch("/api/users", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newName, code: newCode, role: newRole }),
+        body: JSON.stringify({
+          name: newName,
+          code: newCode,
+          role: newRole,
+          screenAccess: newRole === "ADMIN" ? null : newScreens,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Erreur");
@@ -98,6 +176,7 @@ export default function UsersPage() {
       setNewName("");
       setNewCode("");
       setNewRole("USER");
+      setNewScreens(allKeys);
       loadUsers();
     } catch (e) {
       toast.error(String(e));
@@ -131,6 +210,43 @@ export default function UsersPage() {
       loadUsers();
     } catch (e) {
       toast.error(String(e));
+    }
+  };
+
+  const openEdit = (u: UserData) => {
+    setEditUser(u);
+    setEditName(u.name);
+    setEditRole(u.role);
+    // null screenAccess (= all) → preselect everything
+    setEditScreens(u.screenAccess ?? allKeys);
+  };
+
+  const saveEdit = async () => {
+    if (!editUser) return;
+    if (!editName.trim()) {
+      toast.error("Nom requis");
+      return;
+    }
+    setSavingEdit(true);
+    try {
+      const res = await fetch(`/api/users/${editUser.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: editName,
+          role: editRole,
+          screenAccess: editRole === "ADMIN" ? null : editScreens,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erreur");
+      toast.success("Utilisateur mis à jour");
+      setEditUser(null);
+      loadUsers();
+    } catch (e) {
+      toast.error(String(e));
+    } finally {
+      setSavingEdit(false);
     }
   };
 
@@ -198,6 +314,16 @@ export default function UsersPage() {
                       </Button>
                     </div>
                   </div>
+                  {newRole === "ADMIN" ? (
+                    <p className="text-xs text-muted-foreground">
+                      Les administrateurs ont accès à tous les écrans.
+                    </p>
+                  ) : (
+                    <ScreenSelector
+                      selected={newScreens}
+                      onChange={setNewScreens}
+                    />
+                  )}
                   <Button
                     onClick={createUser}
                     disabled={creating}
@@ -289,6 +415,15 @@ export default function UsersPage() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 w-8 p-0"
+                          onClick={() => openEdit(u)}
+                          title="Modifier les accès"
+                        >
+                          <Pencil className="h-4 w-4 text-zinc-600" />
+                        </Button>
                         {u.id !== currentUser?.id && (
                           <>
                             <Button
@@ -331,6 +466,69 @@ export default function UsersPage() {
           </Card>
         )}
       </div>
+
+      {/* ─── Dialogue d'édition (rôle + accès écrans) ─── */}
+      <Dialog open={!!editUser} onOpenChange={(o) => !o && setEditUser(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              Modifier {editUser?.name}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="space-y-2">
+              <Label htmlFor="edit-name">Nom</Label>
+              <Input
+                id="edit-name"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Rôle</Label>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant={editRole === "USER" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setEditRole("USER")}
+                  className="gap-2 flex-1"
+                >
+                  <User className="h-4 w-4" />
+                  Utilisateur
+                </Button>
+                <Button
+                  type="button"
+                  variant={editRole === "ADMIN" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setEditRole("ADMIN")}
+                  className="gap-2 flex-1"
+                >
+                  <Shield className="h-4 w-4" />
+                  Administrateur
+                </Button>
+              </div>
+            </div>
+            {editRole === "ADMIN" ? (
+              <p className="text-xs text-muted-foreground">
+                Les administrateurs ont accès à tous les écrans.
+              </p>
+            ) : (
+              <ScreenSelector
+                selected={editScreens}
+                onChange={setEditScreens}
+              />
+            )}
+            <Button
+              onClick={saveEdit}
+              disabled={savingEdit}
+              className="w-full"
+            >
+              {savingEdit ? "Enregistrement..." : "Enregistrer"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -1,6 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
+import { APP_SCREEN_KEYS } from "@/lib/screens";
+
+function normalizeScreenAccess(value: unknown): string | null {
+  if (value == null) return null;
+  if (!Array.isArray(value)) return null;
+  const valid = value.filter(
+    (v): v is string => typeof v === "string" && APP_SCREEN_KEYS.includes(v)
+  );
+  return JSON.stringify(valid);
+}
 
 export async function PATCH(
   request: NextRequest,
@@ -20,6 +30,11 @@ export async function PATCH(
     if (body.name !== undefined) data.name = body.name;
     if (body.role !== undefined) data.role = body.role === "ADMIN" ? "ADMIN" : "USER";
     if (body.isActive !== undefined) data.isActive = body.isActive;
+    if (body.screenAccess !== undefined) {
+      data.screenAccess = normalizeScreenAccess(body.screenAccess);
+    }
+    // If promoting to ADMIN, clear any screen restriction (admins see all)
+    if (body.role === "ADMIN") data.screenAccess = null;
     if (body.code !== undefined) {
       if (body.code.length < 4) {
         return NextResponse.json(
