@@ -38,6 +38,8 @@ type Row = Record<string, unknown>;
 
 async function importFile(fileName: string, b64: string) {
   const docType = /^FAC/i.test(fileName) ? "FAC" : "BL";
+  // n° de commande TIO encodé dans le nom : BL_IS-041940245113_137391.xlsx
+  const tioOrderNumber = (fileName.match(/IS-\d+/) || [])[0] || null;
   const buf = Buffer.from(b64, "base64");
   const wb = XLSX.read(buf, { type: "buffer" });
   const rows = XLSX.utils.sheet_to_json<Row>(wb.Sheets[wb.SheetNames[0]], {
@@ -62,20 +64,21 @@ async function importFile(fileName: string, b64: string) {
   // Upsert document (SQL brut + ON CONFLICT — cf. gotcha adapter-pg) avec RETURNING id.
   const upserted = await prisma.$queryRawUnsafe<{ id: string }[]>(
     `INSERT INTO "WarehouseDocument"
-       (id, source, "docType", "documentNumber", season, "clientCode", "clientName",
+       (id, source, "docType", "documentNumber", "tioOrderNumber", season, "clientCode", "clientName",
         "brandLabel", "documentDate", "secondaryDate", "documentTotal", "fileName",
         "totalQuantity", "importedAt", "updatedAt")
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NOW(),NOW())
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,NOW(),NOW())
      ON CONFLICT (source, "docType", "documentNumber")
      DO UPDATE SET
-       season = $5, "clientCode" = $6, "clientName" = $7, "brandLabel" = $8,
-       "documentDate" = $9, "secondaryDate" = $10, "documentTotal" = $11,
-       "fileName" = $12, "totalQuantity" = $13, "updatedAt" = NOW()
+       "tioOrderNumber" = $5, season = $6, "clientCode" = $7, "clientName" = $8, "brandLabel" = $9,
+       "documentDate" = $10, "secondaryDate" = $11, "documentTotal" = $12,
+       "fileName" = $13, "totalQuantity" = $14, "updatedAt" = NOW()
      RETURNING id`,
     genId("whd"),
     SOURCE,
     docType,
     documentNumber,
+    tioOrderNumber,
     str(h["Saison Document"]),
     str(h["Code Client"]),
     str(h["Raison sociale Client"]),

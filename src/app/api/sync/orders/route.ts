@@ -49,11 +49,16 @@ export async function POST(request: NextRequest) {
         const effectiveClientCode = clientCode || `UNKNOWN_${orderNumber}`;
         const effectiveClientName = clientName || effectiveClientCode;
 
-        // Parse season from catalog label (W26 → AH 2026, S26 → PE 2026, H26 → AH 2026)
-        const parsed = parseSeasonFromCatalog(seasonName);
-        const seasonType = parsed?.type || "AH";
-        const seasonYear = parsed?.year || new Date().getFullYear();
-        const canonicalName = parsed?.canonicalName || `AH${String(seasonYear).slice(-2)}`;
+        // Les catalogues réassort (Réassort, Réassort hiver, Réassort femme) sont
+        // regroupés dans UNE saison dédiée "Réassort" (sentinelle year=0/type=REASSORT),
+        // indépendamment de l'année. Sinon, parse normal (W26 → AH 2026, S26 → PE 2026).
+        const isReassort = /r[ée]assort/i.test(String(seasonName));
+        const parsed = isReassort ? null : parseSeasonFromCatalog(seasonName);
+        const seasonType = isReassort ? "REASSORT" : parsed?.type || "AH";
+        const seasonYear = isReassort ? 0 : parsed?.year || new Date().getFullYear();
+        const canonicalName = isReassort
+          ? "Réassort"
+          : parsed?.canonicalName || `AH${String(seasonYear).slice(-2)}`;
         const seasonKey = `${seasonYear}_${seasonType}`;
 
         // Find or auto-create season (cached)
@@ -144,6 +149,7 @@ export async function POST(request: NextRequest) {
             deliveryWindow,
             orderType: orderType === "VSS" ? "VSS" : "COMMANDE",
             catalogId: catalog?.id || undefined,
+            tioOrderNumber: String(orderNumber),
           },
           create: {
             orderNumber: String(orderNumber),
@@ -153,6 +159,7 @@ export async function POST(request: NextRequest) {
             status: mappedStatus,
             deliveryWindow,
             orderType: orderType === "VSS" ? "VSS" : "COMMANDE",
+            tioOrderNumber: String(orderNumber),
           },
         });
 

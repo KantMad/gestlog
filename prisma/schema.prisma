@@ -591,6 +591,7 @@ model WarehouseDocument {
   source         String   @default("warehouse_ftp")
   docType        String   // "BL" (bon de livraison) ou "FAC" (facture)
   documentNumber String   // "N° Document" (ex: 137391)
+  tioOrderNumber String?  // n° commande TIO extrait du nom de fichier (IS-xxx) — lien vers ClientOrder.orderNumber
   season         String?  // "Saison Document" (ex: W25)
   clientCode     String?  // "Code Client" → Client.code
   clientName     String?  // "Raison sociale Client"
@@ -609,6 +610,7 @@ model WarehouseDocument {
   @@index([clientCode])
   @@index([docType])
   @@index([documentDate])
+  @@index([tioOrderNumber])
 }
 
 model WarehouseDocumentLine {
