@@ -12,10 +12,12 @@ import {
   SelectTrigger,
 } from "@/components/ui/select";
 import {
+  Crown,
   Download,
   Loader2,
   Package,
   ShoppingCart,
+  TrendingUp,
   Users,
 } from "lucide-react";
 import { formatNumber } from "@/lib/utils";
@@ -129,6 +131,8 @@ export function BtocExportTab() {
   const [exportingProducts, setExportingProducts] = useState(false);
   const [exportingOrders, setExportingOrders] = useState(false);
   const [exportingCustomers, setExportingCustomers] = useState(false);
+  const [exportingTopClients, setExportingTopClients] = useState(false);
+  const [exportingBestSellers, setExportingBestSellers] = useState(false);
 
   // Product filters
   const [prodSearch, setProdSearch] = useState("");
@@ -342,6 +346,82 @@ export function BtocExportTab() {
       console.error("Erreur export clients:", e);
     } finally {
       setExportingCustomers(false);
+    }
+  };
+
+  // ─── Export Top Clients ───────────────────────────
+  // Clients avec > 2 commandes OU panier moyen > 150 €.
+  const handleExportTopClients = async () => {
+    setExportingTopClients(true);
+    try {
+      const res = await fetch("/api/btoc/export/top-clients");
+      const data = await res.json();
+      const customers: {
+        email: string;
+        phone: string | null;
+        lastName: string;
+        firstName: string;
+        billingPostcode: string | null;
+        billingCity: string | null;
+      }[] = data.customers || [];
+
+      const rows = customers.map((c) => ({
+        Email: c.email,
+        Téléphone: c.phone || "",
+        Nom: c.lastName,
+        Prénom: c.firstName,
+        "Code Postal": c.billingPostcode || "",
+        Ville: c.billingCity || "",
+      }));
+
+      downloadXLSX(rows, "Top Clients", `top-clients-btoc-${today()}.xlsx`, [
+        "Email",
+        "Téléphone",
+        "Nom",
+        "Prénom",
+        "Code Postal",
+        "Ville",
+      ]);
+    } catch (e) {
+      console.error("Erreur export top clients:", e);
+    } finally {
+      setExportingTopClients(false);
+    }
+  };
+
+  // ─── Export Best Sellers ──────────────────────────
+  // Les 10 références qui se vendent le mieux (quantité + CA).
+  const handleExportBestSellers = async () => {
+    setExportingBestSellers(true);
+    try {
+      const res = await fetch("/api/btoc/export/best-sellers?limit=10");
+      const data = await res.json();
+      const products: {
+        reference: string;
+        productName: string;
+        quantity: number;
+        revenue: number;
+      }[] = data.products || [];
+
+      const rows = products.map((p, i) => ({
+        Rang: i + 1,
+        Référence: p.reference,
+        "Nom produit": p.productName,
+        "Quantité vendue": p.quantity,
+        "CA (€)": p.revenue,
+      }));
+
+      downloadXLSX(rows, "Best Sellers", `best-sellers-btoc-${today()}.xlsx`, [
+        "Rang",
+        "Référence",
+        "Nom produit",
+        "Quantité vendue",
+        "CA (€)",
+      ]);
+    } catch (e) {
+      console.error("Erreur export best sellers:", e);
+    } finally {
+      setExportingBestSellers(false);
     }
   };
 
@@ -649,6 +729,78 @@ export function BtocExportTab() {
               {custCity && <Badge variant="secondary">Ville : {custCity}</Badge>}
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* ─── Export Top Clients ───────────────────────── */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-50">
+              <Crown className="h-5 w-5 text-amber-600" />
+            </div>
+            <div>
+              <CardTitle className="text-base">Export Top Clients</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Clients avec plus de 2 commandes ou un panier moyen supérieur à 150 €
+              </p>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap items-end gap-3">
+            <p className="text-sm text-muted-foreground">
+              Colonnes : Email, Téléphone, Nom, Prénom, Code Postal, Ville.
+            </p>
+            <Button
+              onClick={handleExportTopClients}
+              disabled={exportingTopClients}
+              className="gap-2 h-9 ml-auto"
+            >
+              {exportingTopClients ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="h-4 w-4" />
+              )}
+              Exporter Top Clients
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ─── Export Best Sellers ──────────────────────── */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-rose-50">
+              <TrendingUp className="h-5 w-5 text-rose-600" />
+            </div>
+            <div>
+              <CardTitle className="text-base">Export Best Sellers</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Les 10 références qui se vendent le mieux (quantité et CA)
+              </p>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap items-end gap-3">
+            <p className="text-sm text-muted-foreground">
+              Colonnes : Rang, Référence, Nom produit, Quantité vendue, CA.
+            </p>
+            <Button
+              onClick={handleExportBestSellers}
+              disabled={exportingBestSellers}
+              className="gap-2 h-9 ml-auto"
+            >
+              {exportingBestSellers ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="h-4 w-4" />
+              )}
+              Exporter Best Sellers
+            </Button>
+          </div>
         </CardContent>
       </Card>
     </div>

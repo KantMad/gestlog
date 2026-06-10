@@ -428,6 +428,7 @@ model BtocCustomer {
   lastName      String
   company       String?
   phone         String?
+  billingPostcode String?
   billingCity   String?
   billingCountry String?
   shippingCity  String?
