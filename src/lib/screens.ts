@@ -10,6 +10,7 @@ export const APP_SCREENS: { key: string; label: string }[] = [
   { key: "/deliveries", label: "Livraisons" },
   { key: "/recap", label: "Récap clients" },
   { key: "/depot", label: "Vue dépôt" },
+  { key: "/shipments", label: "BL / Factures" },
   { key: "/configuration", label: "Configuration" },
   { key: "/statistics", label: "Statistiques" },
   { key: "/btoc", label: "BtoC" },

@@ -18,6 +18,7 @@ import {
   Tag,
   ClipboardList,
   Warehouse,
+  Receipt,
   ShoppingBag,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -33,6 +34,7 @@ const NAV_ITEMS = [
   { href: "/deliveries", label: "Livraisons", icon: Truck },
   { href: "/recap", label: "Récap clients", icon: ClipboardList },
   { href: "/depot", label: "Vue dépôt", icon: Warehouse },
+  { href: "/shipments", label: "BL / Factures", icon: Receipt },
   { href: "/configuration", label: "Configuration", icon: Settings },
   { href: "/statistics", label: "Statistiques", icon: BarChart3 },
   { href: "/btoc", label: "BtoC", icon: ShoppingBag },
