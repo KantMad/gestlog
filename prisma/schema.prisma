@@ -609,7 +609,9 @@ model WarehouseDocument {
   documentDate   DateTime? // BL: Date livraison — FAC: Date facture
   secondaryDate  DateTime? // BL: Date préparation — FAC: Date valeur
   documentTotal  Float?   // "Prix du Document"
-  fileName       String
+  fileName       String   // nom du xlsx source (/in/EAN) — "" si document connu uniquement par son PDF
+  pdfFileName    String?  // nom du PDF correspondant dans /in/PDF (consultable)
+  hasLines       Boolean  @default(true) // false = document de référence (PDF seul, sans lignes détaillées)
   totalQuantity  Int      @default(0)
   importedAt     DateTime @default(now())
   updatedAt      DateTime @updatedAt
