@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { handleApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 
 // GET — Liste des n° de commande TIO (IS-xxx) référencés par les BL/FAC
@@ -21,6 +22,6 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ codes: rows.map((r) => r.code), count: rows.length });
   } catch (e) {
-    return NextResponse.json({ error: `Erreur: ${String(e)}` }, { status: 500 });
+    return handleApiError(e, "api/sync/bl-order-numbers");
   }
 }

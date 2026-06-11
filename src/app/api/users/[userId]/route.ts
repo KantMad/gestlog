@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { handleApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { APP_SCREEN_KEYS } from "@/lib/screens";
@@ -63,10 +64,7 @@ export async function PATCH(
       data: { id: user.id, name: user.name, role: user.role, isActive: user.isActive },
     });
   } catch (e) {
-    return NextResponse.json(
-      { error: `Erreur: ${String(e)}` },
-      { status: 500 }
-    );
+    return handleApiError(e, "api/users/[userId]");
   }
 }
 
@@ -92,9 +90,6 @@ export async function DELETE(
     await prisma.user.delete({ where: { id: userId } });
     return NextResponse.json({ success: true });
   } catch (e) {
-    return NextResponse.json(
-      { error: `Erreur: ${String(e)}` },
-      { status: 500 }
-    );
+    return handleApiError(e, "api/users/[userId]");
   }
 }

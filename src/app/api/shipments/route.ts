@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { handleApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 
 // GET — Liste des livraisons (BL / FAC importés) avec filtres + résumé.
@@ -125,6 +126,6 @@ export async function GET(request: NextRequest) {
       seasons: seasons.map((s) => s.name),
     });
   } catch (e) {
-    return NextResponse.json({ error: `Erreur: ${String(e)}` }, { status: 500 });
+    return handleApiError(e, "api/shipments");
   }
 }

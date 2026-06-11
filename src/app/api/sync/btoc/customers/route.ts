@@ -1,22 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
+import { handleApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
-import {
-  isBrevoConfigured,
-  markCustomerAsVip,
-  type VipCustomer,
-} from "@/lib/brevo";
 
 export const maxDuration = 60;
 
-// Seuil (en €) à partir duquel un client devient VIP. Configurable via .env.
-const VIP_THRESHOLD = Number(process.env.BREVO_VIP_THRESHOLD) || 500;
+// NOTE VIP : l'API WooCommerce REST "Get Customers" renvoie total_spent=0 et
+// orders_count=0 (Woo ne calcule pas ces agrégats à la volée). On NE met donc
+// PAS à jour totalSpent/ordersCount ici — ce serait écraser les vrais montants
+// par des 0. La détection VIP et le recalcul des agrégats vivent dans
+// /api/sync/btoc/vip-recompute, qui agrège depuis BtocOrder.
 
 function genId() {
   return `btcc_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
 // POST — Receive WooCommerce customers from n8n (batched)
-// Expects: [{ id, email, first_name, last_name, company, phone, billing, shipping, total_spent, orders_count }]
+// Expects: [{ id, email, first_name, last_name, company, phone, billing, shipping }]
+// (total_spent / orders_count de Woo sont ignorés : ils valent toujours 0)
 export async function POST(request: NextRequest) {
   try {
     const authHeader = request.headers.get("x-api-key");
@@ -30,23 +30,6 @@ export async function POST(request: NextRequest) {
     const errors: string[] = [];
     let imported = 0;
 
-    // Lit le totalSpent ACTUEL (avant upsert) pour détecter qui franchit le
-    // seuil VIP pendant cette sync — un seul SELECT pour tout le batch.
-    const wooIds = customers
-      .map((c: { id: unknown }) => Number(c.id))
-      .filter((id: number) => Number.isFinite(id) && id > 0);
-    const previousSpentByWooId = new Map<number, number>();
-    if (wooIds.length > 0) {
-      const existing = await prisma.btocCustomer.findMany({
-        where: { wooId: { in: wooIds } },
-        select: { wooId: true, totalSpent: true },
-      });
-      for (const e of existing) {
-        previousSpentByWooId.set(e.wooId, e.totalSpent);
-      }
-    }
-    const newVips: VipCustomer[] = [];
-
     for (const c of customers) {
       try {
         const wooId = Number(c.id);
@@ -55,13 +38,14 @@ export async function POST(request: NextRequest) {
           continue;
         }
 
-        const newSpent = parseFloat(c.total_spent) || 0;
-
+        // totalSpent / ordersCount : 0 à l'insertion d'un nouveau client, et
+        // JAMAIS touchés lors d'un UPDATE — ils sont la propriété de
+        // /api/sync/btoc/vip-recompute (cf. note en tête de fichier).
         await prisma.$executeRawUnsafe(
           `INSERT INTO "BtocCustomer" (id, "wooId", email, "firstName", "lastName", company, phone,
             "billingPostcode", "billingCity", "billingCountry", "shippingCity", "shippingCountry",
             "totalSpent", "ordersCount", "createdAt", "updatedAt")
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW(), NOW())
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 0, 0, NOW(), NOW())
            ON CONFLICT ("wooId")
            DO UPDATE SET
              email = $3,
@@ -74,8 +58,6 @@ export async function POST(request: NextRequest) {
              "billingCountry" = COALESCE($10, "BtocCustomer"."billingCountry"),
              "shippingCity" = COALESCE($11, "BtocCustomer"."shippingCity"),
              "shippingCountry" = COALESCE($12, "BtocCustomer"."shippingCountry"),
-             "totalSpent" = $13,
-             "ordersCount" = $14,
              "updatedAt" = NOW()`,
           genId(),
           wooId,
@@ -88,39 +70,11 @@ export async function POST(request: NextRequest) {
           c.billing?.city || null,
           c.billing?.country || null,
           c.shipping?.city || null,
-          c.shipping?.country || null,
-          newSpent,
-          Number(c.orders_count) || 0
+          c.shipping?.country || null
         );
         imported++;
-
-        // Franchissement du seuil VIP : était en dessous (ou nouveau), passe au-dessus.
-        const previousSpent = previousSpentByWooId.get(wooId) ?? 0;
-        if (previousSpent < VIP_THRESHOLD && newSpent >= VIP_THRESHOLD) {
-          newVips.push({
-            email: String(c.email),
-            firstName: String(c.first_name || ""),
-            lastName: String(c.last_name || ""),
-            totalSpent: newSpent,
-            ordersCount: Number(c.orders_count) || 0,
-          });
-        }
       } catch (e) {
         errors.push(`Client WC#${c.id}: ${String(e)}`);
-      }
-    }
-
-    // Notifie Brevo pour les nouveaux VIP (déclenche le scénario "client_vip").
-    // Best-effort : un échec Brevo n'invalide jamais la sync.
-    let vipNotified = 0;
-    if (newVips.length > 0 && isBrevoConfigured()) {
-      for (const vip of newVips) {
-        try {
-          await markCustomerAsVip(vip);
-          vipNotified++;
-        } catch (e) {
-          errors.push(`Brevo VIP ${vip.email}: ${String(e)}`);
-        }
       }
     }
 
@@ -138,15 +92,11 @@ export async function POST(request: NextRequest) {
       success: true,
       data: {
         imported,
-        vipNotified,
         errors: errors.slice(0, 20),
         total: customers.length,
       },
     });
   } catch (e) {
-    return NextResponse.json(
-      { error: `Erreur sync BtoC customers: ${String(e)}` },
-      { status: 500 }
-    );
+    return handleApiError(e, "api/sync/btoc/customers");
   }
 }

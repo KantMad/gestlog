@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { handleApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { parseExcelBuffer } from "@/lib/import/parser";
 
@@ -54,10 +55,7 @@ export async function PATCH(request: NextRequest) {
 
     return NextResponse.json({ data: updated });
   } catch (e) {
-    return NextResponse.json(
-      { error: `Erreur mise à jour: ${String(e)}` },
-      { status: 500 }
-    );
+    return handleApiError(e, "api/product-info/size-types");
   }
 }
 
@@ -82,10 +80,7 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ success: true, deleted: sizeType.code });
   } catch (e) {
-    return NextResponse.json(
-      { error: `Erreur suppression: ${String(e)}` },
-      { status: 500 }
-    );
+    return handleApiError(e, "api/product-info/size-types");
   }
 }
 
@@ -100,10 +95,7 @@ export async function GET() {
     });
     return NextResponse.json({ data: sizeTypes });
   } catch (e) {
-    return NextResponse.json(
-      { error: `Erreur: ${String(e)}` },
-      { status: 500 }
-    );
+    return handleApiError(e, "api/product-info/size-types");
   }
 }
 
@@ -224,9 +216,6 @@ export async function POST(request: NextRequest) {
       data: { imported, errors },
     });
   } catch (e) {
-    return NextResponse.json(
-      { error: `Erreur d'import: ${String(e)}` },
-      { status: 500 }
-    );
+    return handleApiError(e, "api/product-info/size-types");
   }
 }

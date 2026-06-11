@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { handleApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 
 // ─── Types ──────────────────────────────────────────────
@@ -399,9 +400,6 @@ export async function GET(request: NextRequest) {
       availableSizes: availableSizes.map((s) => s.size),
     });
   } catch (e) {
-    return NextResponse.json(
-      { error: `Erreur: ${String(e)}` },
-      { status: 500 }
-    );
+    return handleApiError(e, "api/btoc/export/orders");
   }
 }

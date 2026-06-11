@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { handleApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 
 // Support multiple export types via ?type= query param
@@ -101,7 +102,7 @@ export async function GET(request: NextRequest) {
     const fields = await loadFields(typeParam as ExportType);
     return NextResponse.json({ fields });
   } catch (e) {
-    return NextResponse.json({ error: `Erreur: ${String(e)}` }, { status: 500 });
+    return handleApiError(e, "api/btoc/settings");
   }
 }
 
@@ -147,6 +148,6 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ fields });
   } catch (e) {
-    return NextResponse.json({ error: `Erreur: ${String(e)}` }, { status: 500 });
+    return handleApiError(e, "api/btoc/settings");
   }
 }

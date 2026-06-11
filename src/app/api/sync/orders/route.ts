@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { handleApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { parseSeasonFromCatalog } from "@/lib/utils";
 
@@ -233,9 +234,6 @@ export async function POST(request: NextRequest) {
       data: { imported, errors, total: orders.length },
     });
   } catch (e) {
-    return NextResponse.json(
-      { error: `Erreur sync: ${String(e)}` },
-      { status: 500 }
-    );
+    return handleApiError(e, "api/sync/orders");
   }
 }

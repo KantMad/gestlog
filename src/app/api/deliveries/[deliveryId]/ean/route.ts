@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { handleApiError } from "@/lib/api";
 import { generateEanExport } from "@/lib/delivery/ean-export";
 
 export async function POST(
@@ -18,9 +19,6 @@ export async function POST(
       },
     });
   } catch (e) {
-    return NextResponse.json(
-      { error: `Erreur export EAN: ${String(e)}` },
-      { status: 500 }
-    );
+    return handleApiError(e, "api/deliveries/[deliveryId]/ean");
   }
 }

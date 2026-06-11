@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { handleApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { parseExcelBuffer } from "@/lib/import/parser";
 import { importReception } from "@/lib/import/reception-mapper";
@@ -55,9 +56,6 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (e) {
-    return NextResponse.json(
-      { error: `Erreur d'import: ${String(e)}` },
-      { status: 500 }
-    );
+    return handleApiError(e, "api/import/receptions");
   }
 }

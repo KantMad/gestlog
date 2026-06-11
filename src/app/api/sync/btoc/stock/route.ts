@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { handleApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 
 export const maxDuration = 60;
@@ -56,9 +57,6 @@ export async function POST(request: NextRequest) {
       data: { updated, errors: errors.slice(0, 20), total: items.length },
     });
   } catch (e) {
-    return NextResponse.json(
-      { error: `Erreur sync BtoC stock: ${String(e)}` },
-      { status: 500 }
-    );
+    return handleApiError(e, "api/sync/btoc/stock");
   }
 }

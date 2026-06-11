@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { handleApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 
 // GET — List catalogs for a season
@@ -26,9 +27,6 @@ export async function GET(request: NextRequest) {
       })),
     });
   } catch (e) {
-    return NextResponse.json(
-      { error: `Erreur: ${String(e)}` },
-      { status: 500 }
-    );
+    return handleApiError(e, "api/catalogs");
   }
 }

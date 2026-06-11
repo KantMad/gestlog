@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { handleApiError } from "@/lib/api";
 import { generateDeliveries } from "@/lib/delivery/generator";
 
 export async function POST(request: NextRequest) {
@@ -21,9 +22,6 @@ export async function POST(request: NextRequest) {
       deliveryIds: result.deliveryIds,
     });
   } catch (e) {
-    return NextResponse.json(
-      { error: `Erreur génération: ${String(e)}` },
-      { status: 500 }
-    );
+    return handleApiError(e, "api/deliveries/generate");
   }
 }

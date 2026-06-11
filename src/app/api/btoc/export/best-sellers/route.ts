@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { handleApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 
 // ─── Best Sellers export ────────────────────────────────
@@ -80,6 +81,6 @@ export async function GET(request: NextRequest) {
       total: rows.length,
     });
   } catch (e) {
-    return NextResponse.json({ error: `Erreur: ${String(e)}` }, { status: 500 });
+    return handleApiError(e, "api/btoc/export/best-sellers");
   }
 }

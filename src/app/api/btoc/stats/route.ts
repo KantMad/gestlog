@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { handleApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(request: NextRequest) {
@@ -310,9 +311,6 @@ export async function GET(request: NextRequest) {
       availableParentProducts,
     });
   } catch (e) {
-    return NextResponse.json(
-      { error: `Erreur: ${String(e)}` },
-      { status: 500 }
-    );
+    return handleApiError(e, "api/btoc/stats");
   }
 }

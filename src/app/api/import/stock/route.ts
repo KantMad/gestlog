@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { handleApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { parseExcelBuffer, detectSizeColumns, extractSizeQuantities } from "@/lib/import/parser";
 import { stringifySizeQuantities, sumQuantities } from "@/lib/utils";
@@ -80,9 +81,6 @@ export async function POST(request: NextRequest) {
       data: { imported, errors, fileName: file.name },
     });
   } catch (e) {
-    return NextResponse.json(
-      { error: `Erreur d'import: ${String(e)}` },
-      { status: 500 }
-    );
+    return handleApiError(e, "api/import/stock");
   }
 }

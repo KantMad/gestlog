@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { handleApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { parseExcelBuffer } from "@/lib/import/parser";
 
@@ -11,10 +12,7 @@ export async function GET() {
     });
     return NextResponse.json({ data: refs });
   } catch (e) {
-    return NextResponse.json(
-      { error: `Erreur: ${String(e)}` },
-      { status: 500 }
-    );
+    return handleApiError(e, "api/product-info/supplier-refs");
   }
 }
 
@@ -100,9 +98,6 @@ export async function POST(request: NextRequest) {
       data: { imported, errors },
     });
   } catch (e) {
-    return NextResponse.json(
-      { error: `Erreur d'import: ${String(e)}` },
-      { status: 500 }
-    );
+    return handleApiError(e, "api/product-info/supplier-refs");
   }
 }

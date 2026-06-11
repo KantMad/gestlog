@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { handleApiError } from "@/lib/api";
 import { computeComparison } from "@/lib/comparison/engine";
 
 export async function GET(request: NextRequest) {
@@ -16,9 +17,6 @@ export async function GET(request: NextRequest) {
     );
     return NextResponse.json({ data });
   } catch (e) {
-    return NextResponse.json(
-      { error: `Erreur de comparaison: ${String(e)}` },
-      { status: 500 }
-    );
+    return handleApiError(e, "api/comparison");
   }
 }
