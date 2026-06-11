@@ -47,8 +47,8 @@ export async function POST(request: NextRequest) {
           : "";
         const extId = prod.externalId ? String(prod.externalId) : null;
 
-        // Raw SQL upsert — bypasses PrismaPg adapter bug
-        await prisma.$executeRawUnsafe(
+        // 1) Upsert Product (RETURNING id → évite un SELECT plus loin)
+        const prodUpsert = await prisma.$queryRawUnsafe<{ id: string }[]>(
           `INSERT INTO "Product" (id, reference, color, "colorCode", "sizeScale", "externalId", category, "subCategory", "createdAt", "updatedAt")
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
            ON CONFLICT (reference, color)
@@ -58,7 +58,8 @@ export async function POST(request: NextRequest) {
              "externalId" = COALESCE($6, "Product"."externalId"),
              category = COALESCE(NULLIF($7, ''), "Product".category),
              "subCategory" = COALESCE(NULLIF($8, ''), "Product"."subCategory"),
-             "updatedAt" = NOW()`,
+             "updatedAt" = NOW()
+           RETURNING id`,
           genId(),
           String(reference),
           colorStr,
@@ -68,106 +69,99 @@ export async function POST(request: NextRequest) {
           category || null,
           subCategory || null
         );
+        const pid = prodUpsert[0]?.id;
 
-        // Upsert EAN entries via raw SQL
-        if (Array.isArray(variations)) {
-          for (const v of variations) {
-            if (v.ean && v.size) {
-              try {
-                await prisma.$executeRawUnsafe(
-                  `INSERT INTO "ProductSizeEan" (id, reference, color, size, ean)
-                   VALUES ($1, $2, $3, $4, $5)
-                   ON CONFLICT (ean)
-                   DO UPDATE SET reference = $2, color = $3, size = $4`,
-                  genId(),
-                  String(reference),
-                  colorStr,
-                  String(v.size),
-                  String(v.ean)
-                );
-              } catch {
-                // Constraint error — skip
-              }
-            }
+        const vars: { size?: string; ean?: string; stock?: unknown }[] = Array.isArray(variations)
+          ? variations
+          : [];
+
+        // 2) EANs — un seul INSERT multi-row (dédoublonné par ean pour éviter
+        //    l'erreur "ON CONFLICT cannot affect row a second time").
+        const eanByEan = new Map<string, [string, string, string, string, string]>();
+        for (const v of vars) {
+          if (v.ean && v.size) {
+            eanByEan.set(String(v.ean), [
+              genId(),
+              String(reference),
+              colorStr,
+              String(v.size),
+              String(v.ean),
+            ]);
           }
         }
+        if (eanByEan.size > 0) {
+          const flat: unknown[] = [];
+          const tuples = [...eanByEan.values()].map((vals) => {
+            const ph = vals.map((x) => {
+              flat.push(x);
+              return `$${flat.length}`;
+            });
+            return `(${ph.join(",")})`;
+          });
+          await prisma.$executeRawUnsafe(
+            `INSERT INTO "ProductSizeEan" (id, reference, color, size, ean) VALUES ${tuples.join(",")}
+             ON CONFLICT (ean) DO UPDATE SET reference = EXCLUDED.reference, color = EXCLUDED.color, size = EXCLUDED.size`,
+            ...flat
+          );
+        }
 
-        // Save stock from variations (if stock data present)
-        if (Array.isArray(variations)) {
+        // 3) Stock — DELETE + INSERT (replace), via le pid retourné (plus de SELECT)
+        if (pid) {
           const stockBySize: Record<string, number> = {};
           let hasStock = false;
-          for (const v of variations) {
+          for (const v of vars) {
             if (v.size && v.stock !== undefined && v.stock !== null) {
-              const qty = Number(v.stock) || 0;
-              stockBySize[String(v.size)] = qty;
+              stockBySize[String(v.size)] = Number(v.stock) || 0;
               hasStock = true;
             }
           }
           if (hasStock) {
-            // Find productId
-            const prodRows = await prisma.$queryRawUnsafe<{ id: string }[]>(
-              `SELECT id FROM "Product" WHERE reference = $1 AND color = $2 LIMIT 1`,
-              String(reference),
-              colorStr
+            const totalStock = Object.values(stockBySize).reduce((s, v) => s + v, 0);
+            await prisma.$executeRawUnsafe(`DELETE FROM "StockEntry" WHERE "productId" = $1`, pid);
+            await prisma.$executeRawUnsafe(
+              `INSERT INTO "StockEntry" (id, "productId", "quantitiesBySize", "totalQuantity", "importDate", "createdAt")
+               VALUES ($1, $2, $3, $4, NOW(), NOW())`,
+              genId(),
+              pid,
+              JSON.stringify(stockBySize),
+              totalStock
             );
-            if (prodRows.length > 0) {
-              const pid = prodRows[0].id;
-              const totalStock = Object.values(stockBySize).reduce((s, v) => s + v, 0);
-              // Replace stock entry
-              await prisma.$executeRawUnsafe(
-                `DELETE FROM "StockEntry" WHERE "productId" = $1`,
-                pid
-              );
-              await prisma.$executeRawUnsafe(
-                `INSERT INTO "StockEntry" (id, "productId", "quantitiesBySize", "totalQuantity", "importDate", "createdAt")
-                 VALUES ($1, $2, $3, $4, NOW(), NOW())`,
-                genId(),
-                pid,
-                JSON.stringify(stockBySize),
-                totalStock
-              );
-            }
           }
         }
 
-        // Upsert size type + mappings via raw SQL
-        if (sizeTypeCode && Array.isArray(variations) && variations.length > 0) {
+        // 4) SizeType + mappings — upsert RETURNING id puis mappings en bulk
+        if (sizeTypeCode && vars.length > 0) {
           try {
-            const stId = genId();
-            await prisma.$executeRawUnsafe(
+            const stUpsert = await prisma.$queryRawUnsafe<{ id: string }[]>(
               `INSERT INTO "SizeType" (id, code, "createdAt", "updatedAt")
                VALUES ($1, $2, NOW(), NOW())
-               ON CONFLICT (code) DO NOTHING`,
-              stId,
+               ON CONFLICT (code) DO UPDATE SET "updatedAt" = NOW()
+               RETURNING id`,
+              genId(),
               String(sizeTypeCode)
             );
-
-            // Get the actual sizeType id
-            const stRows = await prisma.$queryRawUnsafe<{ id: string }[]>(
-              `SELECT id FROM "SizeType" WHERE code = $1`,
-              String(sizeTypeCode)
-            );
-
-            if (stRows.length > 0) {
-              const sizeTypeId = stRows[0].id;
-              for (let i = 0; i < variations.length; i++) {
-                const v = variations[i];
-                if (v.size) {
-                  try {
-                    await prisma.$executeRawUnsafe(
-                      `INSERT INTO "SizeTypeMapping" (id, "sizeTypeId", position, "sizeName")
-                       VALUES ($1, $2, $3, $4)
-                       ON CONFLICT ("sizeTypeId", position)
-                       DO UPDATE SET "sizeName" = $4`,
-                      genId(),
-                      sizeTypeId,
-                      i + 1,
-                      String(v.size)
-                    );
-                  } catch {
-                    // Duplicate sizeName — skip
-                  }
+            const sizeTypeId = stUpsert[0]?.id;
+            if (sizeTypeId) {
+              const mapRows: [string, string, number, string][] = [];
+              for (let i = 0; i < vars.length; i++) {
+                if (vars[i].size) {
+                  mapRows.push([genId(), sizeTypeId, i + 1, String(vars[i].size)]);
                 }
+              }
+              if (mapRows.length > 0) {
+                const flat: unknown[] = [];
+                const tuples = mapRows.map((vals) => {
+                  const ph = vals.map((x) => {
+                    flat.push(x);
+                    return `$${flat.length}`;
+                  });
+                  return `(${ph.join(",")})`;
+                });
+                await prisma.$executeRawUnsafe(
+                  `INSERT INTO "SizeTypeMapping" (id, "sizeTypeId", position, "sizeName") VALUES ${tuples.join(",")}
+                   ON CONFLICT ("sizeTypeId", position) DO UPDATE SET "sizeName" = EXCLUDED."sizeName"`,
+                  ...flat
+                );
               }
             }
           } catch {
