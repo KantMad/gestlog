@@ -495,6 +495,7 @@ model BtocOrder {
   billingCountry  String?   // code pays ISO (FR, BE…) depuis WooCommerce billing.country
   shippingCity    String?
   total           Float
+  totalRefunded   Float    @default(0) // montant remboursé (partiel ou total) — déduit du CA
   subtotal        Float?
   totalTax        Float?
   shippingTotal   Float?
@@ -537,6 +538,26 @@ model BtocOrderLine {
 
   @@index([orderId])
   @@index([productId])
+}
+
+// Lignes de remboursement WooCommerce (depuis /orders/{id}/refunds).
+// Quantité + montant remboursés par article — pour déduire les remboursements
+// partiels des stats de quantité (tailles, best-sellers) et de CA par ligne.
+// Rattaché à la commande par son wooId.
+model BtocRefundLine {
+  id         String   @id @default(cuid())
+  orderWooId Int      // BtocOrder.wooId
+  refundId   Int      // id du remboursement WC
+  lineId     Int      // id de la ligne de remboursement
+  sku        String?  // sku de la variation (réf-couleur-taille)
+  name       String?
+  quantity   Int      @default(0) // quantité remboursée (positive)
+  total      Float    @default(0) // montant remboursé (positif)
+  createdAt  DateTime @default(now())
+
+  @@unique([refundId, lineId])
+  @@index([orderWooId])
+  @@index([sku])
 }
 
 model BtocSyncLog {

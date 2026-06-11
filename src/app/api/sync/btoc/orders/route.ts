@@ -61,12 +61,13 @@ export async function POST(request: NextRequest) {
             "customerEmail", "customerName", "billingCity", "shippingCity",
             total, subtotal, "totalTax", "shippingTotal", "discountTotal",
             "paymentMethod", "paymentTitle", currency, "itemCount",
-            "couponCodes", "customerNote", "orderDate", "completedAt", "billingCountry", "createdAt", "updatedAt")
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, NOW(), NOW())
+            "couponCodes", "customerNote", "orderDate", "completedAt", "billingCountry", "totalRefunded", "createdAt", "updatedAt")
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, NOW(), NOW())
            ON CONFLICT ("wooId")
            DO UPDATE SET
              status = $4,
              "billingCountry" = COALESCE($23, "BtocOrder"."billingCountry"),
+             "totalRefunded" = $24,
              "customerId" = COALESCE($5, "BtocOrder"."customerId"),
              "customerEmail" = COALESCE($6, "BtocOrder"."customerEmail"),
              "customerName" = COALESCE($7, "BtocOrder"."customerName"),
@@ -103,7 +104,13 @@ export async function POST(request: NextRequest) {
           o.customer_note || null,
           o.date_created ? new Date(o.date_created) : new Date(),
           o.date_completed ? new Date(o.date_completed) : null,
-          (o.billing?.country || "").toUpperCase() || null
+          (o.billing?.country || "").toUpperCase() || null,
+          Array.isArray(o.refunds)
+            ? o.refunds.reduce(
+                (s: number, r: { total?: string }) => s + Math.abs(parseFloat(r.total || "0") || 0),
+                0
+              )
+            : 0
         );
 
         // Upsert order lines (pré-chargement produits + bulk insert)
