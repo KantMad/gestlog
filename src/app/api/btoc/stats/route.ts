@@ -78,14 +78,15 @@ export async function GET(request: NextRequest) {
       // o.total) fusionne à tort deux commandes de même montant (CA sous-estimé).
       `SELECT
         COUNT(*) AS "totalOrders",
-        COALESCE(SUM(o.total), 0) AS "totalRevenue",
+        COALESCE(SUM(o.total - o."totalRefunded"), 0) AS "totalRevenue",
         COUNT(DISTINCT o."customerId") AS "totalCustomers",
         CASE WHEN COUNT(*) > 0
-          THEN ROUND((SUM(o.total) / COUNT(*))::numeric, 2)
+          THEN ROUND((SUM(o.total - o."totalRefunded") / COUNT(*))::numeric, 2)
           ELSE 0 END AS "avgOrderValue",
-        COALESCE(SUM(o."itemCount"), 0) AS "totalItems"
+        COALESCE(SUM(GREATEST(o."itemCount" - o."refQty", 0)), 0) AS "totalItems"
       FROM (
-        SELECT DISTINCT o.id, o.total, o."customerId", o."itemCount"
+        SELECT DISTINCT o.id, o.total, o."totalRefunded", o."customerId", o."itemCount",
+          (SELECT COALESCE(SUM(rl.quantity), 0) FROM "BtocRefundLine" rl WHERE rl."orderWooId" = o."wooId") AS "refQty"
         FROM "BtocOrder" o
         ${lineJoin}
         ${revenueWhere}
@@ -107,7 +108,7 @@ export async function GET(request: NextRequest) {
     >(
       `SELECT
         TO_CHAR(o."orderDate", 'YYYY-MM') AS month,
-        COALESCE(SUM(o.total), 0) AS revenue,
+        COALESCE(SUM(o.total - o."totalRefunded"), 0) AS revenue,
         COUNT(DISTINCT o.id) AS orders
       FROM "BtocOrder" o
       ${lineJoin}
@@ -155,22 +156,38 @@ export async function GET(request: NextRequest) {
         ? "WHERE " + topProductConditions.join(" AND ")
         : "";
 
+    // Branche remboursements (déduits) : mêmes filtres date/client + revenue,
+    // sans catégorie/produit (les lignes de remboursement ne joignent pas
+    // BtocProduct). Params séparés pour ne pas perturber les requêtes qui
+    // réutilisent topProductParams (ex. sizeDistribution).
+    const tpAllParams = [...topProductParams];
+    const tpRefundConds: string[] = [REVENUE_FILTER];
+    let tpr = topProductParams.length + 1;
+    if (dateFrom) { tpRefundConds.push(`o."orderDate" >= $${tpr++}`); tpAllParams.push(new Date(dateFrom)); }
+    if (dateTo) { tpRefundConds.push(`o."orderDate" <= $${tpr++}`); tpAllParams.push(new Date(dateTo)); }
+    if (customerId) { tpRefundConds.push(`o."customerId" = $${tpr++}`); tpAllParams.push(customerId); }
+    const tpRefundWhere = "WHERE " + tpRefundConds.join(" AND ");
+
     const topProducts = await prisma.$queryRawUnsafe<
       { name: string; sku: string | null; quantity: bigint; revenue: number }[]
     >(
-      `SELECT
-        ol.name,
-        ol.sku,
-        SUM(ol.quantity) AS quantity,
-        SUM(ol.total) AS revenue
-      FROM "BtocOrderLine" ol
-      JOIN "BtocOrder" o ON o.id = ol."orderId"
-      LEFT JOIN "BtocProduct" p ON p.sku = SPLIT_PART(ol.sku, '-', 1)
-      ${tpWhere}
-      GROUP BY ol.name, ol.sku
+      `SELECT name, sku, SUM(qty) AS quantity, SUM(revenue) AS revenue
+      FROM (
+        SELECT ol.name AS name, ol.sku AS sku, ol.quantity AS qty, ol.total AS revenue
+        FROM "BtocOrderLine" ol
+        JOIN "BtocOrder" o ON o.id = ol."orderId"
+        LEFT JOIN "BtocProduct" p ON p.sku = SPLIT_PART(ol.sku, '-', 1)
+        ${tpWhere}
+        UNION ALL
+        SELECT rl.name, rl.sku, -rl.quantity, -rl.total
+        FROM "BtocRefundLine" rl
+        JOIN "BtocOrder" o ON o."wooId" = rl."orderWooId"
+        ${tpRefundWhere}
+      ) t
+      GROUP BY name, sku
       ORDER BY revenue DESC
       LIMIT 15`,
-      ...topProductParams
+      ...tpAllParams
     );
 
     // ─── Top catégories (catégories BtoB via matching réf) + Top pays ─────────
@@ -209,6 +226,16 @@ export async function GET(request: NextRequest) {
          FROM "BtocOrderLine" ol
          JOIN "BtocOrder" o ON o.id = ol."orderId"
          ${geoWhere}
+         UNION ALL
+         -- Remboursements (quantité + CA négatifs)
+         SELECT -rl.quantity AS qty, -rl.total AS revenue,
+           COALESCE(
+             (SELECT pr.category FROM "Product" pr WHERE pr.reference = SPLIT_PART(rl.sku, '-', 1) AND pr.category IS NOT NULL AND pr.category != '' LIMIT 1),
+             (SELECT pr.category FROM "Product" pr WHERE SUBSTRING(pr.reference FROM 2) = SUBSTRING(SPLIT_PART(rl.sku, '-', 1) FROM 2) AND pr.category IS NOT NULL AND pr.category != '' LIMIT 1)
+           ) AS cat
+         FROM "BtocRefundLine" rl
+         JOIN "BtocOrder" o ON o."wooId" = rl."orderWooId"
+         ${geoWhere}
        ) t
        GROUP BY cat
        ORDER BY revenue DESC`,
@@ -220,7 +247,7 @@ export async function GET(request: NextRequest) {
       { country: string; orders: bigint; revenue: number }[]
     >(
       `SELECT COALESCE(NULLIF(o."billingCountry", ''), 'Inconnu') AS country,
-              COUNT(*) AS orders, SUM(o.total) AS revenue
+              COUNT(*) AS orders, SUM(o.total - o."totalRefunded") AS revenue
        FROM "BtocOrder" o
        ${geoWhere}
        GROUP BY COALESCE(NULLIF(o."billingCountry", ''), 'Inconnu')
@@ -251,9 +278,9 @@ export async function GET(request: NextRequest) {
       `SELECT
         COALESCE(o.city, 'Inconnu') AS city,
         COUNT(*) AS orders,
-        SUM(o.total) AS revenue
+        SUM(o.total - o."totalRefunded") AS revenue
       FROM (
-        SELECT DISTINCT o.id, o."billingCity" AS city, o.total
+        SELECT DISTINCT o.id, o."billingCity" AS city, o.total, o."totalRefunded"
         FROM "BtocOrder" o
         ${lineJoin}
         ${revenueWhere}
@@ -270,7 +297,7 @@ export async function GET(request: NextRequest) {
     >(
       `SELECT
         TO_CHAR(o."orderDate", 'YYYY-MM-DD') AS date,
-        COALESCE(SUM(o.total), 0) AS revenue,
+        COALESCE(SUM(o.total - o."totalRefunded"), 0) AS revenue,
         COUNT(DISTINCT o.id) AS orders
       FROM "BtocOrder" o
       ${lineJoin}

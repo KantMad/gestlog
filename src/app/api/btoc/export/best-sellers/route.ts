@@ -55,6 +55,19 @@ export async function GET(request: NextRequest) {
         JOIN "HistOrder" h ON h.id = hl."histOrderId"
         LEFT JOIN "BtocProduct" bp ON bp.sku = hl.reference
         WHERE hl.reference IS NOT NULL AND hl.reference != ''
+        UNION ALL
+        -- Remboursements (quantité + CA négatifs) — déduits des ventes live
+        SELECT
+          SPLIT_PART(rl.sku, '-', 1),
+          COALESCE(bp.name, rl.name),
+          -rl.quantity,
+          -rl.total,
+          o."orderDate"
+        FROM "BtocRefundLine" rl
+        JOIN "BtocOrder" o ON o."wooId" = rl."orderWooId"
+        LEFT JOIN "BtocProduct" bp ON bp.sku = SPLIT_PART(rl.sku, '-', 1)
+        WHERE o.status NOT IN ('cancelled', 'refunded', 'failed')
+          AND rl.sku IS NOT NULL AND rl.sku != ''
       )
       SELECT
         reference,

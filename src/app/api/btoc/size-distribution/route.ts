@@ -31,6 +31,7 @@ export async function GET(request: NextRequest) {
       { subCategory: string; size: string; qty: bigint }[]
     >(
       `WITH sales AS (
+        -- Ventes (quantité positive)
         SELECT
           SPLIT_PART(ol.sku, '-', 1) AS ref,
           COALESCE(NULLIF(UPPER(ol.size), ''), UPPER(SPLIT_PART(ol.sku, '-', 3))) AS size,
@@ -39,6 +40,18 @@ export async function GET(request: NextRequest) {
         JOIN "BtocOrder" o ON o.id = ol."orderId"
         WHERE o.status NOT IN ('cancelled', 'refunded', 'failed')
           AND ol.sku IS NOT NULL AND ol.sku != ''
+          AND ($1::timestamp IS NULL OR o."orderDate" >= $1)
+          AND ($2::timestamp IS NULL OR o."orderDate" <= $2)
+        UNION ALL
+        -- Remboursements (quantité négative) — déduits des ventes
+        SELECT
+          SPLIT_PART(rl.sku, '-', 1) AS ref,
+          UPPER(SPLIT_PART(rl.sku, '-', 3)) AS size,
+          -rl.quantity AS qty
+        FROM "BtocRefundLine" rl
+        JOIN "BtocOrder" o ON o."wooId" = rl."orderWooId"
+        WHERE o.status NOT IN ('cancelled', 'refunded', 'failed')
+          AND rl.sku IS NOT NULL AND rl.sku != ''
           AND ($1::timestamp IS NULL OR o."orderDate" >= $1)
           AND ($2::timestamp IS NULL OR o."orderDate" <= $2)
       ),
