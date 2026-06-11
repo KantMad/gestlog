@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, Fragment } from "react";
 import { toast } from "sonner";
+import { useSeason } from "@/lib/season-context";
 import { Topbar } from "@/components/layout/topbar";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent } from "@/components/ui/card";
@@ -71,10 +72,9 @@ export default function ReassortPage() {
   const [documents, setDocuments] = useState<Doc[]>([]);
   const [summary, setSummary] = useState({ orders: 0, ordered: 0, delivered: 0, livree: 0, partielle: 0, nonLivree: 0 });
   const [clients, setClients] = useState<{ code: string; name: string }[]>([]);
-  const [seasons, setSeasons] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [season, setSeason] = useState("Réassort");
+  const { activeSeason } = useSeason();
   const [clientCode, setClientCode] = useState("");
   const [status, setStatus] = useState("");
   const [search, setSearch] = useState("");
@@ -84,10 +84,11 @@ export default function ReassortPage() {
   const [loadingLines, setLoadingLines] = useState(false);
 
   const load = useCallback(async () => {
+    if (!activeSeason) return;
     setLoading(true);
     try {
       const p = new URLSearchParams();
-      if (season) p.set("season", season);
+      p.set("season", activeSeason.name);
       if (clientCode) p.set("clientCode", clientCode);
       if (status) p.set("status", status);
       if (search) p.set("search", search);
@@ -97,13 +98,12 @@ export default function ReassortPage() {
       setDocuments(d.documents || []);
       setSummary(d.summary || { orders: 0, ordered: 0, delivered: 0, livree: 0, partielle: 0, nonLivree: 0 });
       setClients(d.clients || []);
-      setSeasons(d.seasons || []);
     } catch {
       toast.error("Impossible de charger les commandes");
     } finally {
       setLoading(false);
     }
-  }, [season, clientCode, status, search]);
+  }, [activeSeason, clientCode, status, search]);
 
   useEffect(() => {
     load();
@@ -156,20 +156,6 @@ export default function ReassortPage() {
         <Card>
           <CardContent className="p-4">
             <div className="flex flex-wrap items-end gap-3">
-              <div className="space-y-1">
-                <label className="block text-xs font-medium text-muted-foreground">Saison</label>
-                <Select value={season || "all"} onValueChange={(v) => setSeason(!v || v === "all" ? "" : v)}>
-                  <SelectTrigger className="w-44 h-9">
-                    <span className={`text-sm truncate ${!season ? "text-muted-foreground" : ""}`}>
-                      {season || "Toutes"}
-                    </span>
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Toutes</SelectItem>
-                    {seasons.map((s) => (<SelectItem key={s} value={s}>{s}</SelectItem>))}
-                  </SelectContent>
-                </Select>
-              </div>
               <div className="space-y-1">
                 <label className="block text-xs font-medium text-muted-foreground">Client</label>
                 <Select value={clientCode || "all"} onValueChange={(v) => setClientCode(!v || v === "all" ? "" : v)}>

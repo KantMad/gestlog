@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, Fragment } from "react";
 import { toast } from "sonner";
+import { useSeason } from "@/lib/season-context";
 import { Topbar } from "@/components/layout/topbar";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent } from "@/components/ui/card";
@@ -116,13 +117,12 @@ export default function ShipmentsPage() {
   const [documents, setDocuments] = useState<Doc[]>([]);
   const [summary, setSummary] = useState({ docs: 0, qty: 0, clients: 0 });
   const [clients, setClients] = useState<{ clientCode: string; clientName: string | null }[]>([]);
-  const [seasons, setSeasons] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const { activeSeason } = useSeason();
   // Filters
   const [docType, setDocType] = useState("");
   const [clientCode, setClientCode] = useState("");
-  const [orderSeason, setOrderSeason] = useState("");
   const [search, setSearch] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -133,12 +133,13 @@ export default function ShipmentsPage() {
   const [loadingLines, setLoadingLines] = useState(false);
 
   const load = useCallback(async () => {
+    if (!activeSeason) return;
     setLoading(true);
     try {
       const p = new URLSearchParams();
       if (docType) p.set("docType", docType);
       if (clientCode) p.set("clientCode", clientCode);
-      if (orderSeason) p.set("orderSeason", orderSeason);
+      p.set("orderSeason", activeSeason.name);
       if (search) p.set("search", search);
       if (dateFrom) p.set("dateFrom", dateFrom);
       if (dateTo) p.set("dateTo", dateTo);
@@ -148,13 +149,12 @@ export default function ShipmentsPage() {
       setDocuments(d.documents || []);
       setSummary(d.summary || { docs: 0, qty: 0, clients: 0 });
       setClients(d.clients || []);
-      setSeasons(d.seasons || []);
     } catch {
       toast.error("Impossible de charger les livraisons");
     } finally {
       setLoading(false);
     }
-  }, [docType, clientCode, orderSeason, search, dateFrom, dateTo]);
+  }, [activeSeason, docType, clientCode, search, dateFrom, dateTo]);
 
   useEffect(() => {
     load();
@@ -335,22 +335,6 @@ export default function ShipmentsPage() {
                       <SelectItem key={c.clientCode} value={c.clientCode}>
                         {c.clientName || c.clientCode}
                       </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <label className="block text-xs font-medium text-muted-foreground">Saison</label>
-                <Select value={orderSeason || "all"} onValueChange={(v) => setOrderSeason(!v || v === "all" ? "" : v)}>
-                  <SelectTrigger className="w-40 h-9">
-                    <span className={`text-sm truncate ${!orderSeason ? "text-muted-foreground" : ""}`}>
-                      {orderSeason || "Toutes"}
-                    </span>
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Toutes</SelectItem>
-                    {seasons.map((s) => (
-                      <SelectItem key={s} value={s}>{s}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
