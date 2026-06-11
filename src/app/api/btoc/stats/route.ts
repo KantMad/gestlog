@@ -65,17 +65,23 @@ export async function GET(request: NextRequest) {
         totalItems: bigint;
       }[]
     >(
+      // On dédoublonne les commandes (le lineJoin éventuel multiplie les lignes)
+      // via une sous-requête DISTINCT par id, PUIS on agrège — sinon SUM(DISTINCT
+      // o.total) fusionne à tort deux commandes de même montant (CA sous-estimé).
       `SELECT
-        COUNT(DISTINCT o.id) AS "totalOrders",
-        COALESCE(SUM(DISTINCT o.total), 0) AS "totalRevenue",
+        COUNT(*) AS "totalOrders",
+        COALESCE(SUM(o.total), 0) AS "totalRevenue",
         COUNT(DISTINCT o."customerId") AS "totalCustomers",
-        CASE WHEN COUNT(DISTINCT o.id) > 0
-          THEN ROUND((SUM(DISTINCT o.total) / COUNT(DISTINCT o.id))::numeric, 2)
+        CASE WHEN COUNT(*) > 0
+          THEN ROUND((SUM(o.total) / COUNT(*))::numeric, 2)
           ELSE 0 END AS "avgOrderValue",
-        COALESCE(SUM(DISTINCT o."itemCount"), 0) AS "totalItems"
-      FROM "BtocOrder" o
-      ${lineJoin}
-      ${whereClause}`,
+        COALESCE(SUM(o."itemCount"), 0) AS "totalItems"
+      FROM (
+        SELECT DISTINCT o.id, o.total, o."customerId", o."itemCount"
+        FROM "BtocOrder" o
+        ${lineJoin}
+        ${whereClause}
+      ) o`,
       ...orderParams
     );
 
@@ -196,13 +202,16 @@ export async function GET(request: NextRequest) {
       { city: string; orders: bigint; revenue: number }[]
     >(
       `SELECT
-        COALESCE(o."billingCity", 'Inconnu') AS city,
-        COUNT(DISTINCT o.id) AS orders,
-        SUM(DISTINCT o.total) AS revenue
-      FROM "BtocOrder" o
-      ${lineJoin}
-      ${whereClause}
-      GROUP BY o."billingCity"
+        COALESCE(o.city, 'Inconnu') AS city,
+        COUNT(*) AS orders,
+        SUM(o.total) AS revenue
+      FROM (
+        SELECT DISTINCT o.id, o."billingCity" AS city, o.total
+        FROM "BtocOrder" o
+        ${lineJoin}
+        ${whereClause}
+      ) o
+      GROUP BY o.city
       ORDER BY revenue DESC
       LIMIT 20`,
       ...orderParams
