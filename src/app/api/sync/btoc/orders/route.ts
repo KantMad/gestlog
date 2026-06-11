@@ -104,9 +104,8 @@ export async function POST(request: NextRequest) {
           o.date_completed ? new Date(o.date_completed) : null
         );
 
-        // Upsert order lines
-        if (Array.isArray(o.line_items)) {
-          // Get the order's internal ID
+        // Upsert order lines (pré-chargement produits + bulk insert)
+        if (Array.isArray(o.line_items) && o.line_items.length > 0) {
           const orderRows = await prisma.$queryRawUnsafe<{ id: string }[]>(
             `SELECT id FROM "BtocOrder" WHERE "wooId" = $1 LIMIT 1`,
             wooId
@@ -120,31 +119,60 @@ export async function POST(request: NextRequest) {
               orderId
             );
 
-            for (const li of o.line_items) {
-              try {
-                // Resolve product: try wooId first, then SKU prefix fallback
-                let productId: string | null = null;
-                const prodWooId = li.variation_id || li.product_id;
-                if (prodWooId) {
-                  const prodRows = await prisma.$queryRawUnsafe<{ id: string }[]>(
-                    `SELECT id FROM "BtocProduct" WHERE "wooId" = $1 LIMIT 1`,
-                    Number(prodWooId)
-                  );
-                  if (prodRows.length > 0) productId = prodRows[0].id;
-                }
-                // Fallback: match parent product via SKU prefix (OMACCE_C012-740-TU → OMACCE_C012)
-                if (!productId && li.sku) {
-                  const skuPrefix = String(li.sku).split("-")[0];
-                  if (skuPrefix) {
-                    const skuRows = await prisma.$queryRawUnsafe<{ id: string }[]>(
-                      `SELECT id FROM "BtocProduct" WHERE sku = $1 AND type = 'variable' LIMIT 1`,
-                      skuPrefix
-                    );
-                    if (skuRows.length > 0) productId = skuRows[0].id;
-                  }
-                }
+            // Pré-charge les produits (par wooId ET par préfixe SKU) en 2 requêtes
+            // au lieu de 2 SELECT par ligne.
+            const wooIds = [
+              ...new Set(
+                o.line_items
+                  .map((li: { variation_id?: number; product_id?: number }) =>
+                    Number(li.variation_id || li.product_id)
+                  )
+                  .filter((n: number) => Number.isFinite(n) && n > 0)
+              ),
+            ];
+            const skuPrefixes = [
+              ...new Set(
+                o.line_items
+                  .map((li: { sku?: string }) =>
+                    li.sku ? String(li.sku).split("-")[0] : null
+                  )
+                  .filter(Boolean)
+              ),
+            ];
+            const byWoo = new Map<number, string>();
+            if (wooIds.length > 0) {
+              const rows = await prisma.$queryRawUnsafe<{ id: string; wooId: number }[]>(
+                `SELECT id, "wooId" FROM "BtocProduct" WHERE "wooId" = ANY($1)`,
+                wooIds
+              );
+              for (const r of rows) byWoo.set(Number(r.wooId), r.id);
+            }
+            const bySku = new Map<string, string>();
+            if (skuPrefixes.length > 0) {
+              const rows = await prisma.$queryRawUnsafe<{ id: string; sku: string }[]>(
+                `SELECT id, sku FROM "BtocProduct" WHERE sku = ANY($1) AND type = 'variable'`,
+                skuPrefixes
+              );
+              for (const r of rows) bySku.set(r.sku, r.id);
+            }
 
-                // Extract size/color from meta_data
+            const valueRows = o.line_items.map(
+              (li: {
+                variation_id?: number;
+                product_id?: number;
+                sku?: string;
+                name?: string;
+                quantity?: number;
+                price?: string;
+                total?: string;
+                meta_data?: { key?: string; value?: unknown }[];
+              }) => {
+                const prodWooId = li.variation_id || li.product_id;
+                let productId: string | null =
+                  (prodWooId && byWoo.get(Number(prodWooId))) || null;
+                if (!productId && li.sku) {
+                  productId = bySku.get(String(li.sku).split("-")[0]) || null;
+                }
                 let size: string | null = null;
                 let color: string | null = null;
                 if (Array.isArray(li.meta_data)) {
@@ -158,11 +186,7 @@ export async function POST(request: NextRequest) {
                     }
                   }
                 }
-
-                await prisma.$executeRawUnsafe(
-                  `INSERT INTO "BtocOrderLine" (id, "orderId", "productId", "wooProductId",
-                    name, sku, quantity, price, total, size, color, "createdAt")
-                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW())`,
+                return [
                   genId(),
                   orderId,
                   productId,
@@ -170,14 +194,30 @@ export async function POST(request: NextRequest) {
                   String(li.name || ""),
                   li.sku || null,
                   Number(li.quantity) || 0,
-                  parseFloat(li.price) || 0,
-                  parseFloat(li.total) || 0,
+                  parseFloat(li.price ?? "") || 0,
+                  parseFloat(li.total ?? "") || 0,
                   size,
-                  color
-                );
-              } catch {
-                // Line error — non-blocking
+                  color,
+                ];
               }
+            );
+
+            const COLS = `(id, "orderId", "productId", "wooProductId", name, sku, quantity, price, total, size, color, "createdAt")`;
+            const CHUNK = 200;
+            for (let i = 0; i < valueRows.length; i += CHUNK) {
+              const slice = valueRows.slice(i, i + CHUNK);
+              const flat: unknown[] = [];
+              const tuples = slice.map((vals: unknown[]) => {
+                const ph = vals.map((v) => {
+                  flat.push(v);
+                  return `$${flat.length}`;
+                });
+                return `(${ph.join(",")}, NOW())`;
+              });
+              await prisma.$executeRawUnsafe(
+                `INSERT INTO "BtocOrderLine" ${COLS} VALUES ${tuples.join(",")}`,
+                ...flat
+              );
             }
           }
         }
