@@ -418,6 +418,16 @@ model User {
   updatedAt    DateTime @updatedAt
 }
 
+// Tentatives de connexion — anti-brute-force par IP (fenêtre glissante).
+model LoginAttempt {
+  id        String   @id @default(cuid())
+  ip        String
+  success   Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([ip, createdAt])
+}
+
 // ─── BtoC (WooCommerce) — Données séparées du BtoB ──────────
 
 model BtocCustomer {

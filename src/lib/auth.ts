@@ -1,17 +1,18 @@
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
+import { signSession, verifySession } from "@/lib/session";
 
 const SESSION_COOKIE = "gestlog_session";
 
 export async function getSession() {
   const cookieStore = await cookies();
-  const sessionCookie = cookieStore.get(SESSION_COOKIE);
-  if (!sessionCookie?.value) return null;
+  const token = cookieStore.get(SESSION_COOKIE)?.value;
+  const payload = await verifySession(token);
+  if (!payload) return null;
 
   try {
-    const userId = sessionCookie.value;
     const user = await prisma.user.findUnique({
-      where: { id: userId, isActive: true },
+      where: { id: payload.uid, isActive: true },
     });
     return user;
   } catch {
@@ -19,10 +20,11 @@ export async function getSession() {
   }
 }
 
-export function setSessionCookie(userId: string) {
+export async function setSessionCookie(userId: string, role: string) {
+  const value = await signSession(userId, role);
   return {
     name: SESSION_COOKIE,
-    value: userId,
+    value,
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax" as const,
