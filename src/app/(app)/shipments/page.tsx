@@ -37,6 +37,8 @@ interface Doc {
   id: string;
   docType: string;
   documentNumber: string;
+  tioOrderNumber: string | null;
+  orderSeason: string | null;
   season: string | null;
   clientCode: string | null;
   clientName: string | null;
@@ -76,7 +78,7 @@ export default function ShipmentsPage() {
   // Filters
   const [docType, setDocType] = useState("");
   const [clientCode, setClientCode] = useState("");
-  const [season, setSeason] = useState("");
+  const [orderSeason, setOrderSeason] = useState("");
   const [search, setSearch] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -92,7 +94,7 @@ export default function ShipmentsPage() {
       const p = new URLSearchParams();
       if (docType) p.set("docType", docType);
       if (clientCode) p.set("clientCode", clientCode);
-      if (season) p.set("season", season);
+      if (orderSeason) p.set("orderSeason", orderSeason);
       if (search) p.set("search", search);
       if (dateFrom) p.set("dateFrom", dateFrom);
       if (dateTo) p.set("dateTo", dateTo);
@@ -103,11 +105,11 @@ export default function ShipmentsPage() {
       setClients(d.clients || []);
       setSeasons(d.seasons || []);
     } catch (e) {
-      console.error("Erreur chargement BL/FAC:", e);
+      console.error("Erreur chargement livraisons:", e);
     } finally {
       setLoading(false);
     }
-  }, [docType, clientCode, season, search, dateFrom, dateTo]);
+  }, [docType, clientCode, orderSeason, search, dateFrom, dateTo]);
 
   useEffect(() => {
     load();
@@ -139,11 +141,11 @@ export default function ShipmentsPage() {
 
   return (
     <>
-      <Topbar title="BL / Factures" />
+      <Topbar title="Livraisons" />
       <div className="p-8 space-y-6">
         <PageHeader
-          title="BL / Factures entrepôt"
-          description="Bons de livraison et factures déposés par l'entrepôt, par client"
+          title="Livraisons"
+          description="Bons de livraison et factures importés de l'entrepôt, liés aux commandes TIO"
         />
 
         {/* Résumé */}
@@ -222,10 +224,10 @@ export default function ShipmentsPage() {
               </div>
               <div className="space-y-1">
                 <label className="block text-xs font-medium text-muted-foreground">Saison</label>
-                <Select value={season || "all"} onValueChange={(v) => setSeason(!v || v === "all" ? "" : v)}>
-                  <SelectTrigger className="w-28 h-9">
-                    <span className={`text-sm truncate ${!season ? "text-muted-foreground" : ""}`}>
-                      {season || "Toutes"}
+                <Select value={orderSeason || "all"} onValueChange={(v) => setOrderSeason(!v || v === "all" ? "" : v)}>
+                  <SelectTrigger className="w-40 h-9">
+                    <span className={`text-sm truncate ${!orderSeason ? "text-muted-foreground" : ""}`}>
+                      {orderSeason || "Toutes"}
                     </span>
                   </SelectTrigger>
                   <SelectContent>
@@ -275,6 +277,7 @@ export default function ShipmentsPage() {
                     <TableHead className="w-8"></TableHead>
                     <TableHead>Type</TableHead>
                     <TableHead>N° Document</TableHead>
+                    <TableHead>Commande</TableHead>
                     <TableHead>Client</TableHead>
                     <TableHead>Date</TableHead>
                     <TableHead className="text-right">Qté</TableHead>
@@ -303,6 +306,18 @@ export default function ShipmentsPage() {
                         </TableCell>
                         <TableCell className="font-medium">{doc.documentNumber}</TableCell>
                         <TableCell>
+                          {doc.tioOrderNumber ? (
+                            <div>
+                              <div className="font-mono text-xs">{doc.tioOrderNumber}</div>
+                              {doc.orderSeason && (
+                                <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{doc.orderSeason}</Badge>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
                           <div className="flex items-center gap-2">
                             <span>{doc.clientName || doc.clientCode || "—"}</span>
                             {doc.clientCode && !doc.clientKnown && (
@@ -321,7 +336,7 @@ export default function ShipmentsPage() {
                       </TableRow>
                       {expanded === doc.id && (
                         <TableRow>
-                          <TableCell colSpan={7} className="bg-muted/30 p-0">
+                          <TableCell colSpan={8} className="bg-muted/30 p-0">
                             {loadingLines && !lines[doc.id] ? (
                               <div className="flex items-center justify-center py-6 text-muted-foreground">
                                 <Loader2 className="h-4 w-4 animate-spin" />

@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-// GET — Suivi des livraisons : commandes B2B (réassort par défaut) avec
-// réconciliation commandé vs livré (via les BL/FAC liés par n° TIO).
-// Statut calculé à la volée : NON_LIVREE / PARTIELLE / LIVREE.
+// GET — Commandes client (TIO) avec réconciliation commandé vs livré
+// (via les BL/FAC liés par n° TIO). Statut à la volée : NON_LIVREE /
+// PARTIELLE / LIVREE. Filtre principal : saison.
 export async function GET(request: NextRequest) {
   try {
     const p = request.nextUrl.searchParams;
-    const scope = p.get("scope") || "reassort"; // "reassort" | "all" | "delivered"
+    const season = p.get("season"); // nom de saison (ex: "Réassort", "AH26"). Vide = toutes.
     const clientCode = p.get("clientCode");
     const search = p.get("search");
 
@@ -15,8 +15,9 @@ export async function GET(request: NextRequest) {
     const params: unknown[] = [];
     let i = 1;
 
-    if (scope === "reassort") {
-      conditions.push(`se.type = 'REASSORT'`);
+    if (season) {
+      conditions.push(`se.name = $${i++}`);
+      params.push(season);
     }
     if (clientCode) {
       conditions.push(`cl.code = $${i++}`);
@@ -82,11 +83,6 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    // scope "delivered" : seulement les commandes avec au moins une livraison
-    if (scope === "delivered") {
-      documents = documents.filter((d) => d.docCount > 0);
-    }
-
     // filtre statut optionnel
     const statusFilter = p.get("status");
     if (statusFilter) documents = documents.filter((d) => d.status === statusFilter);
@@ -100,15 +96,19 @@ export async function GET(request: NextRequest) {
       nonLivree: documents.filter((d) => d.status === "NON_LIVREE").length,
     };
 
-    // Clients disponibles (réassort)
+    // Clients disponibles (toutes commandes)
     const clients = await prisma.$queryRawUnsafe<{ code: string; name: string }[]>(
       `SELECT DISTINCT cl.code, cl.name FROM "ClientOrder" co
-       JOIN "Client" cl ON cl.id = co."clientId"
-       JOIN "Season" se ON se.id = co."seasonId"
-       WHERE se.type = 'REASSORT' ORDER BY cl.name`
+       JOIN "Client" cl ON cl.id = co."clientId" ORDER BY cl.name`
+    );
+    // Saisons disponibles (avec commandes) — Réassort en tête
+    const seasons = await prisma.$queryRawUnsafe<{ name: string; type: string }[]>(
+      `SELECT se.name, se.type FROM "Season" se
+       WHERE EXISTS (SELECT 1 FROM "ClientOrder" co WHERE co."seasonId" = se.id)
+       ORDER BY (se.type = 'REASSORT') DESC, se.name DESC`
     );
 
-    return NextResponse.json({ documents, summary, clients });
+    return NextResponse.json({ documents, summary, clients, seasons: seasons.map((s) => s.name) });
   } catch (e) {
     return NextResponse.json({ error: `Erreur: ${String(e)}` }, { status: 500 });
   }

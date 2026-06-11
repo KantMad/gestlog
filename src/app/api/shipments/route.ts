@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-// GET — Liste des documents entrepôt (BL / FAC) avec filtres + résumé.
-// Filtres : docType, clientCode, dateFrom, dateTo, season, search.
+// GET — Liste des livraisons (BL / FAC importés) avec filtres + résumé.
+// Filtres : docType, clientCode, orderSeason (saison de la commande TIO liée),
+// dateFrom, dateTo, search.
 export async function GET(request: NextRequest) {
   try {
     const p = request.nextUrl.searchParams;
     const docType = p.get("docType"); // "BL" | "FAC" | null
     const clientCode = p.get("clientCode");
-    const season = p.get("season");
+    const orderSeason = p.get("orderSeason"); // saison de la commande liée
     const search = p.get("search");
     const dateFrom = p.get("dateFrom");
     const dateTo = p.get("dateTo");
@@ -25,9 +26,13 @@ export async function GET(request: NextRequest) {
       conditions.push(`d."clientCode" = $${i++}`);
       params.push(clientCode);
     }
-    if (season) {
-      conditions.push(`d.season = $${i++}`);
-      params.push(season);
+    if (orderSeason) {
+      conditions.push(
+        `EXISTS (SELECT 1 FROM "ClientOrder" co JOIN "Season" se ON se.id = co."seasonId"
+                 WHERE co."orderNumber" = d."tioOrderNumber" AND se.name = $${i})`
+      );
+      params.push(orderSeason);
+      i++;
     }
     if (dateFrom) {
       conditions.push(`d."documentDate" >= $${i++}`);
@@ -40,6 +45,7 @@ export async function GET(request: NextRequest) {
     if (search) {
       conditions.push(
         `(d."documentNumber" ILIKE $${i} OR d."clientName" ILIKE $${i} OR d."clientCode" ILIKE $${i}
+          OR d."tioOrderNumber" ILIKE $${i}
           OR EXISTS (SELECT 1 FROM "WarehouseDocumentLine" l
                      WHERE l."documentId" = d.id
                        AND (l.reference ILIKE $${i} OR l.ean ILIKE $${i})))`
@@ -55,6 +61,8 @@ export async function GET(request: NextRequest) {
         id: string;
         docType: string;
         documentNumber: string;
+        tioOrderNumber: string | null;
+        orderSeason: string | null;
         season: string | null;
         clientCode: string | null;
         clientName: string | null;
@@ -64,8 +72,10 @@ export async function GET(request: NextRequest) {
         clientKnown: boolean;
       }[]
     >(
-      `SELECT d.id, d."docType", d."documentNumber", d.season, d."clientCode",
+      `SELECT d.id, d."docType", d."documentNumber", d."tioOrderNumber", d.season, d."clientCode",
               d."clientName", d."documentDate", d."totalQuantity",
+              (SELECT se.name FROM "ClientOrder" co JOIN "Season" se ON se.id = co."seasonId"
+                 WHERE co."orderNumber" = d."tioOrderNumber" LIMIT 1) AS "orderSeason",
               (SELECT COUNT(*) FROM "WarehouseDocumentLine" l WHERE l."documentId" = d.id) AS "lineCount",
               EXISTS (SELECT 1 FROM "Client" c WHERE c.code = d."clientCode") AS "clientKnown"
        FROM "WarehouseDocument" d
@@ -75,7 +85,6 @@ export async function GET(request: NextRequest) {
       ...params
     );
 
-    // Résumé sur l'ensemble du filtre (pas seulement la page)
     const summary = await prisma.$queryRawUnsafe<
       { docs: bigint; qty: bigint; clients: bigint }[]
     >(
@@ -85,7 +94,6 @@ export async function GET(request: NextRequest) {
       ...params
     );
 
-    // Options de filtre (indépendantes des filtres courants)
     const clients = await prisma.$queryRawUnsafe<
       { clientCode: string; clientName: string | null }[]
     >(
@@ -94,9 +102,12 @@ export async function GET(request: NextRequest) {
        WHERE d."clientCode" IS NOT NULL
        GROUP BY d."clientCode" ORDER BY MAX(d."clientName")`
     );
-    const seasons = await prisma.$queryRawUnsafe<{ season: string }[]>(
-      `SELECT DISTINCT season FROM "WarehouseDocument"
-       WHERE season IS NOT NULL AND season != '' ORDER BY season DESC`
+    // Saisons (de commande) disponibles parmi les livraisons
+    const seasons = await prisma.$queryRawUnsafe<{ name: string }[]>(
+      `SELECT DISTINCT se.name FROM "WarehouseDocument" d
+         JOIN "ClientOrder" co ON co."orderNumber" = d."tioOrderNumber"
+         JOIN "Season" se ON se.id = co."seasonId"
+       WHERE d.source = 'warehouse_ftp' ORDER BY se.name`
     );
 
     return NextResponse.json({
@@ -111,7 +122,7 @@ export async function GET(request: NextRequest) {
         clients: Number(summary[0].clients),
       },
       clients,
-      seasons: seasons.map((s) => s.season),
+      seasons: seasons.map((s) => s.name),
     });
   } catch (e) {
     return NextResponse.json({ error: `Erreur: ${String(e)}` }, { status: 500 });

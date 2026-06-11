@@ -881,11 +881,11 @@ export default function DeliveriesPage() {
 
   return (
     <div>
-      <Topbar title="Livraisons" />
+      <Topbar title="Préparation" />
       <div className="p-8 space-y-6">
         <PageHeader
-          title="Livraisons"
-          description="Gérez le flux livraison : préparation, envoi au dépôt, expédition et export EAN"
+          title="Préparation"
+          description="Gérez le flux de préparation : envoi au dépôt, expédition et export EAN"
           action={
             <div className="flex items-center gap-2">
               <CreateShipmentGroupDialog

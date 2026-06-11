@@ -70,9 +70,10 @@ export default function ReassortPage() {
   const [documents, setDocuments] = useState<Doc[]>([]);
   const [summary, setSummary] = useState({ orders: 0, ordered: 0, delivered: 0, livree: 0, partielle: 0, nonLivree: 0 });
   const [clients, setClients] = useState<{ code: string; name: string }[]>([]);
+  const [seasons, setSeasons] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [scope, setScope] = useState("reassort");
+  const [season, setSeason] = useState("Réassort");
   const [clientCode, setClientCode] = useState("");
   const [status, setStatus] = useState("");
   const [search, setSearch] = useState("");
@@ -85,7 +86,7 @@ export default function ReassortPage() {
     setLoading(true);
     try {
       const p = new URLSearchParams();
-      p.set("scope", scope);
+      if (season) p.set("season", season);
       if (clientCode) p.set("clientCode", clientCode);
       if (status) p.set("status", status);
       if (search) p.set("search", search);
@@ -93,12 +94,13 @@ export default function ReassortPage() {
       setDocuments(d.documents || []);
       setSummary(d.summary || { orders: 0, ordered: 0, delivered: 0, livree: 0, partielle: 0, nonLivree: 0 });
       setClients(d.clients || []);
+      setSeasons(d.seasons || []);
     } catch (e) {
-      console.error("Erreur chargement réassort:", e);
+      console.error("Erreur chargement commandes:", e);
     } finally {
       setLoading(false);
     }
-  }, [scope, clientCode, status, search]);
+  }, [season, clientCode, status, search]);
 
   useEffect(() => {
     load();
@@ -122,11 +124,11 @@ export default function ReassortPage() {
 
   return (
     <>
-      <Topbar title="Réassort — Livraisons" />
+      <Topbar title="Commandes client" />
       <div className="p-8 space-y-6">
         <PageHeader
-          title="Suivi des livraisons Réassort"
-          description="Commandes B2B (TIO) confrontées aux BL/Factures de l'entrepôt — livré vs commandé"
+          title="Commandes client"
+          description="Commandes B2B (TIO) par saison, confrontées aux livraisons (BL/Factures) — livré vs commandé"
         />
 
         <div className="grid grid-cols-4 gap-4">
@@ -152,17 +154,16 @@ export default function ReassortPage() {
           <CardContent className="p-4">
             <div className="flex flex-wrap items-end gap-3">
               <div className="space-y-1">
-                <label className="block text-xs font-medium text-muted-foreground">Périmètre</label>
-                <Select value={scope} onValueChange={(v) => setScope(v || "reassort")}>
+                <label className="block text-xs font-medium text-muted-foreground">Saison</label>
+                <Select value={season || "all"} onValueChange={(v) => setSeason(!v || v === "all" ? "" : v)}>
                   <SelectTrigger className="w-44 h-9">
-                    <span className="text-sm truncate">
-                      {scope === "reassort" ? "Réassort" : scope === "delivered" ? "Avec livraison" : "Toutes commandes"}
+                    <span className={`text-sm truncate ${!season ? "text-muted-foreground" : ""}`}>
+                      {season || "Toutes"}
                     </span>
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="reassort">Réassort</SelectItem>
-                    <SelectItem value="delivered">Avec livraison</SelectItem>
-                    <SelectItem value="all">Toutes commandes</SelectItem>
+                    <SelectItem value="all">Toutes</SelectItem>
+                    {seasons.map((s) => (<SelectItem key={s} value={s}>{s}</SelectItem>))}
                   </SelectContent>
                 </Select>
               </div>
