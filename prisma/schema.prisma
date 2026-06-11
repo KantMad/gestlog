@@ -492,6 +492,7 @@ model BtocOrder {
   customerEmail   String?
   customerName    String?
   billingCity     String?
+  billingCountry  String?   // code pays ISO (FR, BE…) depuis WooCommerce billing.country
   shippingCity    String?
   total           Float
   subtotal        Float?

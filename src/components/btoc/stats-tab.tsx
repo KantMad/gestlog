@@ -55,6 +55,7 @@ interface StatsData {
     revenue: number;
   }[];
   topCategories: { category: string; quantity: number; revenue: number }[];
+  topCountries: { country: string; orders: number; revenue: number }[];
   ordersByStatus: { status: string; count: number }[];
   topCities: { city: string; orders: number; revenue: number }[];
   revenueByDay: { date: string; revenue: number; orders: number }[];
@@ -87,6 +88,18 @@ const STATUS_LABELS: Record<string, string> = {
   trash: "Supprimée",
 };
 
+const COUNTRY_NAMES: Record<string, string> = {
+  FR: "France", BE: "Belgique", GB: "Royaume-Uni", DE: "Allemagne", ES: "Espagne",
+  IT: "Italie", NL: "Pays-Bas", CH: "Suisse", LU: "Luxembourg", PT: "Portugal",
+  DK: "Danemark", SE: "Suède", GR: "Grèce", AT: "Autriche", IE: "Irlande",
+  US: "États-Unis", CA: "Canada", MC: "Monaco", FI: "Finlande", NO: "Norvège",
+  PL: "Pologne", CZ: "Tchéquie", RE: "Réunion", GP: "Guadeloupe", MQ: "Martinique",
+};
+function countryLabel(code: string): string {
+  if (!code || code === "Inconnu") return "Inconnu";
+  return COUNTRY_NAMES[code.toUpperCase()] || code;
+}
+
 function formatEuro(n: number): string {
   return new Intl.NumberFormat("fr-FR", {
     style: "currency",
@@ -107,7 +120,7 @@ export function BtocStatsTab() {
   const [parentProduct, setParentProduct] = useState("");
   const [filtersApplied, setFiltersApplied] = useState(false);
 
-  // Répartition par taille (par sous-catégorie BtoB)
+  // Répartition des tailles par sous-catégorie BtoB
   const [sizeDist, setSizeDist] = useState<
     { subCategory: string; total: number; sizes: { size: string; qty: number; pct: number }[] }[]
   >([]);
@@ -558,34 +571,33 @@ export function BtocStatsTab() {
           </Card>
         )}
 
-        {/* Size distribution */}
-        {data.sizeDistribution.length > 0 && (
+        {/* Top pays */}
+        {data.topCountries.length > 0 && (
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">
-                Distribution par taille
-              </CardTitle>
+              <CardTitle className="text-base">Top pays par CA</CardTitle>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={280}>
-                <BarChart data={data.sizeDistribution}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis dataKey="size" tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 11 }} />
-                  <Tooltip
-                    formatter={(value) => [
-                      formatNumber(Number(value)),
-                      "Quantité",
-                    ]}
-                  />
-                  <Bar
-                    dataKey="quantity"
-                    name="Quantité"
-                    fill="#F59E0B"
-                    radius={[4, 4, 0, 0]}
-                  />
-                </BarChart>
-              </ResponsiveContainer>
+              <div className="space-y-2">
+                {data.topCountries.map((c) => {
+                  const max = Math.max(...data.topCountries.map((x) => x.revenue), 1);
+                  return (
+                    <div key={c.country} className="flex items-center gap-3">
+                      <span className="w-28 truncate text-sm font-medium">{countryLabel(c.country)}</span>
+                      <div className="h-6 flex-1 overflow-hidden rounded bg-muted">
+                        <div
+                          className="h-full rounded bg-emerald-500"
+                          style={{ width: `${(c.revenue / max) * 100}%` }}
+                        />
+                      </div>
+                      <span className="w-32 text-right text-sm tabular-nums">
+                        {formatEuro(c.revenue)}{" "}
+                        <span className="text-muted-foreground">({formatNumber(c.orders)})</span>
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
             </CardContent>
           </Card>
         )}

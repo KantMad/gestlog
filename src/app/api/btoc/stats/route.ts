@@ -165,21 +165,59 @@ export async function GET(request: NextRequest) {
       ...topProductParams
     );
 
-    // ─── Top categories ──────────────────────────────────────
+    // ─── Top catégories (catégories BtoB via matching réf) + Top pays ─────────
+    // Regroupement par catégorie BtoB (Product.category, PAS la catégorie BtoC),
+    // matching réf par préfixe SKU avec repli "corps" saison-agnostique.
+    // Conditions date + client uniquement (les filtres BtoC ne s'appliquent pas).
+    const geoConditions: string[] = [];
+    const geoParams: unknown[] = [];
+    let geoIdx = 1;
+    if (dateFrom) {
+      geoConditions.push(`o."orderDate" >= $${geoIdx++}`);
+      geoParams.push(new Date(dateFrom));
+    }
+    if (dateTo) {
+      geoConditions.push(`o."orderDate" <= $${geoIdx++}`);
+      geoParams.push(new Date(dateTo));
+    }
+    if (customerId) {
+      geoConditions.push(`o."customerId" = $${geoIdx++}`);
+      geoParams.push(customerId);
+    }
+    const geoWhere = geoConditions.length > 0 ? "WHERE " + geoConditions.join(" AND ") : "";
+
     const topCategories = await prisma.$queryRawUnsafe<
       { category: string; quantity: bigint; revenue: number }[]
     >(
-      `SELECT
-        COALESCE(p.category, 'Non catégorisé') AS category,
-        SUM(ol.quantity) AS quantity,
-        SUM(ol.total) AS revenue
-      FROM "BtocOrderLine" ol
-      JOIN "BtocOrder" o ON o.id = ol."orderId"
-      LEFT JOIN "BtocProduct" p ON p.sku = SPLIT_PART(ol.sku, '-', 1)
-      ${tpWhere}
-      GROUP BY p.category
-      ORDER BY revenue DESC`,
-      ...topProductParams
+      `SELECT COALESCE(cat, 'Non catégorisé') AS category,
+              SUM(qty) AS quantity, SUM(revenue) AS revenue
+       FROM (
+         SELECT ol.quantity AS qty, ol.total AS revenue,
+           COALESCE(
+             (SELECT pr.category FROM "Product" pr WHERE pr.reference = SPLIT_PART(ol.sku, '-', 1) AND pr.category IS NOT NULL AND pr.category != '' LIMIT 1),
+             (SELECT pr.category FROM "Product" pr WHERE SUBSTRING(pr.reference FROM 2) = SUBSTRING(SPLIT_PART(ol.sku, '-', 1) FROM 2) AND pr.category IS NOT NULL AND pr.category != '' LIMIT 1)
+           ) AS cat
+         FROM "BtocOrderLine" ol
+         JOIN "BtocOrder" o ON o.id = ol."orderId"
+         ${geoWhere}
+       ) t
+       GROUP BY cat
+       ORDER BY revenue DESC`,
+      ...geoParams
+    );
+
+    // ─── Top pays (BtocOrder.billingCountry) ─────────────────
+    const topCountries = await prisma.$queryRawUnsafe<
+      { country: string; orders: bigint; revenue: number }[]
+    >(
+      `SELECT COALESCE(NULLIF(o."billingCountry", ''), 'Inconnu') AS country,
+              COUNT(*) AS orders, SUM(o.total) AS revenue
+       FROM "BtocOrder" o
+       ${geoWhere}
+       GROUP BY COALESCE(NULLIF(o."billingCountry", ''), 'Inconnu')
+       ORDER BY revenue DESC
+       LIMIT 12`,
+      ...geoParams
     );
 
     // ─── Orders by status ────────────────────────────────────
@@ -296,6 +334,11 @@ export async function GET(request: NextRequest) {
       topCategories: topCategories.map((r) => ({
         category: r.category,
         quantity: Number(r.quantity),
+        revenue: Number(r.revenue),
+      })),
+      topCountries: topCountries.map((r) => ({
+        country: r.country,
+        orders: Number(r.orders),
         revenue: Number(r.revenue),
       })),
       ordersByStatus: ordersByStatus.map((r) => ({
