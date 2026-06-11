@@ -735,9 +735,11 @@ export default function DeliveriesPage() {
     setLoading(true);
     try {
       const res = await fetch(`/api/deliveries?seasonId=${activeSeason.id}`);
+      if (!res.ok) throw new Error();
       const data = await res.json();
       setDeliveries(data.data || []);
     } catch {
+      toast.error("Impossible de charger les livraisons");
     } finally {
       setLoading(false);
     }

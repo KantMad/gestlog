@@ -311,9 +311,11 @@ export default function DepotPage() {
     try {
       // Fetch all deliveries with status ENVOYEE_DEPOT or VALIDEE_DEPOT
       const res = await fetch("/api/depot/deliveries");
+      if (!res.ok) throw new Error();
       const data = await res.json();
       setDeliveries(data.data || []);
     } catch {
+      toast.error("Impossible de charger les livraisons");
     } finally {
       setLoading(false);
     }
@@ -336,8 +338,8 @@ export default function DepotPage() {
       if (!res.ok) throw new Error("Erreur");
       toast.success("Livraison validée");
       loadDeliveries();
-    } catch (e) {
-      toast.error(String(e));
+    } catch {
+      toast.error("Échec de la validation");
     }
   };
 
@@ -354,8 +356,8 @@ export default function DepotPage() {
       if (!res.ok) throw new Error("Erreur");
       toast.success("Anomalie signalée");
       loadDeliveries();
-    } catch (e) {
-      toast.error(String(e));
+    } catch {
+      toast.error("Échec du signalement");
     }
   };
 

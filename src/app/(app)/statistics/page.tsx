@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { toast } from "sonner";
 import { useSeason } from "@/lib/season-context";
 import { Topbar } from "@/components/layout/topbar";
 import { PageHeader } from "@/components/layout/page-header";
@@ -86,9 +87,12 @@ export default function StatisticsPage() {
         const params = new URLSearchParams({ seasonId: activeSeason.id });
         if (refFilter) params.set("reference", refFilter);
         const res = await fetch(`/api/statistics/charts?${params}`);
+        if (!res.ok) throw new Error();
         const d = await res.json();
         setData(d);
-      } catch {} finally {
+      } catch {
+        toast.error("Impossible de charger les statistiques");
+      } finally {
         setLoading(false);
       }
     },

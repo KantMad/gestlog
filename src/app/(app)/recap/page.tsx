@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
+import { toast } from "sonner";
 import { useSeason } from "@/lib/season-context";
 import { Topbar } from "@/components/layout/topbar";
 import { PageHeader } from "@/components/layout/page-header";
@@ -322,10 +323,12 @@ export default function RecapPage() {
     setLoading(true);
     try {
       const res = await fetch(`/api/recap?seasonId=${activeSeason.id}`);
+      if (!res.ok) throw new Error();
       const data = await res.json();
       setClients(data.data || []);
       setStats(data.stats || null);
     } catch {
+      toast.error("Impossible de charger le récapitulatif");
     } finally {
       setLoading(false);
     }
@@ -353,7 +356,7 @@ export default function RecapPage() {
 
   return (
     <div>
-      <Topbar title="Récapitulatif clients" />
+      <Topbar title="Récap clients" />
       <div className="p-8 space-y-6">
         <PageHeader
           title="Récapitulatif clients"
