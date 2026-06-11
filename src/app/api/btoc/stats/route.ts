@@ -55,6 +55,14 @@ export async function GET(request: NextRequest) {
         ? "WHERE " + orderConditions.join(" AND ")
         : "";
 
+    // Filtre "chiffre d'affaires" : on exclut les commandes annulées, remboursées
+    // et échouées (cohérent avec les exports). Appliqué aux requêtes de CA
+    // UNIQUEMENT — pas au graphe "commandes par statut" qui doit tout afficher.
+    const REVENUE_FILTER = `o.status NOT IN ('cancelled', 'refunded', 'failed')`;
+    const revenueWhere = whereClause
+      ? `${whereClause} AND ${REVENUE_FILTER}`
+      : `WHERE ${REVENUE_FILTER}`;
+
     // ─── Overview ────────────────────────────────────────────
     const overviewRows = await prisma.$queryRawUnsafe<
       {
@@ -80,7 +88,7 @@ export async function GET(request: NextRequest) {
         SELECT DISTINCT o.id, o.total, o."customerId", o."itemCount"
         FROM "BtocOrder" o
         ${lineJoin}
-        ${whereClause}
+        ${revenueWhere}
       ) o`,
       ...orderParams
     );
@@ -103,8 +111,7 @@ export async function GET(request: NextRequest) {
         COUNT(DISTINCT o.id) AS orders
       FROM "BtocOrder" o
       ${lineJoin}
-      ${whereClause.length > 0 ? whereClause + " AND " : "WHERE "}
-        o."orderDate" >= NOW() - INTERVAL '12 months'
+      ${revenueWhere} AND o."orderDate" >= NOW() - INTERVAL '12 months'
       GROUP BY TO_CHAR(o."orderDate", 'YYYY-MM')
       ORDER BY month ASC`,
       ...orderParams
@@ -142,6 +149,7 @@ export async function GET(request: NextRequest) {
       tpIdx++;
     }
 
+    topProductConditions.push(REVENUE_FILTER);
     const tpWhere =
       topProductConditions.length > 0
         ? "WHERE " + topProductConditions.join(" AND ")
@@ -184,6 +192,7 @@ export async function GET(request: NextRequest) {
       geoConditions.push(`o."customerId" = $${geoIdx++}`);
       geoParams.push(customerId);
     }
+    geoConditions.push(REVENUE_FILTER);
     const geoWhere = geoConditions.length > 0 ? "WHERE " + geoConditions.join(" AND ") : "";
 
     const topCategories = await prisma.$queryRawUnsafe<
@@ -247,7 +256,7 @@ export async function GET(request: NextRequest) {
         SELECT DISTINCT o.id, o."billingCity" AS city, o.total
         FROM "BtocOrder" o
         ${lineJoin}
-        ${whereClause}
+        ${revenueWhere}
       ) o
       GROUP BY o.city
       ORDER BY revenue DESC
@@ -265,7 +274,7 @@ export async function GET(request: NextRequest) {
         COUNT(DISTINCT o.id) AS orders
       FROM "BtocOrder" o
       ${lineJoin}
-      ${whereClause}
+      ${revenueWhere}
       GROUP BY TO_CHAR(o."orderDate", 'YYYY-MM-DD')
       ORDER BY date ASC`,
       ...orderParams
