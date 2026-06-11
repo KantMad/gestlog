@@ -19,6 +19,7 @@ import {
   ClipboardList,
   Warehouse,
   Receipt,
+  RefreshCw,
   ShoppingBag,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -35,6 +36,7 @@ const NAV_ITEMS = [
   { href: "/recap", label: "Récap clients", icon: ClipboardList },
   { href: "/depot", label: "Vue dépôt", icon: Warehouse },
   { href: "/shipments", label: "BL / Factures", icon: Receipt },
+  { href: "/reassort", label: "Réassort", icon: RefreshCw },
   { href: "/configuration", label: "Configuration", icon: Settings },
   { href: "/statistics", label: "Statistiques", icon: BarChart3 },
   { href: "/btoc", label: "BtoC", icon: ShoppingBag },
