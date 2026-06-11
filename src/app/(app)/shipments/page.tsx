@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, Fragment } from "react";
+import { toast } from "sonner";
 import { Topbar } from "@/components/layout/topbar";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent } from "@/components/ui/card";
@@ -142,13 +143,14 @@ export default function ShipmentsPage() {
       if (dateFrom) p.set("dateFrom", dateFrom);
       if (dateTo) p.set("dateTo", dateTo);
       const res = await fetch(`/api/shipments?${p}`);
+      if (!res.ok) throw new Error();
       const d = await res.json();
       setDocuments(d.documents || []);
       setSummary(d.summary || { docs: 0, qty: 0, clients: 0 });
       setClients(d.clients || []);
       setSeasons(d.seasons || []);
-    } catch (e) {
-      console.error("Erreur chargement livraisons:", e);
+    } catch {
+      toast.error("Impossible de charger les livraisons");
     } finally {
       setLoading(false);
     }
@@ -253,7 +255,7 @@ export default function ShipmentsPage() {
         />
 
         {/* Résumé */}
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <Card>
             <CardContent className="flex items-center gap-3 p-4">
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-50">

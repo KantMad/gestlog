@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, Fragment } from "react";
+import { toast } from "sonner";
 import { Topbar } from "@/components/layout/topbar";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent } from "@/components/ui/card";
@@ -90,13 +91,15 @@ export default function ReassortPage() {
       if (clientCode) p.set("clientCode", clientCode);
       if (status) p.set("status", status);
       if (search) p.set("search", search);
-      const d = await (await fetch(`/api/reassort?${p}`)).json();
+      const res = await fetch(`/api/reassort?${p}`);
+      if (!res.ok) throw new Error();
+      const d = await res.json();
       setDocuments(d.documents || []);
       setSummary(d.summary || { orders: 0, ordered: 0, delivered: 0, livree: 0, partielle: 0, nonLivree: 0 });
       setClients(d.clients || []);
       setSeasons(d.seasons || []);
-    } catch (e) {
-      console.error("Erreur chargement commandes:", e);
+    } catch {
+      toast.error("Impossible de charger les commandes");
     } finally {
       setLoading(false);
     }
@@ -131,7 +134,7 @@ export default function ReassortPage() {
           description="Commandes B2B (TIO) par saison, confrontées aux livraisons (BL/Factures) — livré vs commandé"
         />
 
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <Card><CardContent className="flex items-center gap-3 p-4">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50"><Package className="h-5 w-5 text-blue-600" /></div>
             <div><p className="text-2xl font-bold">{formatNumber(summary.orders)}</p><p className="text-xs text-muted-foreground">Commandes</p></div>
