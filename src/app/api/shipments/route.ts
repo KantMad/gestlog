@@ -65,6 +65,8 @@ export async function GET(request: NextRequest) {
         tioOrderNumber: string | null;
         orderSeason: string | null;
         season: string | null;
+        pdfFileName: string | null;
+        hasLines: boolean;
         clientCode: string | null;
         clientName: string | null;
         documentDate: Date | null;
@@ -73,16 +75,25 @@ export async function GET(request: NextRequest) {
         clientKnown: boolean;
       }[]
     >(
-      `SELECT d.id, d."docType", d."documentNumber", d."tioOrderNumber", d.season, d."clientCode",
-              d."clientName", d."documentDate", d."totalQuantity",
-              (SELECT se.name FROM "ClientOrder" co JOIN "Season" se ON se.id = co."seasonId"
-                 WHERE co."orderNumber" = d."tioOrderNumber" LIMIT 1) AS "orderSeason",
+      `SELECT d.id, d."docType", d."documentNumber", d."tioOrderNumber", d.season,
+              d."pdfFileName", d."hasLines",
+              COALESCE(d."clientCode", ord.client_code) AS "clientCode",
+              COALESCE(d."clientName", ord.client_name) AS "clientName",
+              d."documentDate", d."totalQuantity",
+              ord.season_name AS "orderSeason",
               (SELECT COUNT(*) FROM "WarehouseDocumentLine" l WHERE l."documentId" = d.id) AS "lineCount",
-              EXISTS (SELECT 1 FROM "Client" c WHERE c.code = d."clientCode") AS "clientKnown"
+              EXISTS (SELECT 1 FROM "Client" c WHERE c.code = COALESCE(d."clientCode", ord.client_code)) AS "clientKnown"
        FROM "WarehouseDocument" d
+       LEFT JOIN LATERAL (
+         SELECT se.name AS season_name, cl.code AS client_code, cl.name AS client_name
+         FROM "ClientOrder" co
+         JOIN "Season" se ON se.id = co."seasonId"
+         JOIN "Client" cl ON cl.id = co."clientId"
+         WHERE co."orderNumber" = d."tioOrderNumber" LIMIT 1
+       ) ord ON true
        ${where}
        ORDER BY d."documentDate" DESC NULLS LAST, d."documentNumber" DESC
-       LIMIT 500`,
+       LIMIT 1000`,
       ...params
     );
 

@@ -31,6 +31,7 @@ import {
   ChevronDown,
   Loader2,
   AlertTriangle,
+  ExternalLink,
 } from "lucide-react";
 import { formatNumber } from "@/lib/utils";
 
@@ -41,6 +42,8 @@ interface Doc {
   tioOrderNumber: string | null;
   orderSeason: string | null;
   season: string | null;
+  pdfFileName: string | null;
+  hasLines: boolean;
   clientCode: string | null;
   clientName: string | null;
   documentDate: string | null;
@@ -168,8 +171,9 @@ export default function ShipmentsPage() {
       return;
     }
     setExpanded(group.key);
-    // Charge les lignes de tous les documents du groupe pas encore chargés
-    const missing = group.docs.filter((d) => !lines[d.id]);
+    // Charge les lignes des documents xlsx du groupe pas encore chargés
+    // (les documents PDF seuls n'ont pas de lignes détaillées).
+    const missing = group.docs.filter((d) => d.hasLines && !lines[d.id]);
     if (missing.length > 0) {
       setLoadingLines(true);
       try {
@@ -207,41 +211,62 @@ export default function ShipmentsPage() {
         </Badge>
         <span className="font-medium text-sm">N° {d.documentNumber}</span>
         <span className="text-xs text-muted-foreground">{fmtDate(d.documentDate)}</span>
-        <span className="ml-auto text-xs text-muted-foreground">{formatNumber(d.totalQuantity)} pièces · {d.lineCount} lignes</span>
+        <div className="ml-auto flex items-center gap-3">
+          {d.hasLines && (
+            <span className="text-xs text-muted-foreground">{formatNumber(d.totalQuantity)} pièces · {d.lineCount} lignes</span>
+          )}
+          {d.pdfFileName && (
+            <a
+              href={`/api/shipments/pdf?file=${encodeURIComponent(d.pdfFileName)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+            >
+              <ExternalLink className="h-3.5 w-3.5" /> Voir le PDF
+            </a>
+          )}
+        </div>
       </div>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Référence</TableHead>
-            <TableHead>Produit</TableHead>
-            <TableHead>Couleur</TableHead>
-            <TableHead>Taille</TableHead>
-            <TableHead>EAN</TableHead>
-            <TableHead className="text-right">Qté</TableHead>
-            <TableHead>Colis</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {(lines[d.id] || []).map((l) => (
-            <TableRow key={l.id}>
-              <TableCell className="font-mono text-xs">
-                <div className="flex items-center gap-1.5">
-                  {l.reference || "—"}
-                  {l.reference && !l.refKnown && (
-                    <span title="Référence inconnue"><AlertTriangle className="h-3.5 w-3.5 text-amber-500" /></span>
-                  )}
-                </div>
-              </TableCell>
-              <TableCell className="text-sm">{l.productLabel || "—"}</TableCell>
-              <TableCell className="text-sm">{l.colorLabel || l.colorCode || "—"}</TableCell>
-              <TableCell className="text-sm">{l.size || "—"}</TableCell>
-              <TableCell className="font-mono text-xs">{l.ean || "—"}</TableCell>
-              <TableCell className="text-right font-medium">{l.quantity}</TableCell>
-              <TableCell className="text-sm text-muted-foreground">{l.parcelNo || "—"}</TableCell>
+      {d.hasLines ? (
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Référence</TableHead>
+              <TableHead>Produit</TableHead>
+              <TableHead>Couleur</TableHead>
+              <TableHead>Taille</TableHead>
+              <TableHead>EAN</TableHead>
+              <TableHead className="text-right">Qté</TableHead>
+              <TableHead>Colis</TableHead>
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+          </TableHeader>
+          <TableBody>
+            {(lines[d.id] || []).map((l) => (
+              <TableRow key={l.id}>
+                <TableCell className="font-mono text-xs">
+                  <div className="flex items-center gap-1.5">
+                    {l.reference || "—"}
+                    {l.reference && !l.refKnown && (
+                      <span title="Référence inconnue"><AlertTriangle className="h-3.5 w-3.5 text-amber-500" /></span>
+                    )}
+                  </div>
+                </TableCell>
+                <TableCell className="text-sm">{l.productLabel || "—"}</TableCell>
+                <TableCell className="text-sm">{l.colorLabel || l.colorCode || "—"}</TableCell>
+                <TableCell className="text-sm">{l.size || "—"}</TableCell>
+                <TableCell className="font-mono text-xs">{l.ean || "—"}</TableCell>
+                <TableCell className="text-right font-medium">{l.quantity}</TableCell>
+                <TableCell className="text-sm text-muted-foreground">{l.parcelNo || "—"}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      ) : (
+        <div className="px-3 py-3 text-xs text-muted-foreground">
+          Document disponible en PDF uniquement (pas de détail de lignes importé).
+        </div>
+      )}
     </div>
   );
 
