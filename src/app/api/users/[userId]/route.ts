@@ -1,8 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { handleApiError } from "@/lib/api";
+import { z } from "zod";
+import { handleApiError, parseBody } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { APP_SCREEN_KEYS } from "@/lib/screens";
+
+const UserUpdateSchema = z.object({
+  name: z.string().trim().min(1).optional(),
+  code: z.string().min(4, "Le code doit faire au moins 4 caractères").optional(),
+  role: z.enum(["ADMIN", "USER"]).optional(),
+  isActive: z.boolean().optional(),
+  screenAccess: z.array(z.string()).nullable().optional(),
+});
 
 function normalizeScreenAccess(value: unknown): string | null {
   if (value == null) return null;
@@ -25,11 +34,13 @@ export async function PATCH(
   const { userId } = await params;
 
   try {
-    const body = await request.json();
+    const parsed = await parseBody(request, UserUpdateSchema);
+    if ("error" in parsed) return parsed.error;
+    const body = parsed.data;
     const data: Record<string, unknown> = {};
 
     if (body.name !== undefined) data.name = body.name;
-    if (body.role !== undefined) data.role = body.role === "ADMIN" ? "ADMIN" : "USER";
+    if (body.role !== undefined) data.role = body.role;
     if (body.isActive !== undefined) data.isActive = body.isActive;
     if (body.screenAccess !== undefined) {
       data.screenAccess = normalizeScreenAccess(body.screenAccess);
@@ -37,12 +48,6 @@ export async function PATCH(
     // If promoting to ADMIN, clear any screen restriction (admins see all)
     if (body.role === "ADMIN") data.screenAccess = null;
     if (body.code !== undefined) {
-      if (body.code.length < 4) {
-        return NextResponse.json(
-          { error: "Le code doit faire au moins 4 caractères" },
-          { status: 400 }
-        );
-      }
       const existing = await prisma.user.findFirst({
         where: { code: body.code, id: { not: userId } },
       });

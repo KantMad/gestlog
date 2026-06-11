@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { handleApiError } from "@/lib/api";
+import { z } from "zod";
+import { handleApiError, parseBody } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 
 // Support multiple export types via ?type= query param
 const VALID_TYPES = ["customers", "products", "orders"] as const;
+
+const SettingsSchema = z.object({
+  type: z.enum(VALID_TYPES),
+  fields: z.record(z.string(), z.boolean()),
+});
 type ExportType = (typeof VALID_TYPES)[number];
 
 function settingsKey(type: ExportType): string {
@@ -108,33 +114,11 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { fields, type } = body;
+    const parsed = await parseBody(request, SettingsSchema);
+    if ("error" in parsed) return parsed.error;
+    const { fields, type } = parsed.data;
 
-    if (!type || !VALID_TYPES.includes(type)) {
-      return NextResponse.json(
-        { error: `Champ 'type' requis. Valeurs acceptees: ${VALID_TYPES.join(", ")}` },
-        { status: 400 }
-      );
-    }
-
-    if (!fields || typeof fields !== "object") {
-      return NextResponse.json(
-        { error: "Champ 'fields' requis (objet cle/booleen)" },
-        { status: 400 }
-      );
-    }
-
-    for (const [k, v] of Object.entries(fields)) {
-      if (typeof v !== "boolean") {
-        return NextResponse.json(
-          { error: `Le champ '${k}' doit etre un booleen` },
-          { status: 400 }
-        );
-      }
-    }
-
-    const key = settingsKey(type as ExportType);
+    const key = settingsKey(type);
     const jsonValue = JSON.stringify(fields);
 
     await prisma.$queryRawUnsafe(

@@ -1,21 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
-import { handleApiError } from "@/lib/api";
+import { z } from "zod";
+import { handleApiError, parseBody } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { parseExcelBuffer } from "@/lib/import/parser";
+
+const SizeTypeUpdateSchema = z.object({
+  id: z.string().min(1, "ID requis"),
+  label: z.string().nullable().optional(),
+  mappings: z
+    .array(z.object({ position: z.number().int(), sizeName: z.string() }))
+    .optional(),
+});
 
 // PATCH — update size type label and/or mappings (positions + size names)
 export async function PATCH(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { id, label, mappings } = body as {
-      id: string;
-      label?: string | null;
-      mappings?: { position: number; sizeName: string }[];
-    };
-
-    if (!id) {
-      return NextResponse.json({ error: "ID requis" }, { status: 400 });
-    }
+    const parsed = await parseBody(request, SizeTypeUpdateSchema);
+    if ("error" in parsed) return parsed.error;
+    const { id, label, mappings } = parsed.data;
 
     const sizeType = await prisma.sizeType.findUnique({ where: { id } });
     if (!sizeType) {
