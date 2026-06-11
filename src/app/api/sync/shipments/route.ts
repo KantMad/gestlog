@@ -98,30 +98,41 @@ async function importFile(fileName: string, b64: string) {
     documentId
   );
 
-  for (const r of rows) {
+  // INSERT en bulk (multi-row) par paquets — au lieu d'une requête par ligne.
+  const valueRows = rows.map((r) => [
+    genId("whl"),
+    documentId,
+    str(r["N° Ligne"]),
+    str(r["Code Produit Fini"]),
+    str(r["Libellé 1 Produit Fini"]),
+    str(r["Code Coloris"]),
+    str(r["Libellé Coloris"]),
+    str(r["Taille"]),
+    str(r["Code Barre"]),
+    Number(r["Qté"]) || 0,
+    num(r["Prix Unitaire"]),
+    str(r["N° Colis"]),
+    str(r["Code Emplacement"]),
+    str(r["Libellé famille statistique"]),
+    str(r["Libellé sous famille statistique"]),
+    str(r["Référence Commande"]),
+    JSON.stringify(r),
+  ]);
+  const COLS = `(id, "documentId", "lineNo", reference, "productLabel", "colorCode", "colorLabel", size, ean, quantity, "unitPrice", "parcelNo", location, "statFamily", "statSubFamily", "orderRef", "rawData", "createdAt")`;
+  const CHUNK = 200; // 200 lignes × 17 params = 3400 params, bien sous la limite PG
+  for (let i = 0; i < valueRows.length; i += CHUNK) {
+    const slice = valueRows.slice(i, i + CHUNK);
+    const flat: unknown[] = [];
+    const tuples = slice.map((vals) => {
+      const ph = vals.map((v) => {
+        flat.push(v);
+        return `$${flat.length}`;
+      });
+      return `(${ph.join(",")}, NOW())`;
+    });
     await prisma.$executeRawUnsafe(
-      `INSERT INTO "WarehouseDocumentLine"
-         (id, "documentId", "lineNo", reference, "productLabel", "colorCode", "colorLabel",
-          size, ean, quantity, "unitPrice", "parcelNo", location, "statFamily",
-          "statSubFamily", "orderRef", "rawData", "createdAt")
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,NOW())`,
-      genId("whl"),
-      documentId,
-      str(r["N° Ligne"]),
-      str(r["Code Produit Fini"]),
-      str(r["Libellé 1 Produit Fini"]),
-      str(r["Code Coloris"]),
-      str(r["Libellé Coloris"]),
-      str(r["Taille"]),
-      str(r["Code Barre"]),
-      Number(r["Qté"]) || 0,
-      num(r["Prix Unitaire"]),
-      str(r["N° Colis"]),
-      str(r["Code Emplacement"]),
-      str(r["Libellé famille statistique"]),
-      str(r["Libellé sous famille statistique"]),
-      str(r["Référence Commande"]),
-      JSON.stringify(r)
+      `INSERT INTO "WarehouseDocumentLine" ${COLS} VALUES ${tuples.join(",")}`,
+      ...flat
     );
   }
 
