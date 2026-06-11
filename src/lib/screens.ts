@@ -35,6 +35,39 @@ export function parseScreenAccess(raw: unknown): string[] | null {
   return null;
 }
 
+// Correspondance préfixe de route API → écran requis. Les préfixes ABSENTS de
+// cette table sont des endpoints TRANSVERSES (référentiel : saisons, clients,
+// catalogues, fournisseurs…) accessibles à tout utilisateur authentifié.
+const API_SCREEN_MAP: [string, string][] = [
+  ["/api/allocation", "/allocation"],
+  ["/api/btoc", "/btoc"],
+  ["/api/comparison", "/comparison"],
+  ["/api/deliveries", "/deliveries"],
+  ["/api/depot", "/depot"],
+  ["/api/import", "/import"],
+  ["/api/product-info", "/product-info"],
+  ["/api/reassort", "/reassort"],
+  ["/api/recap", "/recap"],
+  ["/api/shipments", "/shipments"],
+  ["/api/statistics", "/statistics"],
+];
+
+// Écran requis pour un chemin (page OU API), ou null si le chemin n'est pas
+// rattaché à un écran restreignable (→ pas d'enforcement par écran).
+// /users et /api/users ne sont PAS ici : ils sont gardés en ADMIN séparément.
+export function screenForPath(pathname: string): string | null {
+  if (pathname.startsWith("/api/")) {
+    for (const [prefix, screen] of API_SCREEN_MAP) {
+      if (pathname === prefix || pathname.startsWith(prefix + "/")) return screen;
+    }
+    return null;
+  }
+  for (const key of APP_SCREEN_KEYS) {
+    if (pathname === key || pathname.startsWith(key + "/")) return key;
+  }
+  return null;
+}
+
 // Whether a user (role + screenAccess) may access a given pathname.
 export function canAccessScreen(
   role: string | undefined,

@@ -20,8 +20,12 @@ export async function getSession() {
   }
 }
 
-export async function setSessionCookie(userId: string, role: string) {
-  const value = await signSession(userId, role);
+export async function setSessionCookie(
+  userId: string,
+  role: string,
+  screenAccess: string[] | null
+) {
+  const value = await signSession(userId, role, screenAccess);
   return {
     name: SESSION_COOKIE,
     value,

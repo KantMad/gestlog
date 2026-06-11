@@ -14,6 +14,7 @@ const DEFAULT_TTL_MS = 1000 * 60 * 60 * 24 * 30; // 30 jours
 export interface SessionPayload {
   uid: string;
   role: string;
+  scr: string[] | null; // screenAccess (null = tous les écrans)
 }
 
 function getSecret(): string {
@@ -56,9 +57,10 @@ async function importKey(): Promise<CryptoKey> {
 export async function signSession(
   uid: string,
   role: string,
+  scr: string[] | null,
   ttlMs: number = DEFAULT_TTL_MS
 ): Promise<string> {
-  const data = strToB64url(JSON.stringify({ uid, role, exp: Date.now() + ttlMs }));
+  const data = strToB64url(JSON.stringify({ uid, role, scr, exp: Date.now() + ttlMs }));
   const key = await importKey();
   const sig = await crypto.subtle.sign("HMAC", key, buf(data));
   return `${data}.${bytesToB64url(new Uint8Array(sig))}`;
@@ -73,9 +75,18 @@ export async function verifySession(token: string | undefined): Promise<SessionP
     const key = await importKey();
     const ok = await crypto.subtle.verify("HMAC", key, b64urlToBytes(sig) as BufferSource, buf(data));
     if (!ok) return null;
-    const payload = JSON.parse(b64urlToStr(data)) as { uid?: string; role?: string; exp?: number };
+    const payload = JSON.parse(b64urlToStr(data)) as {
+      uid?: string;
+      role?: string;
+      scr?: string[] | null;
+      exp?: number;
+    };
     if (!payload.uid || !payload.exp || Date.now() > payload.exp) return null;
-    return { uid: payload.uid, role: payload.role || "USER" };
+    return {
+      uid: payload.uid,
+      role: payload.role || "USER",
+      scr: Array.isArray(payload.scr) ? payload.scr : null,
+    };
   } catch {
     return null;
   }

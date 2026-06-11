@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { setSessionCookie } from "@/lib/auth";
+import { parseScreenAccess } from "@/lib/screens";
 
 const WINDOW_MS = 5 * 60 * 1000; // 5 minutes
 const MAX_FAILED = 10; // tentatives échouées max par IP sur la fenêtre
@@ -47,7 +48,9 @@ export async function POST(request: NextRequest) {
       user: { id: user.id, name: user.name, role: user.role },
     });
 
-    response.cookies.set(await setSessionCookie(user.id, user.role));
+    response.cookies.set(
+      await setSessionCookie(user.id, user.role, parseScreenAccess(user.screenAccess))
+    );
     return response;
   } catch (e) {
     return NextResponse.json(

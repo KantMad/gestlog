@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { verifySession } from "@/lib/session";
+import { screenForPath, canAccessScreen } from "@/lib/screens";
 
 const PUBLIC_PATHS = ["/login", "/api/auth/", "/api/sync/"];
 
@@ -39,6 +40,16 @@ export async function middleware(request: NextRequest) {
   }
 
   if (isAdminPath(pathname) && session.role !== "ADMIN") {
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
+    }
+    return NextResponse.redirect(new URL("/dashboard", request.url));
+  }
+
+  // Autorisation par écran (pages + API screen-spécifiques). screenAccess est
+  // porté par le jeton signé. Les routes transverses renvoient screen=null.
+  const screen = screenForPath(pathname);
+  if (screen && !canAccessScreen(session.role, session.scr, screen)) {
     if (pathname.startsWith("/api/")) {
       return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
     }
