@@ -1,8 +1,15 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-export async function POST() {
+// Bootstrap des comptes initiaux — réservé à l'administration (clé de sync).
+// Ne doit JAMAIS être appelable anonymement (sinon recréation d'un ADMIN à code connu).
+export async function POST(request: NextRequest) {
   try {
+    const authHeader = request.headers.get("x-api-key");
+    if (authHeader !== process.env.SYNC_API_KEY) {
+      return NextResponse.json({ error: "Non autorise" }, { status: 401 });
+    }
+
     const adminExists = await prisma.user.findUnique({ where: { code: "2358" } });
     if (!adminExists) {
       await prisma.user.create({
