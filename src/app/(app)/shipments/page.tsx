@@ -28,7 +28,6 @@ import {
   ChevronRight,
   ChevronDown,
   Loader2,
-  CheckCircle2,
   AlertTriangle,
 } from "lucide-react";
 import { formatNumber } from "@/lib/utils";
@@ -63,9 +62,53 @@ interface Line {
   eanKnown: boolean;
 }
 
+interface Group {
+  key: string;
+  orderNumber: string | null;
+  orderSeason: string | null;
+  clientCode: string | null;
+  clientName: string | null;
+  clientKnown: boolean;
+  docs: Doc[];
+  totalQuantity: number;
+  blCount: number;
+  facCount: number;
+  lastDate: string | null;
+}
+
 function fmtDate(d: string | null): string {
   if (!d) return "—";
   return new Date(d).toLocaleDateString("fr-FR");
+}
+
+// Regroupe les documents par n° de commande TIO (sinon document isolé).
+function groupDocs(docs: Doc[]): Group[] {
+  const map = new Map<string, Group>();
+  for (const d of docs) {
+    const key = d.tioOrderNumber || `doc:${d.id}`;
+    if (!map.has(key)) {
+      map.set(key, {
+        key,
+        orderNumber: d.tioOrderNumber,
+        orderSeason: d.orderSeason,
+        clientCode: d.clientCode,
+        clientName: d.clientName,
+        clientKnown: d.clientKnown,
+        docs: [],
+        totalQuantity: 0,
+        blCount: 0,
+        facCount: 0,
+        lastDate: null,
+      });
+    }
+    const g = map.get(key)!;
+    g.docs.push(d);
+    g.totalQuantity += d.totalQuantity;
+    if (d.docType === "FAC") g.facCount++;
+    else g.blCount++;
+    if (d.documentDate && (!g.lastDate || d.documentDate > g.lastDate)) g.lastDate = d.documentDate;
+  }
+  return Array.from(map.values());
 }
 
 export default function ShipmentsPage() {
@@ -83,7 +126,7 @@ export default function ShipmentsPage() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
 
-  // Expansion
+  // Expansion (par groupe) + lignes (par document)
   const [expanded, setExpanded] = useState<string | null>(null);
   const [lines, setLines] = useState<Record<string, Line[]>>({});
   const [loadingLines, setLoadingLines] = useState(false);
@@ -115,18 +158,31 @@ export default function ShipmentsPage() {
     load();
   }, [load]);
 
-  const toggle = async (doc: Doc) => {
-    if (expanded === doc.id) {
+  const groups = groupDocs(documents);
+
+  const toggle = async (group: Group) => {
+    if (expanded === group.key) {
       setExpanded(null);
       return;
     }
-    setExpanded(doc.id);
-    if (!lines[doc.id]) {
+    setExpanded(group.key);
+    // Charge les lignes de tous les documents du groupe pas encore chargés
+    const missing = group.docs.filter((d) => !lines[d.id]);
+    if (missing.length > 0) {
       setLoadingLines(true);
       try {
-        const res = await fetch(`/api/shipments/lines?documentId=${doc.id}`);
-        const d = await res.json();
-        setLines((prev) => ({ ...prev, [doc.id]: d.lines || [] }));
+        const results = await Promise.all(
+          missing.map((d) =>
+            fetch(`/api/shipments/lines?documentId=${d.id}`)
+              .then((r) => r.json())
+              .then((j) => [d.id, j.lines || []] as [string, Line[]])
+          )
+        );
+        setLines((prev) => {
+          const next = { ...prev };
+          for (const [id, ls] of results) next[id] = ls;
+          return next;
+        });
       } catch (e) {
         console.error("Erreur chargement lignes:", e);
       } finally {
@@ -139,17 +195,76 @@ export default function ShipmentsPage() {
     ? clients.find((c) => c.clientCode === clientCode)?.clientName || clientCode
     : "Tous";
 
+  // Rendu d'un document (en-tête + lignes) dans la zone dépliée
+  const renderDoc = (d: Doc) => (
+    <div key={d.id} className="rounded-md border bg-background">
+      <div className="flex items-center gap-2 px-3 py-2 border-b">
+        <Badge variant={d.docType === "BL" ? "default" : "secondary"} className="gap-1">
+          {d.docType === "BL" ? <FileText className="h-3 w-3" /> : <Receipt className="h-3 w-3" />}
+          {d.docType}
+        </Badge>
+        <span className="font-medium text-sm">N° {d.documentNumber}</span>
+        <span className="text-xs text-muted-foreground">{fmtDate(d.documentDate)}</span>
+        <span className="ml-auto text-xs text-muted-foreground">{formatNumber(d.totalQuantity)} pièces · {d.lineCount} lignes</span>
+      </div>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Référence</TableHead>
+            <TableHead>Produit</TableHead>
+            <TableHead>Couleur</TableHead>
+            <TableHead>Taille</TableHead>
+            <TableHead>EAN</TableHead>
+            <TableHead className="text-right">Qté</TableHead>
+            <TableHead>Colis</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {(lines[d.id] || []).map((l) => (
+            <TableRow key={l.id}>
+              <TableCell className="font-mono text-xs">
+                <div className="flex items-center gap-1.5">
+                  {l.reference || "—"}
+                  {l.reference && !l.refKnown && (
+                    <span title="Référence inconnue"><AlertTriangle className="h-3.5 w-3.5 text-amber-500" /></span>
+                  )}
+                </div>
+              </TableCell>
+              <TableCell className="text-sm">{l.productLabel || "—"}</TableCell>
+              <TableCell className="text-sm">{l.colorLabel || l.colorCode || "—"}</TableCell>
+              <TableCell className="text-sm">{l.size || "—"}</TableCell>
+              <TableCell className="font-mono text-xs">{l.ean || "—"}</TableCell>
+              <TableCell className="text-right font-medium">{l.quantity}</TableCell>
+              <TableCell className="text-sm text-muted-foreground">{l.parcelNo || "—"}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
+
   return (
     <>
       <Topbar title="Livraisons" />
       <div className="p-8 space-y-6">
         <PageHeader
           title="Livraisons"
-          description="Bons de livraison et factures importés de l'entrepôt, liés aux commandes TIO"
+          description="Bons de livraison et factures importés de l'entrepôt, regroupés par commande TIO"
         />
 
         {/* Résumé */}
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-4 gap-4">
+          <Card>
+            <CardContent className="flex items-center gap-3 p-4">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-50">
+                <Package className="h-5 w-5 text-indigo-600" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold">{formatNumber(groups.length)}</p>
+                <p className="text-xs text-muted-foreground">Commandes livrées</p>
+              </div>
+            </CardContent>
+          </Card>
           <Card>
             <CardContent className="flex items-center gap-3 p-4">
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50">
@@ -157,7 +272,7 @@ export default function ShipmentsPage() {
               </div>
               <div>
                 <p className="text-2xl font-bold">{formatNumber(summary.docs)}</p>
-                <p className="text-xs text-muted-foreground">Documents</p>
+                <p className="text-xs text-muted-foreground">Documents (BL/FAC)</p>
               </div>
             </CardContent>
           </Card>
@@ -168,7 +283,7 @@ export default function ShipmentsPage() {
               </div>
               <div>
                 <p className="text-2xl font-bold">{formatNumber(summary.qty)}</p>
-                <p className="text-xs text-muted-foreground">Quantité totale</p>
+                <p className="text-xs text-muted-foreground">Pièces livrées</p>
               </div>
             </CardContent>
           </Card>
@@ -249,7 +364,7 @@ export default function ShipmentsPage() {
               <div className="space-y-1">
                 <label className="block text-xs font-medium text-muted-foreground">Recherche</label>
                 <Input
-                  placeholder="N° doc, réf, EAN, client..."
+                  placeholder="N° doc/commande, réf, EAN, client..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   className="w-56 h-9"
@@ -259,140 +374,78 @@ export default function ShipmentsPage() {
           </CardContent>
         </Card>
 
-        {/* Tableau */}
+        {/* Tableau groupé par commande */}
         <Card>
           <CardContent className="p-0">
             {loading ? (
               <div className="flex items-center justify-center py-16 text-muted-foreground">
                 <Loader2 className="h-5 w-5 animate-spin" />
               </div>
-            ) : documents.length === 0 ? (
-              <div className="py-16 text-center text-sm text-muted-foreground">
-                Aucun document.
-              </div>
+            ) : groups.length === 0 ? (
+              <div className="py-16 text-center text-sm text-muted-foreground">Aucune livraison.</div>
             ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-8"></TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>N° Document</TableHead>
-                    <TableHead>Commande</TableHead>
+                    <TableHead>N° Commande</TableHead>
                     <TableHead>Client</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead className="text-right">Qté</TableHead>
-                    <TableHead className="text-right">Lignes</TableHead>
+                    <TableHead>Saison</TableHead>
+                    <TableHead>Documents</TableHead>
+                    <TableHead>Dernière</TableHead>
+                    <TableHead className="text-right">Pièces</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {documents.map((doc) => (
-                    <Fragment key={doc.id}>
-                      <TableRow
-                        className="cursor-pointer"
-                        onClick={() => toggle(doc)}
-                      >
+                  {groups.map((g) => (
+                    <Fragment key={g.key}>
+                      <TableRow className="cursor-pointer" onClick={() => toggle(g)}>
                         <TableCell>
-                          {expanded === doc.id ? (
-                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                          ) : (
-                            <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                          )}
+                          {expanded === g.key ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
                         </TableCell>
-                        <TableCell>
-                          <Badge variant={doc.docType === "BL" ? "default" : "secondary"} className="gap-1">
-                            {doc.docType === "BL" ? <FileText className="h-3 w-3" /> : <Receipt className="h-3 w-3" />}
-                            {doc.docType}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="font-medium">{doc.documentNumber}</TableCell>
-                        <TableCell>
-                          {doc.tioOrderNumber ? (
-                            <div>
-                              <div className="font-mono text-xs">{doc.tioOrderNumber}</div>
-                              {doc.orderSeason && (
-                                <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{doc.orderSeason}</Badge>
-                              )}
-                            </div>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">—</span>
-                          )}
+                        <TableCell className="font-mono text-xs font-medium">
+                          {g.orderNumber || <span className="text-muted-foreground">(sans commande)</span>}
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
-                            <span>{doc.clientName || doc.clientCode || "—"}</span>
-                            {doc.clientCode && !doc.clientKnown && (
-                              <span title="Client absent de l'outil">
-                                <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
-                              </span>
+                            <span>{g.clientName || g.clientCode || "—"}</span>
+                            {g.clientCode && !g.clientKnown && (
+                              <span title="Client absent de l'outil"><AlertTriangle className="h-3.5 w-3.5 text-amber-500" /></span>
                             )}
                           </div>
-                          {doc.clientCode && (
-                            <span className="text-xs text-muted-foreground">{doc.clientCode}</span>
-                          )}
+                          {g.clientCode && <span className="text-xs text-muted-foreground">{g.clientCode}</span>}
                         </TableCell>
-                        <TableCell>{fmtDate(doc.documentDate)}</TableCell>
-                        <TableCell className="text-right font-medium">{formatNumber(doc.totalQuantity)}</TableCell>
-                        <TableCell className="text-right text-muted-foreground">{doc.lineCount}</TableCell>
+                        <TableCell>
+                          {g.orderSeason ? <Badge variant="secondary" className="text-xs">{g.orderSeason}</Badge> : <span className="text-xs text-muted-foreground">—</span>}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1.5">
+                            {g.blCount > 0 && <Badge className="gap-1"><FileText className="h-3 w-3" />{g.blCount} BL</Badge>}
+                            {g.facCount > 0 && <Badge variant="secondary" className="gap-1"><Receipt className="h-3 w-3" />{g.facCount} FAC</Badge>}
+                          </div>
+                        </TableCell>
+                        <TableCell>{fmtDate(g.lastDate)}</TableCell>
+                        <TableCell className="text-right font-medium">{formatNumber(g.totalQuantity)}</TableCell>
                       </TableRow>
-                      {expanded === doc.id && (
+                      {expanded === g.key && (
                         <TableRow>
-                          <TableCell colSpan={8} className="bg-muted/30 p-0">
-                            {loadingLines && !lines[doc.id] ? (
-                              <div className="flex items-center justify-center py-6 text-muted-foreground">
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              </div>
+                          <TableCell colSpan={7} className="bg-muted/30 p-0">
+                            {loadingLines && g.docs.some((d) => !lines[d.id]) ? (
+                              <div className="flex items-center justify-center py-6 text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /></div>
                             ) : (
-                              <div className="p-4">
-                                <Table>
-                                  <TableHeader>
-                                    <TableRow>
-                                      <TableHead>Référence</TableHead>
-                                      <TableHead>Produit</TableHead>
-                                      <TableHead>Couleur</TableHead>
-                                      <TableHead>Taille</TableHead>
-                                      <TableHead>EAN</TableHead>
-                                      <TableHead className="text-right">Qté</TableHead>
-                                      <TableHead>Colis</TableHead>
-                                    </TableRow>
-                                  </TableHeader>
-                                  <TableBody>
-                                    {(lines[doc.id] || []).map((l) => (
-                                      <TableRow key={l.id}>
-                                        <TableCell className="font-mono text-xs">
-                                          <div className="flex items-center gap-1.5">
-                                            {l.reference || "—"}
-                                            {l.reference && (l.refKnown ? (
-                                              <span title="Référence connue dans l'outil">
-                                                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
-                                              </span>
-                                            ) : (
-                                              <span title="Référence inconnue">
-                                                <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
-                                              </span>
-                                            ))}
-                                          </div>
-                                        </TableCell>
-                                        <TableCell className="text-sm">{l.productLabel || "—"}</TableCell>
-                                        <TableCell className="text-sm">
-                                          {l.colorLabel || l.colorCode || "—"}
-                                        </TableCell>
-                                        <TableCell className="text-sm">{l.size || "—"}</TableCell>
-                                        <TableCell className="font-mono text-xs">
-                                          <div className="flex items-center gap-1.5">
-                                            {l.ean || "—"}
-                                            {l.ean && !l.eanKnown && (
-                                              <span title="EAN inconnu dans l'outil">
-                                                <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
-                                              </span>
-                                            )}
-                                          </div>
-                                        </TableCell>
-                                        <TableCell className="text-right font-medium">{l.quantity}</TableCell>
-                                        <TableCell className="text-sm text-muted-foreground">{l.parcelNo || "—"}</TableCell>
-                                      </TableRow>
-                                    ))}
-                                  </TableBody>
-                                </Table>
+                              <div className="p-4 space-y-4">
+                                {g.blCount > 0 && (
+                                  <div className="space-y-2">
+                                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Bons de livraison</p>
+                                    {g.docs.filter((d) => d.docType !== "FAC").map(renderDoc)}
+                                  </div>
+                                )}
+                                {g.facCount > 0 && (
+                                  <div className="space-y-2">
+                                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Factures</p>
+                                    {g.docs.filter((d) => d.docType === "FAC").map(renderDoc)}
+                                  </div>
+                                )}
                               </div>
                             )}
                           </TableCell>
