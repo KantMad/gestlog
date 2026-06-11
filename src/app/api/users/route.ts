@@ -1,8 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { handleApiError } from "@/lib/api";
+import { z } from "zod";
+import { handleApiError, parseBody } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { parseScreenAccess, APP_SCREEN_KEYS } from "@/lib/screens";
+
+const UserCreateSchema = z.object({
+  name: z.string().trim().min(1, "Nom requis"),
+  code: z.string().min(4, "Le code doit faire au moins 4 caractères"),
+  role: z.enum(["ADMIN", "USER"]).optional(),
+  screenAccess: z.array(z.string()).nullable().optional(),
+});
 
 // Validate + normalize a screenAccess payload into a JSON string (or null).
 function normalizeScreenAccess(value: unknown): string | null {
@@ -48,21 +56,9 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const { name, code, role, screenAccess } = await request.json();
-
-    if (!name || !code) {
-      return NextResponse.json(
-        { error: "Nom et code requis" },
-        { status: 400 }
-      );
-    }
-
-    if (code.length < 4) {
-      return NextResponse.json(
-        { error: "Le code doit faire au moins 4 caractères" },
-        { status: 400 }
-      );
-    }
+    const parsed = await parseBody(request, UserCreateSchema);
+    if ("error" in parsed) return parsed.error;
+    const { name, code, role, screenAccess } = parsed.data;
 
     const existing = await prisma.user.findUnique({ where: { code } });
     if (existing) {
