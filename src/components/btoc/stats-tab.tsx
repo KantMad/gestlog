@@ -107,6 +107,12 @@ export function BtocStatsTab() {
   const [parentProduct, setParentProduct] = useState("");
   const [filtersApplied, setFiltersApplied] = useState(false);
 
+  // Répartition par taille (par sous-catégorie BtoB)
+  const [sizeDist, setSizeDist] = useState<
+    { subCategory: string; total: number; sizes: { size: string; qty: number; pct: number }[] }[]
+  >([]);
+  const [selectedSubCat, setSelectedSubCat] = useState("");
+
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
@@ -116,10 +122,18 @@ export function BtocStatsTab() {
       if (category) params.set("category", category);
       if (parentProduct) params.set("parentProduct", parentProduct);
 
-      const res = await fetch(`/api/btoc/stats?${params}`);
+      const [res, sdRes] = await Promise.all([
+        fetch(`/api/btoc/stats?${params}`),
+        fetch(`/api/btoc/size-distribution?${params}`),
+      ]);
       if (!res.ok) throw new Error("Erreur API");
       const d = await res.json();
       setData(d);
+      if (sdRes.ok) {
+        const sd = await sdRes.json();
+        setSizeDist(sd.subCategories || []);
+        setSelectedSubCat((prev) => prev || (sd.subCategories?.[0]?.subCategory ?? ""));
+      }
     } catch (e) {
       console.error("Erreur chargement stats BtoC:", e);
     } finally {
@@ -647,6 +661,59 @@ export function BtocStatsTab() {
                 />
               </LineChart>
             </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Répartition des tailles par sous-catégorie BtoB */}
+      {sizeDist.length > 0 && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <CardTitle className="text-base">
+                Répartition des tailles vendues — par sous-catégorie BtoB
+              </CardTitle>
+              <Select value={selectedSubCat} onValueChange={(v) => v && setSelectedSubCat(v)}>
+                <SelectTrigger className="w-72 h-9">
+                  <span className="text-sm truncate">{selectedSubCat || "Choisir une sous-catégorie"}</span>
+                </SelectTrigger>
+                <SelectContent>
+                  {sizeDist.map((s) => (
+                    <SelectItem key={s.subCategory} value={s.subCategory}>
+                      {s.subCategory} ({formatNumber(s.total)})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {(() => {
+              const sel = sizeDist.find((s) => s.subCategory === selectedSubCat);
+              if (!sel) return <p className="text-sm text-muted-foreground">Aucune donnée.</p>;
+              return (
+                <div className="space-y-2">
+                  <p className="mb-4 text-xs text-muted-foreground">
+                    {formatNumber(sel.total)} pièces vendues — pourcentage de chaque taille
+                  </p>
+                  {sel.sizes.map((x) => (
+                    <div key={x.size} className="flex items-center gap-3">
+                      <span className="w-12 text-right text-sm font-medium">{x.size}</span>
+                      <div className="h-6 flex-1 overflow-hidden rounded bg-muted">
+                        <div
+                          className="h-full rounded bg-blue-500"
+                          style={{ width: `${x.pct}%` }}
+                        />
+                      </div>
+                      <span className="w-28 text-right text-sm tabular-nums">
+                        {x.pct}%{" "}
+                        <span className="text-muted-foreground">({formatNumber(x.qty)})</span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
           </CardContent>
         </Card>
       )}
