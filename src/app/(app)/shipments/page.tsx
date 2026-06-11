@@ -399,7 +399,19 @@ export default function ShipmentsPage() {
                 <TableBody>
                   {groups.map((g) => (
                     <Fragment key={g.key}>
-                      <TableRow className="cursor-pointer" onClick={() => toggle(g)}>
+                      <TableRow
+                        className="cursor-pointer"
+                        onClick={() => toggle(g)}
+                        role="button"
+                        tabIndex={0}
+                        aria-expanded={expanded === g.key}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            toggle(g);
+                          }
+                        }}
+                      >
                         <TableCell>
                           {expanded === g.key ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
                         </TableCell>

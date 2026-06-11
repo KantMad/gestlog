@@ -421,6 +421,7 @@ export default function UsersPage() {
                           className="h-8 w-8 p-0"
                           onClick={() => openEdit(u)}
                           title="Modifier les accès"
+                          aria-label="Modifier les accès"
                         >
                           <Pencil className="h-4 w-4 text-zinc-600" />
                         </Button>
@@ -431,9 +432,8 @@ export default function UsersPage() {
                               size="sm"
                               className="h-8 w-8 p-0"
                               onClick={() => toggleActive(u.id, u.isActive)}
-                              title={
-                                u.isActive ? "Désactiver" : "Réactiver"
-                              }
+                              title={u.isActive ? "Désactiver" : "Réactiver"}
+                              aria-label={u.isActive ? "Désactiver" : "Réactiver"}
                             >
                               {u.isActive ? (
                                 <UserX className="h-4 w-4 text-amber-600" />
@@ -447,6 +447,7 @@ export default function UsersPage() {
                               className="h-8 w-8 p-0"
                               onClick={() => deleteUser(u.id, u.name)}
                               title="Supprimer"
+                              aria-label="Supprimer l'utilisateur"
                             >
                               <Trash2 className="h-4 w-4 text-red-600" />
                             </Button>

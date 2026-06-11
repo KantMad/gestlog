@@ -116,6 +116,7 @@ export function Sidebar() {
               onClick={logout}
               className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
               title="Se déconnecter"
+              aria-label="Se déconnecter"
             >
               <LogOut className="h-4 w-4" />
             </button>

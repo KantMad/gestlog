@@ -228,7 +228,19 @@ export default function ReassortPage() {
                     const S = STATUS[doc.status];
                     return (
                       <Fragment key={doc.id}>
-                        <TableRow className="cursor-pointer" onClick={() => toggle(doc)}>
+                        <TableRow
+                          className="cursor-pointer"
+                          onClick={() => toggle(doc)}
+                          role="button"
+                          tabIndex={0}
+                          aria-expanded={expanded === doc.id}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              toggle(doc);
+                            }
+                          }}
+                        >
                           <TableCell>{expanded === doc.id ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}</TableCell>
                           <TableCell className="font-mono text-xs font-medium">{doc.orderNumber}</TableCell>
                           <TableCell>
