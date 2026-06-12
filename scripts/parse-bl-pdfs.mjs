@@ -15,7 +15,7 @@ const WEBHOOK = "https://centralway.pro/webhook/gestlog-pdf";
 // ── parseur ──────────────────────────────────────────
 const ALPHA = new Set(["XXS","XS","S","M","L","XL","XXL","2XL","3XL","4XL","5XL","6XL","7XL","TU","U","T0","T1","T2","T3","T4","T5"]);
 const isSize = (s) => ALPHA.has(s.toUpperCase()) || /^\d{2,3}$/.test(s);
-const REF_RE = /^[A-Z]{4,6}_[A-Z]{1,2}[0-9]{2,3}$/; // ex: QMTSMC_C312, KMCHML_L003, QMBELT_P001
+const REF_RE = /^[A-Z]{3,8}_[A-Z0-9]{2,8}$/; // ex: QMTSMC_C312, KMCHML_L003, QMBELT_P001, CVMO_CHMC01
 
 function groupRows(items, tol = 3) {
   const sorted = [...items].sort((a, b) => b.y - a.y || a.x - b.x);
