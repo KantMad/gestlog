@@ -15,7 +15,7 @@ const WEBHOOK = "https://centralway.pro/webhook/gestlog-pdf";
 // ── parseur ──────────────────────────────────────────
 const ALPHA = new Set(["XXS","XS","S","M","L","XL","XXL","2XL","3XL","4XL","5XL","6XL","7XL","TU","U","T0","T1","T2","T3","T4","T5"]);
 const isSize = (s) => ALPHA.has(s.toUpperCase()) || /^\d{2,3}$/.test(s);
-const REF_RE = /^[A-Z]{3,8}_[A-Z0-9]{2,8}$/; // ex: QMTSMC_C312, KMCHML_L003, QMBELT_P001, CVMO_CHMC01
+const REF_RE = /^[A-Z]{2,}[A-Z0-9]*_[A-Z0-9]{2,8}$/; // ex: QMTSMC_C312, CVMO_CHMC01, NMD201_D760 (denim)
 
 function groupRows(items, tol = 3) {
   const sorted = [...items].sort((a, b) => b.y - a.y || a.x - b.x);
@@ -35,22 +35,22 @@ function parseLines(items) {
     const toks = row.items;
     const refTok = toks.find((t) => REF_RE.test(t.s));
     if (refTok) curRef = refTok.s;
-    const codeTok = toks.find((t) => t.x < 40 && /^\d{2,3}$/.test(t.s)); // code couleur
-    // en-tête tailles : ligne SANS code couleur, avec >=1 taille alpha (ex: TU)
-    // OU >=2 tailles numériques (ex: pantalons 38 40 42). Le "sans code couleur"
-    // évite de confondre une ligne de quantités (qui a un code couleur) avec un en-tête.
-    const zone = toks.filter((t) => t.x > 180 && t.x < 410);
-    const alphaSz = zone.filter((t) => ALPHA.has(t.s.toUpperCase()));
-    const numSz = zone.filter((t) => /^\d{2,3}$/.test(t.s));
-    if (!codeTok && (alphaSz.length >= 1 || numSz.length >= 2)) {
-      sizeMap = [...alphaSz, ...numSz]
-        .map((t) => ({ size: t.s.toUpperCase(), x: t.x }))
-        .sort((a, b) => a.x - b.x);
+    const codeTok = toks.find((t) => t.x < 40 && /^\d{2,3}$/.test(t.s)); // code couleur (gauche)
+    // En-tête tailles : ligne SANS code couleur, avec des tailles à droite de la zone
+    // libellé (x>=60). >=1 alpha (ex: TU) OU >=2 numériques (pantalons/denim).
+    // Bornes x DYNAMIQUES : les templates de BL varient (tailles à x~107 ou x~196).
+    const cands = toks.filter((t) => t.x >= 60 && t.x < 420 && (ALPHA.has(t.s.toUpperCase()) || /^\d{2,3}$/.test(t.s)));
+    const alphaH = cands.filter((t) => ALPHA.has(t.s.toUpperCase()));
+    const numH = cands.filter((t) => /^\d{2,3}$/.test(t.s));
+    if (!codeTok && (alphaH.length >= 1 || numH.length >= 2)) {
+      sizeMap = cands.map((t) => ({ size: t.s.toUpperCase(), x: t.x })).sort((a, b) => a.x - b.x);
       continue;
     }
-    // ligne de quantités : avec code couleur (multi-coloris) OU sans (mono-coloris → "000")
+    // Ligne de quantités : code couleur (multi-coloris) ou sans (mono → "000").
+    // Quantités = nombres dans la plage des colonnes tailles (exclut le total à droite).
     if (sizeMap && curRef) {
-      const qtys = toks.filter((t) => t.x > 180 && t.x < 410 && /^\d+$/.test(t.s));
+      const left = sizeMap[0].x, right = sizeMap[sizeMap.length - 1].x;
+      const qtys = toks.filter((t) => /^\d+$/.test(t.s) && t.x >= left - 14 && t.x <= right + 14);
       const mapped = [];
       for (const q of qtys) {
         const sz = sizeMap.reduce((b, s) => Math.abs(s.x - q.x) < Math.abs(b.x - q.x) ? s : b);
@@ -58,7 +58,9 @@ function parseLines(items) {
       }
       if (mapped.length) {
         const colorCode = codeTok ? codeTok.s : "000";
-        const colorLabel = codeTok ? toks.filter((t) => t.x >= 40 && t.x < 180).map((t) => t.s).join(" ").trim() : "";
+        const colorLabel = codeTok
+          ? toks.filter((t) => t.x >= 40 && t.x < left - 4 && !/^\d+$/.test(t.s)).map((t) => t.s).join(" ").trim()
+          : "";
         for (const m of mapped) lines.push({ reference: curRef, colorCode, colorLabel, size: m.size, quantity: m.quantity });
       }
     }
