@@ -44,21 +44,33 @@ export async function GET(request: NextRequest) {
       ? Math.round((completedOrders / supplierOrders.length) * 100)
       : 0;
 
-  const deliveredLines = await prisma.deliveryLine.findMany({
-    where: { delivery: { status: "EXPEDIEE" } },
-    select: { totalQuantity: true },
+  // Soldé (pièces annulées) sur la saison → retirées du dénominateur.
+  const cancelledAgg = await prisma.clientOrderLine.aggregate({
+    where: { clientOrder: { seasonId } },
+    _sum: { cancelledTotal: true },
   });
-  const deliveredPieces = deliveredLines.reduce(
-    (sum, l) => sum + l.totalQuantity,
-    0
+  const cancelledPieces = cancelledAgg._sum.cancelledTotal || 0;
+
+  // Livré = cumul des BL des commandes de la saison (et non l'ancien workflow Delivery).
+  const blAgg = await prisma.$queryRawUnsafe<{ delivered: bigint }[]>(
+    `SELECT COALESCE(SUM(l.quantity),0)::bigint AS delivered
+     FROM "ClientOrder" co
+     JOIN "WarehouseDocument" d ON d."tioOrderNumber" = co."orderNumber" AND d."docType" = 'BL'
+     JOIN "WarehouseDocumentLine" l ON l."documentId" = d.id
+     WHERE co."seasonId" = $1`,
+    seasonId
   );
+  const deliveredPieces = Number(blAgg[0]?.delivered || 0);
+  const effectivePieces = Math.max(0, totalPieces - cancelledPieces);
   const deliveryRate =
-    totalPieces > 0 ? Math.round((deliveredPieces / totalPieces) * 100) : 0;
+    effectivePieces > 0 ? Math.round((deliveredPieces / effectivePieces) * 100) : 0;
 
   return NextResponse.json({
     data: {
       totalOrders: clientOrderCount,
       totalPieces,
+      cancelledPieces,
+      deliveredPieces,
       receptionRate,
       deliveryRate,
       pendingAllocations: allocationCount,

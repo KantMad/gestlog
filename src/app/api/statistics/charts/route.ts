@@ -25,20 +25,36 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    const clientOrderData = new Map<string, { name: string; ordered: number }>();
+    const clientOrderData = new Map<string, { name: string; ordered: number; cancelled: number }>();
     for (const order of clientOrders) {
       const total = order.lines.reduce((s, l) => s + l.totalQuantity, 0);
+      const cancelled = order.lines.reduce((s, l) => s + (l.cancelledTotal || 0), 0);
       if (total === 0 && referenceFilter) continue;
       const existing = clientOrderData.get(order.clientId);
       if (existing) {
         existing.ordered += total;
+        existing.cancelled += cancelled;
       } else {
         clientOrderData.set(order.clientId, {
           name: order.client.name,
           ordered: total,
+          cancelled,
         });
       }
     }
+
+    // ─── Livré réel = cumul des BL (par client) ──────────────
+    const blRows = await prisma.$queryRawUnsafe<{ clientId: string; delivered: bigint }[]>(
+      `SELECT co."clientId", COALESCE(SUM(l.quantity),0)::bigint AS delivered
+       FROM "ClientOrder" co
+       JOIN "WarehouseDocument" d ON d."tioOrderNumber" = co."orderNumber" AND d."docType" = 'BL'
+       JOIN "WarehouseDocumentLine" l ON l."documentId" = d.id
+       WHERE co."seasonId" = $1 ${referenceFilter ? "AND l.reference ILIKE '%' || $2 || '%'" : ""}
+       GROUP BY co."clientId"`,
+      ...(referenceFilter ? [seasonId, referenceFilter] : [seasonId])
+    );
+    const clientBlDelivered = new Map<string, number>();
+    for (const r of blRows) clientBlDelivered.set(r.clientId, Number(r.delivered));
 
     // ─── Deliveries ──────────────────────────────────────────
     const deliveries = await prisma.delivery.findMany({
@@ -85,14 +101,21 @@ export async function GET(request: NextRequest) {
       clientDeliveryDetail.set(d.clientId, detail);
     }
 
-    const clientBreakdown = Array.from(clientOrderData.entries()).map(
-      ([clientId, data]) => ({
-        name: data.name,
-        commandé: data.ordered,
-        livré: clientDelivered.get(clientId) || 0,
-        restant: data.ordered - (clientDelivered.get(clientId) || 0),
+    // Répartition par client : livré = BL, soldé = annulé, restant = commandé − soldé − livré.
+    // Trié par volume commandé, limité aux 15 plus gros (lisibilité du graphe).
+    const clientBreakdown = Array.from(clientOrderData.entries())
+      .map(([clientId, data]) => {
+        const livré = clientBlDelivered.get(clientId) || 0;
+        return {
+          name: data.name,
+          commandé: data.ordered,
+          livré,
+          soldé: data.cancelled,
+          restant: Math.max(0, data.ordered - data.cancelled - livré),
+        };
       })
-    );
+      .sort((a, b) => b.commandé - a.commandé)
+      .slice(0, 15);
 
     // Client delivery detail (all statuses)
     const clientDeliveries = Array.from(clientDeliveryDetail.values());
@@ -161,20 +184,31 @@ export async function GET(request: NextRequest) {
       manquant: Math.max(0, s.ordered - s.received),
     }));
 
-    // ─── Delivery status ─────────────────────────────────────
+    // ─── Statut des commandes (réconciliation BL : commandé vs livré, soldage) ──
+    const stRows = await prisma.$queryRawUnsafe<
+      { livree: bigint; soldee: bigint; partielle: bigint; non_livree: bigint }[]
+    >(
+      `WITH o AS (
+        SELECT
+          (SELECT COALESCE(SUM(col."totalQuantity"),0) FROM "ClientOrderLine" col WHERE col."clientOrderId"=co.id) ord,
+          (SELECT COALESCE(SUM(col."cancelledTotal"),0) FROM "ClientOrderLine" col WHERE col."clientOrderId"=co.id) can,
+          (SELECT COALESCE(SUM(l.quantity),0) FROM "WarehouseDocument" d JOIN "WarehouseDocumentLine" l ON l."documentId"=d.id WHERE d."tioOrderNumber"=co."orderNumber" AND d."docType"='BL') del
+        FROM "ClientOrder" co WHERE co."seasonId"=$1
+      )
+      SELECT
+        COUNT(*) FILTER (WHERE NOT (del=0 AND can=0) AND del >= GREATEST(ord-can,0) AND can=0)::bigint livree,
+        COUNT(*) FILTER (WHERE NOT (del=0 AND can=0) AND del >= GREATEST(ord-can,0) AND can>0)::bigint soldee,
+        COUNT(*) FILTER (WHERE NOT (del=0 AND can=0) AND del < GREATEST(ord-can,0))::bigint partielle,
+        COUNT(*) FILTER (WHERE del=0 AND can=0)::bigint non_livree
+      FROM o`,
+      seasonId
+    );
+    const st = stRows[0];
     const deliveryStatus = [
-      {
-        name: "Planifiées",
-        value: deliveries.filter((d) => d.status === "PLANIFIEE").length,
-      },
-      {
-        name: "En préparation",
-        value: deliveries.filter((d) => d.status === "EN_PREPARATION").length,
-      },
-      {
-        name: "Expédiées",
-        value: deliveries.filter((d) => d.status === "EXPEDIEE").length,
-      },
+      { name: "Livrées", value: Number(st?.livree || 0) },
+      { name: "Soldées", value: Number(st?.soldee || 0) },
+      { name: "Partielles", value: Number(st?.partielle || 0) },
+      { name: "Non livrées", value: Number(st?.non_livree || 0) },
     ];
 
     // ─── Timeline ────────────────────────────────────────────

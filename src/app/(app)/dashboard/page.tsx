@@ -38,13 +38,14 @@ interface DashboardStats {
 }
 
 interface ChartData {
-  clientBreakdown: { name: string; commandé: number; livré: number; restant: number }[];
+  clientBreakdown: { name: string; commandé: number; livré: number; soldé: number; restant: number }[];
   supplierConformity: { name: string; commandé: number; reçu: number; conformité: number }[];
   deliveryStatus: { name: string; value: number }[];
   deliveryTimeline: { date: string; client: string; pièces: number }[];
 }
 
-const PIE_COLORS = ["#3B82F6", "#F59E0B", "#10B981"];
+// Couleurs des statuts : Livrées / Soldées / Partielles / Non livrées
+const PIE_COLORS = ["#10B981", "#0EA5E9", "#F59E0B", "#9CA3AF"];
 
 export default function DashboardPage() {
   const { activeSeason, loading } = useSeason();
@@ -176,36 +177,27 @@ export default function DashboardPage() {
                   <Card>
                     <CardHeader>
                       <CardTitle className="text-base">
-                        Répartition par client
+                        Répartition par client{" "}
+                        <span className="text-xs font-normal text-muted-foreground">(top 15 — livré / soldé / restant)</span>
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <ResponsiveContainer width="100%" height={300}>
-                        <BarChart data={charts!.clientBreakdown}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                          <XAxis
+                      <ResponsiveContainer width="100%" height={Math.max(220, charts!.clientBreakdown.length * 30 + 50)}>
+                        <BarChart data={charts!.clientBreakdown} layout="vertical" margin={{ left: 8, right: 16 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false} />
+                          <XAxis type="number" tick={{ fontSize: 11 }} />
+                          <YAxis
+                            type="category"
                             dataKey="name"
+                            width={160}
                             tick={{ fontSize: 11 }}
                             interval={0}
-                            angle={-30}
-                            textAnchor="end"
-                            height={60}
                           />
-                          <YAxis tick={{ fontSize: 11 }} />
                           <Tooltip />
                           <Legend />
-                          <Bar
-                            dataKey="livré"
-                            stackId="a"
-                            fill="#10B981"
-                            radius={[0, 0, 0, 0]}
-                          />
-                          <Bar
-                            dataKey="restant"
-                            stackId="a"
-                            fill="#E5E7EB"
-                            radius={[4, 4, 0, 0]}
-                          />
+                          <Bar dataKey="livré" stackId="a" fill="#10B981" name="Livré" />
+                          <Bar dataKey="soldé" stackId="a" fill="#0EA5E9" name="Soldé" />
+                          <Bar dataKey="restant" stackId="a" fill="#E5E7EB" name="Restant" radius={[0, 4, 4, 0]} />
                         </BarChart>
                       </ResponsiveContainer>
                     </CardContent>
@@ -246,7 +238,7 @@ export default function DashboardPage() {
                   <Card>
                     <CardHeader>
                       <CardTitle className="text-base">
-                        Statut des livraisons
+                        Statut des commandes
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="flex items-center justify-center">
