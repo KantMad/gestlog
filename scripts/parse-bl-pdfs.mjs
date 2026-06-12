@@ -50,7 +50,9 @@ function parseLines(items) {
     // Quantités = nombres dans la plage des colonnes tailles (exclut le total à droite).
     if (sizeMap && curRef) {
       const left = sizeMap[0].x, right = sizeMap[sizeMap.length - 1].x;
-      const qtys = toks.filter((t) => /^\d+$/.test(t.s) && t.x >= left - 14 && t.x <= right + 14);
+      // quantité = 1 à 4 chiffres max (exclut les EAN/codes à 8-13 chiffres parfois
+      // positionnés près des colonnes tailles sur certains templates).
+      const qtys = toks.filter((t) => /^\d{1,4}$/.test(t.s) && t.x >= left - 14 && t.x <= right + 14);
       const mapped = [];
       for (const q of qtys) {
         const sz = sizeMap.reduce((b, s) => Math.abs(s.x - q.x) < Math.abs(b.x - q.x) ? s : b);
