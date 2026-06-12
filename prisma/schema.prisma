@@ -260,6 +260,12 @@ model ClientOrderLine {
   totalQuantity    Int
   category         String?  // catégorie produit
   sizeTypeCode     String?  // code du type de taille (lien vers SizeType)
+  // Pièces SOLDÉES (ne seront jamais livrées) : retirées du compte "à livrer".
+  // JSON { taille: qté annulée }. Trace conservée (qui/quand).
+  cancelledBySize  String   @default("{}")
+  cancelledTotal   Int      @default(0)
+  cancelledAt      DateTime?
+  cancelledBy      String?
   createdAt        DateTime @default(now())
 
   clientOrder ClientOrder @relation(fields: [clientOrderId], references: [id], onDelete: Cascade)

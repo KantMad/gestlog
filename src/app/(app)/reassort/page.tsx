@@ -7,6 +7,7 @@ import { Topbar } from "@/components/layout/topbar";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -31,6 +32,7 @@ import {
   Loader2,
   CheckCircle2,
   AlertTriangle,
+  Ban,
 } from "lucide-react";
 import { formatNumber } from "@/lib/utils";
 
@@ -43,10 +45,11 @@ interface Doc {
   seasonName: string;
   orderDate: string | null;
   ordered: number;
+  cancelled: number;
   delivered: number;
   missing: number;
   docCount: number;
-  status: "NON_LIVREE" | "PARTIELLE" | "LIVREE";
+  status: "NON_LIVREE" | "PARTIELLE" | "LIVREE" | "SOLDEE";
 }
 interface Line {
   reference: string;
@@ -54,12 +57,14 @@ interface Line {
   colorLabel: string;
   size: string;
   ordered: number;
+  cancelled: number;
   delivered: number;
   missing: number;
 }
 
 const STATUS = {
   LIVREE: { label: "Livrée", cls: "bg-emerald-100 text-emerald-700", icon: CheckCircle2 },
+  SOLDEE: { label: "Soldée", cls: "bg-sky-100 text-sky-700", icon: Ban },
   PARTIELLE: { label: "Partielle", cls: "bg-amber-100 text-amber-700", icon: AlertTriangle },
   NON_LIVREE: { label: "Non livrée", cls: "bg-zinc-100 text-zinc-600", icon: CircleSlash },
 } as const;
@@ -70,7 +75,7 @@ function fmtDate(d: string | null) {
 
 export default function ReassortPage() {
   const [documents, setDocuments] = useState<Doc[]>([]);
-  const [summary, setSummary] = useState({ orders: 0, ordered: 0, delivered: 0, livree: 0, partielle: 0, nonLivree: 0 });
+  const [summary, setSummary] = useState({ orders: 0, ordered: 0, cancelled: 0, delivered: 0, livree: 0, soldee: 0, partielle: 0, nonLivree: 0 });
   const [clients, setClients] = useState<{ code: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -96,7 +101,7 @@ export default function ReassortPage() {
       if (!res.ok) throw new Error();
       const d = await res.json();
       setDocuments(d.documents || []);
-      setSummary(d.summary || { orders: 0, ordered: 0, delivered: 0, livree: 0, partielle: 0, nonLivree: 0 });
+      setSummary(d.summary || { orders: 0, ordered: 0, cancelled: 0, delivered: 0, livree: 0, soldee: 0, partielle: 0, nonLivree: 0 });
       setClients(d.clients || []);
     } catch {
       toast.error("Impossible de charger les commandes");
@@ -121,6 +126,40 @@ export default function ReassortPage() {
         setLoadingLines(false);
       }
     }
+  };
+
+  // Solde des pièces : envoie la quantité annulée (absolue) pour chaque pièce,
+  // recharge le détail + le résumé (statuts).
+  const sendCancel = async (
+    docId: string,
+    items: { reference: string; colorCode: string; size: string; quantity: number }[]
+  ) => {
+    try {
+      const res = await fetch("/api/reassort/cancel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId: docId, items }),
+      });
+      if (!res.ok) throw new Error();
+      const d = await (await fetch(`/api/reassort/lines?orderId=${docId}`)).json();
+      setLines((prev) => ({ ...prev, [docId]: d.lines || [] }));
+      load();
+    } catch {
+      toast.error("Échec du soldage de la commande");
+    }
+  };
+
+  // Solde tout le reste : annule toutes les pièces non livrées de la commande.
+  const solderRest = (doc: Doc) => {
+    const items = (lines[doc.id] || [])
+      .filter((l) => l.missing > 0)
+      .map((l) => ({ reference: l.reference, colorCode: l.color, size: l.size, quantity: l.cancelled + l.missing }));
+    if (!items.length) {
+      toast.info("Aucune pièce restante à solder.");
+      return;
+    }
+    if (!confirm(`Solder ${doc.orderNumber} : ${items.reduce((s, i) => s + i.quantity - 0, 0)} pièce(s) seront marquées « ne seront jamais livrées ». Continuer ?`)) return;
+    sendCancel(doc.id, items);
   };
 
   const clientLabel = clientCode ? clients.find((c) => c.code === clientCode)?.name || clientCode : "Tous";
@@ -179,6 +218,7 @@ export default function ReassortPage() {
                   <SelectContent>
                     <SelectItem value="all">Tous</SelectItem>
                     <SelectItem value="LIVREE">Livrées</SelectItem>
+                    <SelectItem value="SOLDEE">Soldées</SelectItem>
                     <SelectItem value="PARTIELLE">Partielles</SelectItem>
                     <SelectItem value="NON_LIVREE">Non livrées</SelectItem>
                   </SelectContent>
@@ -237,7 +277,10 @@ export default function ReassortPage() {
                             <div className="text-xs text-muted-foreground">{doc.clientCode}</div>
                           </TableCell>
                           <TableCell className="text-sm text-muted-foreground">{doc.catalog || "—"}</TableCell>
-                          <TableCell className="text-right font-medium">{formatNumber(doc.ordered)}</TableCell>
+                          <TableCell className="text-right font-medium">
+                            {formatNumber(doc.ordered)}
+                            {doc.cancelled > 0 && <div className="text-[10px] font-normal text-sky-600">−{formatNumber(doc.cancelled)} soldé</div>}
+                          </TableCell>
                           <TableCell className="text-right">{formatNumber(doc.delivered)}</TableCell>
                           <TableCell className={`text-right font-medium ${doc.missing > 0 ? "text-amber-600" : "text-muted-foreground"}`}>{doc.missing > 0 ? formatNumber(doc.missing) : "—"}</TableCell>
                           <TableCell>
@@ -250,7 +293,15 @@ export default function ReassortPage() {
                               {loadingLines && !lines[doc.id] ? (
                                 <div className="flex items-center justify-center py-6 text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /></div>
                               ) : (
-                                <div className="p-4">
+                                <div className="p-4 space-y-3">
+                                  <div className="flex items-center justify-between gap-3">
+                                    <p className="text-xs text-muted-foreground">
+                                      « Annulé » = pièces qui ne seront jamais livrées (soldées) — retirées du reste à livrer, trace conservée.
+                                    </p>
+                                    <Button size="sm" variant="outline" className="h-7 gap-1 text-xs shrink-0" onClick={() => solderRest(doc)}>
+                                      <Ban className="h-3 w-3" /> Solder le reste
+                                    </Button>
+                                  </div>
                                   <Table>
                                     <TableHeader>
                                       <TableRow>
@@ -259,20 +310,43 @@ export default function ReassortPage() {
                                         <TableHead>Taille</TableHead>
                                         <TableHead className="text-right">Commandé</TableHead>
                                         <TableHead className="text-right">Livré</TableHead>
-                                        <TableHead className="text-right">Manquant</TableHead>
+                                        <TableHead className="text-right">Annulé</TableHead>
+                                        <TableHead className="text-right">Reste</TableHead>
                                       </TableRow>
                                     </TableHeader>
                                     <TableBody>
-                                      {(lines[doc.id] || []).map((l, idx) => (
-                                        <TableRow key={idx} className={l.missing > 0 ? "bg-amber-50/50" : ""}>
-                                          <TableCell className="font-mono text-xs">{l.reference}</TableCell>
-                                          <TableCell className="text-sm">{l.colorLabel ? `${l.color} — ${l.colorLabel}` : l.color}</TableCell>
-                                          <TableCell className="text-sm">{l.size}</TableCell>
-                                          <TableCell className="text-right">{l.ordered}</TableCell>
-                                          <TableCell className="text-right">{l.delivered}</TableCell>
-                                          <TableCell className={`text-right font-medium ${l.missing > 0 ? "text-amber-600" : "text-muted-foreground"}`}>{l.missing > 0 ? l.missing : "—"}</TableCell>
-                                        </TableRow>
-                                      ))}
+                                      {(lines[doc.id] || []).map((l, idx) => {
+                                        const cancellable = l.missing > 0 || l.cancelled > 0;
+                                        return (
+                                          <TableRow key={idx} className={l.cancelled > 0 ? "bg-sky-50/50" : l.missing > 0 ? "bg-amber-50/50" : ""}>
+                                            <TableCell className="font-mono text-xs">{l.reference}</TableCell>
+                                            <TableCell className="text-sm">{l.colorLabel ? `${l.color} — ${l.colorLabel}` : l.color}</TableCell>
+                                            <TableCell className="text-sm">{l.size}</TableCell>
+                                            <TableCell className="text-right">{l.ordered}</TableCell>
+                                            <TableCell className="text-right">{l.delivered}</TableCell>
+                                            <TableCell className="text-right">
+                                              {cancellable ? (
+                                                <Input
+                                                  type="number"
+                                                  min={0}
+                                                  defaultValue={l.cancelled}
+                                                  key={`${l.reference}-${l.color}-${l.size}-${l.cancelled}`}
+                                                  className="h-7 w-16 text-right ml-auto"
+                                                  aria-label={`Annulé ${l.reference} ${l.size}`}
+                                                  onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                                                  onBlur={(e) => {
+                                                    const v = Math.max(0, parseInt(e.target.value) || 0);
+                                                    if (v !== l.cancelled) sendCancel(doc.id, [{ reference: l.reference, colorCode: l.color, size: l.size, quantity: v }]);
+                                                  }}
+                                                />
+                                              ) : (
+                                                <span className="text-muted-foreground">—</span>
+                                              )}
+                                            </TableCell>
+                                            <TableCell className={`text-right font-medium ${l.missing > 0 ? "text-amber-600" : "text-muted-foreground"}`}>{l.missing > 0 ? l.missing : "—"}</TableCell>
+                                          </TableRow>
+                                        );
+                                      })}
                                     </TableBody>
                                   </Table>
                                 </div>

@@ -41,6 +41,7 @@ export async function GET(request: NextRequest) {
         seasonName: string;
         orderDate: Date | null;
         ordered: bigint;
+        cancelled: bigint;
         delivered: bigint;
         docCount: bigint;
       }[]
@@ -48,6 +49,7 @@ export async function GET(request: NextRequest) {
       `SELECT co.id, co."orderNumber", cl.code AS "clientCode", cl.name AS "clientName",
               cat.name AS catalog, se.name AS "seasonName", co."orderDate",
               (SELECT COALESCE(SUM(col."totalQuantity"),0) FROM "ClientOrderLine" col WHERE col."clientOrderId" = co.id) AS ordered,
+              (SELECT COALESCE(SUM(col."cancelledTotal"),0) FROM "ClientOrderLine" col WHERE col."clientOrderId" = co.id) AS cancelled,
               (SELECT COALESCE(SUM(l.quantity),0) FROM "WarehouseDocument" d
                  JOIN "WarehouseDocumentLine" l ON l."documentId" = d.id
                  WHERE d."tioOrderNumber" = co."orderNumber" AND d."docType" = 'BL') AS delivered,
@@ -65,9 +67,14 @@ export async function GET(request: NextRequest) {
 
     let documents = rows.map((r) => {
       const ordered = Number(r.ordered);
+      const cancelled = Number(r.cancelled);
       const delivered = Number(r.delivered);
-      const status =
-        delivered === 0 ? "NON_LIVREE" : delivered >= ordered ? "LIVREE" : "PARTIELLE";
+      // Quantité réellement attendue après soldage des pièces annulées.
+      const effective = Math.max(0, ordered - cancelled);
+      let status: string;
+      if (delivered === 0 && cancelled === 0) status = "NON_LIVREE";
+      else if (delivered >= effective) status = cancelled > 0 ? "SOLDEE" : "LIVREE";
+      else status = "PARTIELLE";
       return {
         id: r.id,
         orderNumber: r.orderNumber,
@@ -77,8 +84,9 @@ export async function GET(request: NextRequest) {
         seasonName: r.seasonName,
         orderDate: r.orderDate,
         ordered,
+        cancelled,
         delivered,
-        missing: Math.max(0, ordered - delivered),
+        missing: Math.max(0, effective - delivered),
         docCount: Number(r.docCount),
         status,
       };
@@ -91,8 +99,10 @@ export async function GET(request: NextRequest) {
     const summary = {
       orders: documents.length,
       ordered: documents.reduce((s, d) => s + d.ordered, 0),
+      cancelled: documents.reduce((s, d) => s + d.cancelled, 0),
       delivered: documents.reduce((s, d) => s + d.delivered, 0),
       livree: documents.filter((d) => d.status === "LIVREE").length,
+      soldee: documents.filter((d) => d.status === "SOLDEE").length,
       partielle: documents.filter((d) => d.status === "PARTIELLE").length,
       nonLivree: documents.filter((d) => d.status === "NON_LIVREE").length,
     };

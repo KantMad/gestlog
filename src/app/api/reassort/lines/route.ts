@@ -22,9 +22,9 @@ export async function GET(request: NextRequest) {
 
     // Commandé : lignes avec quantitiesBySize JSON → expansion (ref|color|size)
     const orderedLines = await prisma.$queryRawUnsafe<
-      { reference: string; colorCode: string | null; color: string | null; quantitiesBySize: string }[]
+      { reference: string; colorCode: string | null; color: string | null; quantitiesBySize: string; cancelledBySize: string }[]
     >(
-      `SELECT p.reference, p."colorCode", p.color, col."quantitiesBySize"
+      `SELECT p.reference, p."colorCode", p.color, col."quantitiesBySize", col."cancelledBySize"
        FROM "ClientOrderLine" col JOIN "Product" p ON p.id = col."productId"
        WHERE col."clientOrderId" = $1`,
       orderId
@@ -47,25 +47,36 @@ export async function GET(request: NextRequest) {
       colorLabel: string;
       size: string;
       ordered: number;
+      cancelled: number;
       delivered: number;
     };
     const map = new Map<string, Row>();
     const key = (ref: string, color: string, size: string) =>
       `${ref}|||${(color || "").toUpperCase()}|||${(size || "").toUpperCase()}`;
+    const parse = (s: string): Record<string, number> => {
+      try {
+        const o = JSON.parse(s || "{}");
+        return o && typeof o === "object" ? o : {};
+      } catch {
+        return {};
+      }
+    };
 
     for (const ol of orderedLines) {
       const color = ol.colorCode || ol.color || "";
-      let q: Record<string, number> = {};
-      try {
-        q = JSON.parse(ol.quantitiesBySize || "{}");
-      } catch {
-        q = {};
-      }
+      const q = parse(ol.quantitiesBySize);
+      const cancelled = parse(ol.cancelledBySize);
       for (const [size, qty] of Object.entries(q)) {
         const k = key(ol.reference, color, size);
         if (!map.has(k))
-          map.set(k, { reference: ol.reference, color, colorLabel: "", size: size.toUpperCase(), ordered: 0, delivered: 0 });
+          map.set(k, { reference: ol.reference, color, colorLabel: "", size: size.toUpperCase(), ordered: 0, cancelled: 0, delivered: 0 });
         map.get(k)!.ordered += Number(qty) || 0;
+      }
+      for (const [size, qty] of Object.entries(cancelled)) {
+        const k = key(ol.reference, color, size);
+        if (!map.has(k))
+          map.set(k, { reference: ol.reference, color, colorLabel: "", size: size.toUpperCase(), ordered: 0, cancelled: 0, delivered: 0 });
+        map.get(k)!.cancelled += Number(qty) || 0;
       }
     }
     for (const dl of deliveredLines) {
@@ -74,14 +85,15 @@ export async function GET(request: NextRequest) {
       const size = dl.size || "";
       const k = key(ref, color, size);
       if (!map.has(k))
-        map.set(k, { reference: ref, color, colorLabel: dl.colorLabel || "", size, ordered: 0, delivered: 0 });
+        map.set(k, { reference: ref, color, colorLabel: dl.colorLabel || "", size, ordered: 0, cancelled: 0, delivered: 0 });
       const row = map.get(k)!;
       row.delivered += Number(dl.q) || 0;
       if (!row.colorLabel && dl.colorLabel) row.colorLabel = dl.colorLabel;
     }
 
     const lines = Array.from(map.values())
-      .map((r) => ({ ...r, missing: Math.max(0, r.ordered - r.delivered) }))
+      // reste à livrer = commandé − annulé − livré
+      .map((r) => ({ ...r, missing: Math.max(0, r.ordered - r.cancelled - r.delivered) }))
       .sort(
         (a, b) =>
           a.reference.localeCompare(b.reference) ||
