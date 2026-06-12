@@ -40,7 +40,8 @@ type Row = Record<string, unknown>;
 async function importFile(fileName: string, b64: string) {
   const docType = /^FAC/i.test(fileName) ? "FAC" : "BL";
   // n° de commande TIO encodé dans le nom : BL_IS-041940245113_137391.xlsx
-  const tioOrderNumber = (fileName.match(/IS-\d+/) || [])[0] || null;
+  // IS- = commande en stock, PO- = précommande — les deux sont valides.
+  const tioOrderNumber = (fileName.match(/(?:IS|PO)-\d+/) || [])[0] || null;
   const buf = Buffer.from(b64, "base64");
   const wb = XLSX.read(buf, { type: "buffer" });
   const rows = XLSX.utils.sheet_to_json<Row>(wb.Sheets[wb.SheetNames[0]], {

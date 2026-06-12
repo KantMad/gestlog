@@ -15,7 +15,8 @@ function genId() {
 function parsePdfName(name: string) {
   const base = name.replace(/\.pdf$/i, "");
   const docType = /^FAC/i.test(base) ? "FAC" : "BL";
-  const tioOrderNumber = (base.match(/IS-\d+/) || [])[0] || null;
+  // IS- = commande en stock, PO- = précommande — les deux sont valides.
+  const tioOrderNumber = (base.match(/(?:IS|PO)-\d+/) || [])[0] || null;
   const documentNumber = base.split("_").pop() || "";
   return { docType, tioOrderNumber, documentNumber };
 }
