@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
     >(
       `SELECT l.reference, l."colorCode", MAX(l."colorLabel") AS "colorLabel", UPPER(l.size) AS size, SUM(l.quantity)::bigint AS q
        FROM "WarehouseDocument" d JOIN "WarehouseDocumentLine" l ON l."documentId" = d.id
-       WHERE d."tioOrderNumber" = $1
+       WHERE d."tioOrderNumber" = $1 AND d."docType" = 'BL'
        GROUP BY l.reference, l."colorCode", UPPER(l.size)`,
       orderNumber
     );

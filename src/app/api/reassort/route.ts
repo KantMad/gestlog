@@ -50,9 +50,9 @@ export async function GET(request: NextRequest) {
               (SELECT COALESCE(SUM(col."totalQuantity"),0) FROM "ClientOrderLine" col WHERE col."clientOrderId" = co.id) AS ordered,
               (SELECT COALESCE(SUM(l.quantity),0) FROM "WarehouseDocument" d
                  JOIN "WarehouseDocumentLine" l ON l."documentId" = d.id
-                 WHERE d."tioOrderNumber" = co."orderNumber") AS delivered,
+                 WHERE d."tioOrderNumber" = co."orderNumber" AND d."docType" = 'BL') AS delivered,
               (SELECT COUNT(DISTINCT d."documentNumber") FROM "WarehouseDocument" d
-                 WHERE d."tioOrderNumber" = co."orderNumber") AS "docCount"
+                 WHERE d."tioOrderNumber" = co."orderNumber" AND d."docType" = 'BL') AS "docCount"
        FROM "ClientOrder" co
        JOIN "Client" cl ON cl.id = co."clientId"
        JOIN "Season" se ON se.id = co."seasonId"
