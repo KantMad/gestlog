@@ -35,18 +35,31 @@ function parseLines(items) {
     const toks = row.items;
     const refTok = toks.find((t) => REF_RE.test(t.s));
     if (refTok) curRef = refTok.s;
-    // en-tête tailles : >=2 tokens "taille" en zone données (x 180-410)
-    const sizeToks = toks.filter((t) => t.x > 180 && t.x < 410 && isSize(t.s));
-    if (sizeToks.length >= 2) { sizeMap = sizeToks.map((t) => ({ size: t.s.toUpperCase(), x: t.x })); continue; }
-    // ligne coloris : code couleur à gauche (x<40, 2-3 chiffres) + quantités sous les tailles
-    const codeTok = toks.find((t) => t.x < 40 && /^\d{2,3}$/.test(t.s));
-    if (codeTok && sizeMap && curRef) {
-      const colorCode = codeTok.s;
-      const colorLabel = toks.filter((t) => t.x >= 40 && t.x < 180).map((t) => t.s).join(" ").trim();
+    const codeTok = toks.find((t) => t.x < 40 && /^\d{2,3}$/.test(t.s)); // code couleur
+    // en-tête tailles : ligne SANS code couleur, avec >=1 taille alpha (ex: TU)
+    // OU >=2 tailles numériques (ex: pantalons 38 40 42). Le "sans code couleur"
+    // évite de confondre une ligne de quantités (qui a un code couleur) avec un en-tête.
+    const zone = toks.filter((t) => t.x > 180 && t.x < 410);
+    const alphaSz = zone.filter((t) => ALPHA.has(t.s.toUpperCase()));
+    const numSz = zone.filter((t) => /^\d{2,3}$/.test(t.s));
+    if (!codeTok && (alphaSz.length >= 1 || numSz.length >= 2)) {
+      sizeMap = [...alphaSz, ...numSz]
+        .map((t) => ({ size: t.s.toUpperCase(), x: t.x }))
+        .sort((a, b) => a.x - b.x);
+      continue;
+    }
+    // ligne de quantités : avec code couleur (multi-coloris) OU sans (mono-coloris → "000")
+    if (sizeMap && curRef) {
       const qtys = toks.filter((t) => t.x > 180 && t.x < 410 && /^\d+$/.test(t.s));
+      const mapped = [];
       for (const q of qtys) {
         const sz = sizeMap.reduce((b, s) => Math.abs(s.x - q.x) < Math.abs(b.x - q.x) ? s : b);
-        if (Math.abs(sz.x - q.x) < 14) lines.push({ reference: curRef, colorCode, colorLabel, size: sz.size, quantity: parseInt(q.s) });
+        if (Math.abs(sz.x - q.x) < 14) mapped.push({ size: sz.size, quantity: parseInt(q.s) });
+      }
+      if (mapped.length) {
+        const colorCode = codeTok ? codeTok.s : "000";
+        const colorLabel = codeTok ? toks.filter((t) => t.x >= 40 && t.x < 180).map((t) => t.s).join(" ").trim() : "";
+        for (const m of mapped) lines.push({ reference: curRef, colorCode, colorLabel, size: m.size, quantity: m.quantity });
       }
     }
   }
