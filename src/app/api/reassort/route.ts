@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { handleApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
+import { orderStatus, remaining } from "@/lib/reconciliation";
 
 // GET — Commandes client (TIO) avec réconciliation commandé vs livré
 // (via les BL/FAC liés par n° TIO). Statut à la volée : NON_LIVREE /
@@ -69,12 +70,7 @@ export async function GET(request: NextRequest) {
       const ordered = Number(r.ordered);
       const cancelled = Number(r.cancelled);
       const delivered = Number(r.delivered);
-      // Quantité réellement attendue après soldage des pièces annulées.
-      const effective = Math.max(0, ordered - cancelled);
-      let status: string;
-      if (delivered === 0 && cancelled === 0) status = "NON_LIVREE";
-      else if (delivered >= effective) status = cancelled > 0 ? "SOLDEE" : "LIVREE";
-      else status = "PARTIELLE";
+      const status = orderStatus(ordered, cancelled, delivered);
       return {
         id: r.id,
         orderNumber: r.orderNumber,
@@ -86,7 +82,7 @@ export async function GET(request: NextRequest) {
         ordered,
         cancelled,
         delivered,
-        missing: Math.max(0, effective - delivered),
+        missing: remaining(ordered, cancelled, delivered),
         docCount: Number(r.docCount),
         status,
       };
