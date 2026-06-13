@@ -139,7 +139,7 @@ export default function StatisticsPage() {
   return (
     <div>
       <Topbar title="Statistiques" />
-      <div className="p-8 space-y-6">
+      <div className="p-4 sm:p-6 lg:p-8 space-y-6">
         <PageHeader
           title="Statistiques"
           description="Graphiques et analyses par client, fournisseur et saison"

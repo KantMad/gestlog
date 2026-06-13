@@ -1360,7 +1360,7 @@ export default function ProductInfoPage() {
   return (
     <div>
       <Topbar title="Infos produits" />
-      <div className="p-8 space-y-6">
+      <div className="p-4 sm:p-6 lg:p-8 space-y-6">
         <PageHeader
           title="Infos produits"
           description="Données globales trans-saison : types de taille, correspondances fournisseurs et codes EAN"

@@ -167,7 +167,7 @@ export default function ReassortPage() {
   return (
     <>
       <Topbar title="Commandes client" />
-      <div className="p-8 space-y-6">
+      <div className="p-4 sm:p-6 lg:p-8 space-y-6">
         <PageHeader
           title="Commandes client"
           description="Commandes B2B (TIO) par saison, confrontées aux livraisons (BL/Factures) — livré vs commandé"

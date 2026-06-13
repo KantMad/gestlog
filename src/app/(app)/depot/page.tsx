@@ -389,7 +389,7 @@ export default function DepotPage() {
   return (
     <div>
       <Topbar title="Vue dépôt" />
-      <div className="p-8 space-y-6">
+      <div className="p-4 sm:p-6 lg:p-8 space-y-6">
         <PageHeader
           title="Vue dépôt"
           description="Validez les livraisons reçues et signalez les anomalies"

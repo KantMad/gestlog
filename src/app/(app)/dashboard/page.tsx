@@ -123,7 +123,7 @@ export default function DashboardPage() {
   return (
     <div>
       <Topbar title="Tableau de bord" />
-      <div className="p-8 space-y-8">
+      <div className="p-4 sm:p-6 lg:p-8 space-y-8">
         <PageHeader
           title="Tableau de bord"
           description={

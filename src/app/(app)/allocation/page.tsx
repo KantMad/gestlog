@@ -1052,7 +1052,7 @@ export default function AllocationPage() {
   return (
     <div>
       <Topbar title="Répartition" />
-      <div className="p-8 space-y-6">
+      <div className="p-4 sm:p-6 lg:p-8 space-y-6">
         <PageHeader
           title="Répartition des quantités"
           description="Simulez et ajustez la répartition entre boutiques — cliquez sur une quantité pour la modifier"

@@ -213,7 +213,7 @@ export default function ComparisonPage() {
   return (
     <div>
       <Topbar title="Comparaison" />
-      <div className="p-8 space-y-6">
+      <div className="p-4 sm:p-6 lg:p-8 space-y-6">
         <PageHeader
           title="Comparaison commande / réception"
           description="Analysez les écarts entre commandes fournisseurs et réceptions réelles"

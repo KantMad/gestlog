@@ -255,7 +255,7 @@ export default function UsersPage() {
   return (
     <div>
       <Topbar title="Utilisateurs" />
-      <div className="p-8 space-y-6">
+      <div className="p-4 sm:p-6 lg:p-8 space-y-6">
         <PageHeader
           title="Gestion des utilisateurs"
           description="Ajoutez, modifiez ou désactivez les comptes d'accès"

@@ -16,7 +16,7 @@ export default function BtocPage() {
   return (
     <div>
       <Topbar title="BtoC" />
-      <div className="p-8 space-y-6">
+      <div className="p-4 sm:p-6 lg:p-8 space-y-6">
         <PageHeader
           title="BtoC — WooCommerce"
           description="Statistiques, exports, clients et paramètres de votre boutique en ligne"

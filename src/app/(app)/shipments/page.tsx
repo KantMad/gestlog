@@ -273,7 +273,7 @@ export default function ShipmentsPage() {
   return (
     <>
       <Topbar title="Livraisons" />
-      <div className="p-8 space-y-6">
+      <div className="p-4 sm:p-6 lg:p-8 space-y-6">
         <PageHeader
           title="Livraisons"
           description="Bons de livraison et factures importés de l'entrepôt, regroupés par commande TIO"

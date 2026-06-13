@@ -259,7 +259,7 @@ export default function ImportPage() {
   return (
     <div>
       <Topbar title="Import" />
-      <div className="p-8 space-y-8">
+      <div className="p-4 sm:p-6 lg:p-8 space-y-8">
         <PageHeader
           title="Import de données"
           description="Importez vos fichiers Excel pour alimenter le système"

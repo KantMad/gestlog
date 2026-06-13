@@ -884,7 +884,7 @@ export default function DeliveriesPage() {
   return (
     <div>
       <Topbar title="Préparation" />
-      <div className="p-8 space-y-6">
+      <div className="p-4 sm:p-6 lg:p-8 space-y-6">
         <PageHeader
           title="Préparation"
           description="Gérez le flux de préparation : envoi au dépôt, expédition et export EAN"

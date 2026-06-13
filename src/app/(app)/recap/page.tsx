@@ -357,7 +357,7 @@ export default function RecapPage() {
   return (
     <div>
       <Topbar title="Récap clients" />
-      <div className="p-8 space-y-6">
+      <div className="p-4 sm:p-6 lg:p-8 space-y-6">
         <PageHeader
           title="Récapitulatif clients"
           description="Vue d'ensemble par client : commandes, livraisons et solde restant"
