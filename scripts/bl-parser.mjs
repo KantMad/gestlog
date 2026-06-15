@@ -87,3 +87,56 @@ export function parseLines(items) {
   }
   return [...m.values()];
 }
+
+// Logique PURE de parsing des FAC (factures) PDF. Contrairement aux BL, la facture
+// est RÉCAPITULATIVE : une seule quantité par (référence, coloris), SANS ventilation
+// par taille (la colonne "Désignation / Tailles" n'affiche qu'une plage de tailles en
+// texte, ex. "Tailles : S - 3XL"). Layout type :
+//   réf@x17 | libellé@x103                                            (ligne référence)
+//   codeCouleur@x17 | libellé@x49 | "Tailles : X - Y"@x103 | Qté@x≈471 | Pu@x498 | Montant@x554
+// La quantité facturée est le SEUL entier pur (sans décimale) à x>200 de la ligne
+// coloris (prix et montant portent toujours une décimale → exclus). size = plage de
+// tailles ("S - 3XL"), à titre indicatif ; la réconciliation se fait par (réf, coloris).
+export function parseFacLines(items) {
+  const rows = groupRows(items);
+  const lines = [];
+  let curRef = null;
+  for (const row of rows) {
+    const toks = row.items;
+    const refTok = toks.find((t) => REF_RE.test(t.s));
+    if (refTok) {
+      curRef = refTok.s;
+      continue; // une ligne référence ne porte pas de quantité coloris
+    }
+    if (!curRef) continue;
+    // Ligne coloris : code à 3 chiffres tout à gauche (ex. 001, 753, 000 mono).
+    const codeTok = toks.find((t) => t.x < 40 && /^\d{3}$/.test(t.s));
+    if (!codeTok) continue;
+    // Quantité = entier pur (1-4 chiffres, sans décimale) dans la colonne Qté (x>200,
+    // avant le prix). Prix/montant ont une décimale → exclus. On prend le plus à gauche.
+    const qtyToks = toks
+      .filter((t) => t.x > 200 && /^\d{1,4}$/.test(t.s))
+      .sort((a, b) => a.x - b.x);
+    if (!qtyToks.length) continue;
+    const quantity = parseInt(qtyToks[0].s, 10);
+    if (!quantity) continue;
+    // Libellé coloris : tokens entre le code et la colonne "Tailles" (x 40→100).
+    const colorLabel = toks
+      .filter((t) => t.x >= 40 && t.x < 100 && !/^\d+$/.test(t.s))
+      .map((t) => t.s)
+      .join(" ")
+      .trim();
+    // Plage de tailles indicative, ex. "Tailles : S - 3XL" → "S - 3XL".
+    const sizeTok = toks.find((t) => /^Tailles\s*:/.test(t.s));
+    const size = sizeTok ? sizeTok.s.replace(/^Tailles\s*:\s*/, "").trim() : "";
+    lines.push({ reference: curRef, colorCode: codeTok.s, colorLabel, size, quantity });
+  }
+  // fusionne d'éventuels doublons (réf+couleur)
+  const m = new Map();
+  for (const l of lines) {
+    const k = `${l.reference}|${l.colorCode}`;
+    if (m.has(k)) m.get(k).quantity += l.quantity;
+    else m.set(k, { ...l });
+  }
+  return [...m.values()];
+}

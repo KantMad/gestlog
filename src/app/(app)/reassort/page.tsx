@@ -33,6 +33,7 @@ import {
   CheckCircle2,
   AlertTriangle,
   Ban,
+  Receipt,
 } from "lucide-react";
 import { formatNumber } from "@/lib/utils";
 
@@ -47,9 +48,12 @@ interface Doc {
   ordered: number;
   cancelled: number;
   delivered: number;
+  invoiced: number;
   missing: number;
   docCount: number;
+  facCount: number;
   status: "NON_LIVREE" | "PARTIELLE" | "LIVREE" | "SOLDEE";
+  invStatus: "NEANT" | "NON_FACTUREE" | "PARTIELLE" | "FACTUREE";
 }
 interface Line {
   reference: string;
@@ -69,19 +73,28 @@ const STATUS = {
   NON_LIVREE: { label: "Non livrée", cls: "bg-zinc-100 text-zinc-600", icon: CircleSlash },
 } as const;
 
+// Statut de facturation (FAC) : la facture suit la livraison.
+const INVSTATUS = {
+  FACTUREE: { label: "Facturée", cls: "bg-emerald-100 text-emerald-700", icon: Receipt },
+  PARTIELLE: { label: "Partielle", cls: "bg-amber-100 text-amber-700", icon: AlertTriangle },
+  NON_FACTUREE: { label: "À facturer", cls: "bg-rose-100 text-rose-700", icon: Receipt },
+  NEANT: { label: "—", cls: "bg-zinc-100 text-zinc-500", icon: CircleSlash },
+} as const;
+
 function fmtDate(d: string | null) {
   return d ? new Date(d).toLocaleDateString("fr-FR") : "—";
 }
 
 export default function ReassortPage() {
   const [documents, setDocuments] = useState<Doc[]>([]);
-  const [summary, setSummary] = useState({ orders: 0, ordered: 0, cancelled: 0, delivered: 0, livree: 0, soldee: 0, partielle: 0, nonLivree: 0 });
+  const [summary, setSummary] = useState({ orders: 0, ordered: 0, cancelled: 0, delivered: 0, invoiced: 0, livree: 0, soldee: 0, partielle: 0, nonLivree: 0, facturee: 0, facPartielle: 0, nonFacturee: 0 });
   const [clients, setClients] = useState<{ code: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
 
   const { activeSeason } = useSeason();
   const [clientCode, setClientCode] = useState("");
   const [status, setStatus] = useState("");
+  const [invStatus, setInvStatus] = useState("");
   const [search, setSearch] = useState("");
 
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -96,19 +109,20 @@ export default function ReassortPage() {
       p.set("season", activeSeason.name);
       if (clientCode) p.set("clientCode", clientCode);
       if (status) p.set("status", status);
+      if (invStatus) p.set("invStatus", invStatus);
       if (search) p.set("search", search);
       const res = await fetch(`/api/reassort?${p}`);
       if (!res.ok) throw new Error();
       const d = await res.json();
       setDocuments(d.documents || []);
-      setSummary(d.summary || { orders: 0, ordered: 0, cancelled: 0, delivered: 0, livree: 0, soldee: 0, partielle: 0, nonLivree: 0 });
+      setSummary(d.summary || { orders: 0, ordered: 0, cancelled: 0, delivered: 0, invoiced: 0, livree: 0, soldee: 0, partielle: 0, nonLivree: 0, facturee: 0, facPartielle: 0, nonFacturee: 0 });
       setClients(d.clients || []);
     } catch {
       toast.error("Impossible de charger les commandes");
     } finally {
       setLoading(false);
     }
-  }, [activeSeason, clientCode, status, search]);
+  }, [activeSeason, clientCode, status, invStatus, search]);
 
   useEffect(() => {
     load();
@@ -173,7 +187,7 @@ export default function ReassortPage() {
           description="Commandes B2B (TIO) par saison, confrontées aux livraisons (BL/Factures) — livré vs commandé"
         />
 
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
           <Card><CardContent className="flex items-center gap-3 p-4">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50"><Package className="h-5 w-5 text-blue-600" /></div>
             <div><p className="text-2xl font-bold">{formatNumber(summary.orders)}</p><p className="text-xs text-muted-foreground">Commandes</p></div>
@@ -189,6 +203,16 @@ export default function ReassortPage() {
           <Card><CardContent className="flex items-center gap-3 p-4">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-zinc-100"><Truck className="h-5 w-5 text-zinc-500" /></div>
             <div><p className="text-2xl font-bold">{formatNumber(summary.delivered)}/{formatNumber(summary.ordered)}</p><p className="text-xs text-muted-foreground">Pièces livrées / commandées</p></div>
+          </CardContent></Card>
+          {/* Alerte facturation : commandes livrées mais non facturées (écart à traiter) */}
+          <Card className={summary.nonFacturee > 0 ? "border-rose-200" : ""}><CardContent className="flex items-center gap-3 p-4">
+            <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${summary.nonFacturee > 0 ? "bg-rose-50" : "bg-emerald-50"}`}>
+              <Receipt className={`h-5 w-5 ${summary.nonFacturee > 0 ? "text-rose-600" : "text-emerald-600"}`} />
+            </div>
+            <div>
+              <p className={`text-2xl font-bold ${summary.nonFacturee > 0 ? "text-rose-600" : ""}`}>{formatNumber(summary.nonFacturee)}</p>
+              <p className="text-xs text-muted-foreground">Livrées non facturées</p>
+            </div>
           </CardContent></Card>
         </div>
 
@@ -225,6 +249,22 @@ export default function ReassortPage() {
                 </Select>
               </div>
               <div className="space-y-1">
+                <label className="block text-xs font-medium text-muted-foreground">Facturation</label>
+                <Select value={invStatus || "all"} onValueChange={(v) => setInvStatus(!v || v === "all" ? "" : v)}>
+                  <SelectTrigger className="w-44 h-9">
+                    <span className={`text-sm truncate ${!invStatus ? "text-muted-foreground" : ""}`}>
+                      {invStatus ? INVSTATUS[invStatus as keyof typeof INVSTATUS].label : "Toutes"}
+                    </span>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Toutes</SelectItem>
+                    <SelectItem value="NON_FACTUREE">À facturer</SelectItem>
+                    <SelectItem value="PARTIELLE">Partielles</SelectItem>
+                    <SelectItem value="FACTUREE">Facturées</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
                 <label className="block text-xs font-medium text-muted-foreground">Recherche</label>
                 <Input placeholder="N° commande, client..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-56 h-9" />
               </div>
@@ -250,11 +290,13 @@ export default function ReassortPage() {
                     <TableHead className="text-right">Livré</TableHead>
                     <TableHead className="text-right">Manquant</TableHead>
                     <TableHead>Statut</TableHead>
+                    <TableHead>Facturation</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {documents.map((doc) => {
                     const S = STATUS[doc.status];
+                    const IS = INVSTATUS[doc.invStatus];
                     return (
                       <Fragment key={doc.id}>
                         <TableRow
@@ -286,10 +328,16 @@ export default function ReassortPage() {
                           <TableCell>
                             <Badge className={`gap-1 ${S.cls}`}><S.icon className="h-3 w-3" />{S.label}</Badge>
                           </TableCell>
+                          <TableCell>
+                            <Badge className={`gap-1 ${IS.cls}`}><IS.icon className="h-3 w-3" />{IS.label}</Badge>
+                            {doc.invStatus !== "NEANT" && (
+                              <div className="text-[10px] text-muted-foreground mt-0.5">{formatNumber(doc.invoiced)}/{formatNumber(doc.delivered)} pièces</div>
+                            )}
+                          </TableCell>
                         </TableRow>
                         {expanded === doc.id && (
                           <TableRow>
-                            <TableCell colSpan={8} className="bg-muted/30 p-0">
+                            <TableCell colSpan={9} className="bg-muted/30 p-0">
                               {loadingLines && !lines[doc.id] ? (
                                 <div className="flex items-center justify-center py-6 text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /></div>
                               ) : (

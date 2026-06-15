@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { orderStatus, remaining, effectiveOrdered } from "./reconciliation";
+import { orderStatus, remaining, effectiveOrdered, invoiceStatus } from "./reconciliation";
 
 describe("orderStatus", () => {
   it("rien livré, rien soldé → NON_LIVREE", () => {
@@ -47,5 +47,26 @@ describe("effectiveOrdered", () => {
   });
   it("jamais négatif", () => {
     expect(effectiveOrdered(5, 8)).toBe(0);
+  });
+});
+
+describe("invoiceStatus", () => {
+  it("rien livré ni facturé → NEANT", () => {
+    expect(invoiceStatus(0, 0)).toBe("NEANT");
+  });
+  it("livré mais aucune facture → NON_FACTUREE (écart à traiter)", () => {
+    expect(invoiceStatus(10, 0)).toBe("NON_FACTUREE");
+  });
+  it("facturé ≥ livré → FACTUREE", () => {
+    expect(invoiceStatus(10, 10)).toBe("FACTUREE");
+  });
+  it("sur-facturation (facturé > livré) → FACTUREE", () => {
+    expect(invoiceStatus(10, 12)).toBe("FACTUREE");
+  });
+  it("facturé partiel < livré → PARTIELLE", () => {
+    expect(invoiceStatus(10, 4)).toBe("PARTIELLE");
+  });
+  it("facturé sans livraison enregistrée → FACTUREE (couvre le livré nul)", () => {
+    expect(invoiceStatus(0, 5)).toBe("FACTUREE");
   });
 });

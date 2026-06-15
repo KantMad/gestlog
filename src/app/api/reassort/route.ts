@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { handleApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
-import { orderStatus, remaining } from "@/lib/reconciliation";
+import { orderStatus, remaining, invoiceStatus } from "@/lib/reconciliation";
 
 // GET — Commandes client (TIO) avec réconciliation commandé vs livré
 // (via les BL/FAC liés par n° TIO). Statut à la volée : NON_LIVREE /
@@ -44,7 +44,9 @@ export async function GET(request: NextRequest) {
         ordered: bigint;
         cancelled: bigint;
         delivered: bigint;
+        invoiced: bigint;
         docCount: bigint;
+        facCount: bigint;
       }[]
     >(
       `SELECT co.id, co."orderNumber", cl.code AS "clientCode", cl.name AS "clientName",
@@ -54,8 +56,13 @@ export async function GET(request: NextRequest) {
               (SELECT COALESCE(SUM(l.quantity),0) FROM "WarehouseDocument" d
                  JOIN "WarehouseDocumentLine" l ON l."documentId" = d.id
                  WHERE d."tioOrderNumber" = co."orderNumber" AND d."docType" = 'BL') AS delivered,
+              (SELECT COALESCE(SUM(l.quantity),0) FROM "WarehouseDocument" d
+                 JOIN "WarehouseDocumentLine" l ON l."documentId" = d.id
+                 WHERE d."tioOrderNumber" = co."orderNumber" AND d."docType" = 'FAC') AS invoiced,
               (SELECT COUNT(DISTINCT d."documentNumber") FROM "WarehouseDocument" d
-                 WHERE d."tioOrderNumber" = co."orderNumber" AND d."docType" = 'BL') AS "docCount"
+                 WHERE d."tioOrderNumber" = co."orderNumber" AND d."docType" = 'BL') AS "docCount",
+              (SELECT COUNT(DISTINCT d."documentNumber") FROM "WarehouseDocument" d
+                 WHERE d."tioOrderNumber" = co."orderNumber" AND d."docType" = 'FAC') AS "facCount"
        FROM "ClientOrder" co
        JOIN "Client" cl ON cl.id = co."clientId"
        JOIN "Season" se ON se.id = co."seasonId"
@@ -70,6 +77,7 @@ export async function GET(request: NextRequest) {
       const ordered = Number(r.ordered);
       const cancelled = Number(r.cancelled);
       const delivered = Number(r.delivered);
+      const invoiced = Number(r.invoiced);
       const status = orderStatus(ordered, cancelled, delivered);
       return {
         id: r.id,
@@ -82,25 +90,35 @@ export async function GET(request: NextRequest) {
         ordered,
         cancelled,
         delivered,
+        invoiced,
         missing: remaining(ordered, cancelled, delivered),
         docCount: Number(r.docCount),
+        facCount: Number(r.facCount),
         status,
+        invStatus: invoiceStatus(delivered, invoiced),
       };
     });
 
     // filtre statut optionnel
     const statusFilter = p.get("status");
     if (statusFilter) documents = documents.filter((d) => d.status === statusFilter);
+    const invFilter = p.get("invStatus");
+    if (invFilter) documents = documents.filter((d) => d.invStatus === invFilter);
 
     const summary = {
       orders: documents.length,
       ordered: documents.reduce((s, d) => s + d.ordered, 0),
       cancelled: documents.reduce((s, d) => s + d.cancelled, 0),
       delivered: documents.reduce((s, d) => s + d.delivered, 0),
+      invoiced: documents.reduce((s, d) => s + d.invoiced, 0),
       livree: documents.filter((d) => d.status === "LIVREE").length,
       soldee: documents.filter((d) => d.status === "SOLDEE").length,
       partielle: documents.filter((d) => d.status === "PARTIELLE").length,
       nonLivree: documents.filter((d) => d.status === "NON_LIVREE").length,
+      // facturation : on ne compte que les commandes ayant quelque chose de livré
+      facturee: documents.filter((d) => d.invStatus === "FACTUREE").length,
+      facPartielle: documents.filter((d) => d.invStatus === "PARTIELLE").length,
+      nonFacturee: documents.filter((d) => d.invStatus === "NON_FACTUREE").length,
     };
 
     // Clients disponibles (toutes commandes)

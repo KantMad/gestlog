@@ -1,9 +1,12 @@
-// Parse les BL (bons de livraison) au format PDF en lignes (réf + colorCode + taille + quantité)
-// pour permettre la réconciliation commandé/livré. Tourne sur le VPS (accès base + webhook FTP).
-// Usage : node scripts/parse-bl-pdfs.mjs [--pe26] [--limit=N]
+// Parse les documents dépôt PDF en lignes (réf + colorCode + taille + quantité) pour la
+// réconciliation : BL (bons de livraison) → quantités LIVRÉES par taille ; FAC (factures)
+// → quantités FACTURÉES par coloris (récapitulatif, sans ventilation taille).
+// Tourne sur le VPS (accès base + webhook FTP).
+// Usage : node scripts/parse-bl-pdfs.mjs [--bl|--fac] [--pe26] [--limit=N]
+//   sans --bl/--fac : traite les deux types.
 import fs from "fs";
 import pg from "pg";
-import { parseLines } from "./bl-parser.mjs";
+import { parseLines, parseFacLines } from "./bl-parser.mjs";
 const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
 
 // ── env ──────────────────────────────────────────────
@@ -13,7 +16,7 @@ const DBURL = ev("DATABASE_URL");
 const KEY = ev("SYNC_API_KEY");
 const WEBHOOK = "https://centralway.pro/webhook/gestlog-pdf";
 
-async function pdfToLines(buf) {
+async function pdfToLines(buf, docType) {
   const doc = await pdfjs.getDocument({ data: new Uint8Array(buf), useSystemFonts: true }).promise;
   const items = [];
   for (let p = 1; p <= doc.numPages; p++) {
@@ -26,28 +29,32 @@ async function pdfToLines(buf) {
     })));
   }
   await doc.destroy();
-  return parseLines(items);
+  return docType === "FAC" ? parseFacLines(items) : parseLines(items);
 }
 
 const genId = () => "wdl_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 9);
 
 // ── main ─────────────────────────────────────────────
 const onlyPe = process.argv.includes("--pe26");
+const onlyBl = process.argv.includes("--bl");
+const onlyFac = process.argv.includes("--fac");
+const types = onlyBl ? ["BL"] : onlyFac ? ["FAC"] : ["BL", "FAC"];
 const limit = parseInt((process.argv.find((a) => a.startsWith("--limit=")) || "").split("=")[1]) || 100000;
 
 const c = new pg.Client({ connectionString: DBURL });
 await c.connect();
 
 const docs = (await c.query(
-  `SELECT d.id, COALESCE(NULLIF(d."pdfFileName",''), d."fileName") AS fn
+  `SELECT d.id, d."docType", COALESCE(NULLIF(d."pdfFileName",''), d."fileName") AS fn
    FROM "WarehouseDocument" d
    ${onlyPe ? 'JOIN "ClientOrder" co ON co."orderNumber"=d."tioOrderNumber" JOIN "Season" s ON s.id=co."seasonId"' : ""}
-   WHERE d."docType"='BL' AND d."hasLines"=false
+   WHERE d."docType" = ANY($1) AND d."hasLines"=false
      AND COALESCE(NULLIF(d."pdfFileName",''), d."fileName") ~ '\\.pdf$'
      ${onlyPe ? "AND s.year=2026 AND s.type='PE'" : ""}
-   ORDER BY d.id LIMIT ${limit}`
+   ORDER BY d.id LIMIT ${limit}`,
+  [types]
 )).rows;
-console.log(`Docs BL PDF à parser: ${docs.length}`);
+console.log(`Docs ${types.join("/")} PDF à parser: ${docs.length}`);
 
 let done = 0, empty = 0, errors = 0, totLines = 0;
 for (const d of docs) {
@@ -55,7 +62,7 @@ for (const d of docs) {
     const res = await fetch(`${WEBHOOK}?key=${encodeURIComponent(KEY)}&file=${encodeURIComponent(d.fn)}`, { signal: AbortSignal.timeout(60000) });
     const j = await res.json();
     if (!j.b64) { errors++; continue; }
-    const lines = await pdfToLines(Buffer.from(j.b64, "base64"));
+    const lines = await pdfToLines(Buffer.from(j.b64, "base64"), d.docType);
     if (lines.length === 0) { empty++; continue; } // laissé hasLines=false (réessayable)
     const flat = []; const tuples = lines.map((l) => {
       const v = [genId(), d.id, l.reference, l.colorCode, l.colorLabel || null, l.size, l.quantity];
@@ -76,5 +83,5 @@ for (const d of docs) {
     if (errors <= 6) console.log(`  ⚠️ ${d.fn}: ${e.message}`);
   }
 }
-console.log(`\nTerminé : ${done} BL parsés, ${totLines} lignes créées, ${empty} sans lignes, ${errors} erreurs.`);
+console.log(`\nTerminé : ${done} docs parsés, ${totLines} lignes créées, ${empty} sans lignes, ${errors} erreurs.`);
 await c.end();

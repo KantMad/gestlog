@@ -24,3 +24,21 @@ export function orderStatus(ordered: number, cancelled: number, delivered: numbe
   if (delivered >= effective) return cancelled > 0 ? "SOLDEE" : "LIVREE";
   return "PARTIELLE";
 }
+
+// ── Facturation ─────────────────────────────────────────────────────────────
+// La facture (FAC) suit la livraison : on vérifie que ce qui a été LIVRÉ a bien
+// été facturé. La FAC étant récapitulative (quantité par coloris, sans taille),
+// la réconciliation facturation se fait au niveau de la commande, par total.
+export type InvoiceStatus = "NEANT" | "NON_FACTUREE" | "PARTIELLE" | "FACTUREE";
+
+// Statut de facturation à partir des quantités livrée et facturée.
+//  - NEANT        : rien livré ni facturé (pas encore concerné)
+//  - NON_FACTUREE : livré > 0 mais aucune facture (écart de facturation à traiter)
+//  - FACTUREE     : facturé ≥ livré (tout le livré est couvert)
+//  - PARTIELLE    : facturé > 0 mais inférieur au livré
+export function invoiceStatus(delivered: number, invoiced: number): InvoiceStatus {
+  if (delivered === 0 && invoiced === 0) return "NEANT";
+  if (invoiced === 0) return "NON_FACTUREE";
+  if (invoiced >= delivered) return "FACTUREE";
+  return "PARTIELLE";
+}

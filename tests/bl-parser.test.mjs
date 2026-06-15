@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseLines } from "../scripts/bl-parser.mjs";
+import { parseLines, parseFacLines } from "../scripts/bl-parser.mjs";
 
 // Helpers : items texte positionnés { x, y, s }. y décroissant = haut → bas.
 const I = (x, y, s) => ({ x, y, s: String(s) });
@@ -90,5 +90,52 @@ describe("parseLines — dédoublonnage", () => {
     expect(lines).toEqual([
       { reference: "AMTSMC_C001", colorCode: "001", colorLabel: "Blanc", size: "S", quantity: 5 },
     ]);
+  });
+});
+
+// ── FAC (factures récapitulatives) ────────────────────────────────────────────
+describe("parseFacLines — facture récapitulative (1 qté par coloris)", () => {
+  it("extrait la quantité Qté en excluant prix et montant", () => {
+    const items = [
+      // ligne référence
+      I(17, 100, "JMPOMC_C012"), I(103, 100, "Polo piqué uni"),
+      // ligne coloris : code | libellé | plage tailles | Qté | Pu | Montant
+      I(17, 80, "001"), I(49, 80, "Blanc"), I(103, 80, "Tailles : S - 3XL"),
+      I(471, 80, "34"), I(498, 80, "23.00"), I(554, 80, "782.00"),
+    ];
+    const lines = parseFacLines(items);
+    expect(lines).toEqual([
+      { reference: "JMPOMC_C012", colorCode: "001", colorLabel: "Blanc", size: "S - 3XL", quantity: 34 },
+    ]);
+  });
+
+  it("gère plusieurs coloris sous une même référence + coloris mono 000", () => {
+    const items = [
+      I(17, 100, "JMPOMC_C012"),
+      I(17, 80, "001"), I(49, 80, "Blanc"), I(103, 80, "Tailles : S - 3XL"), I(471, 80, "34"), I(498, 80, "23.00"), I(554, 80, "782.00"),
+      I(17, 60, "753"), I(49, 60, "Bleu vintage"), I(103, 60, "Tailles : M - 3XL"), I(471, 60, "22"), I(498, 60, "23.00"), I(554, 60, "506.00"),
+      // autre référence, coloris mono 000, tailles numériques
+      I(17, 40, "OMD201_D550"),
+      I(17, 20, "000"), I(49, 20, "Bleu jean"), I(103, 20, "Tailles : 31 - 38"), I(471, 20, "17"), I(498, 20, "39.67"), I(554, 20, "674.39"),
+    ];
+    const lines = parseFacLines(items);
+    expect(lines).toEqual([
+      { reference: "JMPOMC_C012", colorCode: "001", colorLabel: "Blanc", size: "S - 3XL", quantity: 34 },
+      { reference: "JMPOMC_C012", colorCode: "753", colorLabel: "Bleu vintage", size: "M - 3XL", quantity: 22 },
+      { reference: "OMD201_D550", colorCode: "000", colorLabel: "Bleu jean", size: "31 - 38", quantity: 17 },
+    ]);
+  });
+
+  it("ne confond pas le prix décimal avec une quantité", () => {
+    const items = [
+      I(17, 100, "MMCHML_L009"),
+      I(17, 80, "822"), I(49, 80, "Vert thym"), I(103, 80, "Tailles : M - 3XL"),
+      I(475, 80, "8"), I(498, 80, "36.33"), I(554, 80, "290.64"),
+    ];
+    const lines = parseFacLines(items);
+    expect(lines).toEqual([
+      { reference: "MMCHML_L009", colorCode: "822", colorLabel: "Vert thym", size: "M - 3XL", quantity: 8 },
+    ]);
+    expect(lines[0].quantity).toBe(8);
   });
 });
