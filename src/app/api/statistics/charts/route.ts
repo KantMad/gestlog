@@ -56,6 +56,19 @@ export async function GET(request: NextRequest) {
     const clientBlDelivered = new Map<string, number>();
     for (const r of blRows) clientBlDelivered.set(r.clientId, Number(r.delivered));
 
+    // ─── Facturé = cumul des FAC (par client) ────────────────
+    const facRows = await prisma.$queryRawUnsafe<{ clientId: string; invoiced: bigint }[]>(
+      `SELECT co."clientId", COALESCE(SUM(l.quantity),0)::bigint AS invoiced
+       FROM "ClientOrder" co
+       JOIN "WarehouseDocument" d ON d."tioOrderNumber" = co."orderNumber" AND d."docType" = 'FAC'
+       JOIN "WarehouseDocumentLine" l ON l."documentId" = d.id
+       WHERE co."seasonId" = $1 ${referenceFilter ? "AND l.reference ILIKE '%' || $2 || '%'" : ""}
+       GROUP BY co."clientId"`,
+      ...(referenceFilter ? [seasonId, referenceFilter] : [seasonId])
+    );
+    const clientFacInvoiced = new Map<string, number>();
+    for (const r of facRows) clientFacInvoiced.set(r.clientId, Number(r.invoiced));
+
     // ─── Deliveries ──────────────────────────────────────────
     const deliveries = await prisma.delivery.findMany({
       where: { allocationSession: { seasonId } },
@@ -106,10 +119,12 @@ export async function GET(request: NextRequest) {
     const clientBreakdown = Array.from(clientOrderData.entries())
       .map(([clientId, data]) => {
         const livré = clientBlDelivered.get(clientId) || 0;
+        const facturé = clientFacInvoiced.get(clientId) || 0;
         return {
           name: data.name,
           commandé: data.ordered,
           livré,
+          facturé,
           soldé: data.cancelled,
           restant: Math.max(0, data.ordered - data.cancelled - livré),
         };
@@ -211,6 +226,30 @@ export async function GET(request: NextRequest) {
       { name: "Non livrées", value: Number(st?.non_livree || 0) },
     ];
 
+    // ─── Statut facturation (FAC suit la livraison : livré vs facturé) ──
+    const invRows = await prisma.$queryRawUnsafe<
+      { facturee: bigint; partielle: bigint; non_facturee: bigint }[]
+    >(
+      `WITH o AS (
+        SELECT
+          (SELECT COALESCE(SUM(l.quantity),0) FROM "WarehouseDocument" d JOIN "WarehouseDocumentLine" l ON l."documentId"=d.id WHERE d."tioOrderNumber"=co."orderNumber" AND d."docType"='BL') del,
+          (SELECT COALESCE(SUM(l.quantity),0) FROM "WarehouseDocument" d JOIN "WarehouseDocumentLine" l ON l."documentId"=d.id WHERE d."tioOrderNumber"=co."orderNumber" AND d."docType"='FAC') inv
+        FROM "ClientOrder" co WHERE co."seasonId"=$1
+      )
+      SELECT
+        COUNT(*) FILTER (WHERE inv >= del AND del > 0)::bigint facturee,
+        COUNT(*) FILTER (WHERE inv > 0 AND inv < del)::bigint partielle,
+        COUNT(*) FILTER (WHERE del > 0 AND inv = 0)::bigint non_facturee
+      FROM o`,
+      seasonId
+    );
+    const inv = invRows[0];
+    const invoiceStatus = [
+      { name: "Facturées", value: Number(inv?.facturee || 0) },
+      { name: "Partielles", value: Number(inv?.partielle || 0) },
+      { name: "À facturer", value: Number(inv?.non_facturee || 0) },
+    ];
+
     // ─── Timeline ────────────────────────────────────────────
     const deliveryTimeline = deliveries
       .filter((d) => d.status === "EXPEDIEE" && d.shippedAt)
@@ -233,6 +272,7 @@ export async function GET(request: NextRequest) {
       supplierConformity,
       supplierReceptions,
       deliveryStatus,
+      invoiceStatus,
       deliveryTimeline,
     });
   } catch (e) {

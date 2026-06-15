@@ -32,6 +32,7 @@ interface ChartData {
     name: string;
     commandé: number;
     livré: number;
+    facturé: number;
     restant: number;
   }[];
   clientDeliveries: {
@@ -53,8 +54,16 @@ interface ChartData {
     manquant: number;
   }[];
   deliveryStatus: { name: string; value: number }[];
+  invoiceStatus: { name: string; value: number }[];
   deliveryTimeline: { date: string; client: string; pièces: number }[];
 }
+
+// Statut facturation : Facturées / Partielles / À facturer
+const INVOICE_COLORS: Record<string, string> = {
+  "Facturées": "#10B981",
+  "Partielles": "#F59E0B",
+  "À facturer": "#F43F5E",
+};
 
 const COLORS = [
   "#3B82F6",
@@ -128,6 +137,8 @@ export default function StatisticsPage() {
     data?.clientBreakdown.reduce((s, c) => s + c.commandé, 0) || 0;
   const totalDelivered =
     data?.clientBreakdown.reduce((s, c) => s + c.livré, 0) || 0;
+  const totalInvoiced =
+    data?.clientBreakdown.reduce((s, c) => s + (c.facturé || 0), 0) || 0;
   const avgConformity =
     data?.supplierConformity.length
       ? Math.round(
@@ -217,7 +228,7 @@ export default function StatisticsPage() {
             ) : (
               <>
                 {/* Summary badges */}
-                <div className="grid gap-4 sm:grid-cols-3">
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                   <Card>
                     <CardContent className="pt-6">
                       <div className="text-2xl font-bold">
@@ -240,6 +251,30 @@ export default function StatisticsPage() {
                           ? Math.round((totalDelivered / totalOrdered) * 100)
                           : 0}
                         %)
+                      </p>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="pt-6">
+                      <div className="text-2xl font-bold">
+                        {formatNumber(totalInvoiced)}
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        Total facturé
+                      </p>
+                      <div className="mt-2 h-2 rounded-full bg-zinc-100 overflow-hidden">
+                        <div
+                          className="h-full bg-rose-500 rounded-full transition-all"
+                          style={{
+                            width: `${totalDelivered > 0 ? Math.min(100, Math.round((totalInvoiced / totalDelivered) * 100)) : 0}%`,
+                          }}
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {totalDelivered > 0
+                          ? Math.round((totalInvoiced / totalDelivered) * 100)
+                          : 0}
+                        % du livré facturé
                       </p>
                     </CardContent>
                   </Card>
@@ -281,7 +316,7 @@ export default function StatisticsPage() {
                     <Card>
                       <CardHeader>
                         <CardTitle className="text-base">
-                          Commandé vs Livré par client
+                          Commandé / Livré / Facturé par client
                         </CardTitle>
                       </CardHeader>
                       <CardContent>
@@ -310,6 +345,11 @@ export default function StatisticsPage() {
                             <Bar
                               dataKey="livré"
                               fill="#10B981"
+                              radius={[4, 4, 0, 0]}
+                            />
+                            <Bar
+                              dataKey="facturé"
+                              fill="#F43F5E"
                               radius={[4, 4, 0, 0]}
                             />
                           </BarChart>
@@ -545,6 +585,42 @@ export default function StatisticsPage() {
                                 <Cell
                                   key={`cell-${index}`}
                                   fill={COLORS[index % COLORS.length]}
+                                />
+                              ))}
+                            </Pie>
+                            <Tooltip />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {/* Statut de facturation pie */}
+                  {data!.invoiceStatus?.some((d) => d.value > 0) && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-base">
+                          Statut de facturation{" "}
+                          <span className="text-xs font-normal text-muted-foreground">(facturé vs livré)</span>
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="flex items-center justify-center">
+                        <ResponsiveContainer width="100%" height={280}>
+                          <PieChart>
+                            <Pie
+                              data={data!.invoiceStatus.filter((d) => d.value > 0)}
+                              cx="50%"
+                              cy="50%"
+                              innerRadius={60}
+                              outerRadius={100}
+                              paddingAngle={4}
+                              dataKey="value"
+                              label={({ name, value }) => `${name}: ${value}`}
+                            >
+                              {data!.invoiceStatus.filter((d) => d.value > 0).map((entry, index) => (
+                                <Cell
+                                  key={`cell-inv-${index}`}
+                                  fill={INVOICE_COLORS[entry.name] || "#9CA3AF"}
                                 />
                               ))}
                             </Pie>

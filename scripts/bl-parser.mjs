@@ -12,6 +12,13 @@ export const ALPHA = new Set([
 // ex : QMTSMC_C312, CVMO_CHMC01, NMD201_D760 (denim).
 export const REF_RE = /^[A-Z]{2,}[A-Z0-9]*_[A-Z0-9]{2,8}$/;
 
+// Bloc récapitulatif / totaux du BL (fin de document) : "Tot. colis", "Nb de colis",
+// "Qté pièce", "Qté unités", "Qté packs", "Récapitulatif"… Ces lignes portent des
+// nombres (ex. le total de pièces) qui, mal placés dans les colonnes tailles, étaient
+// captés comme une ligne produit fantôme → SUR-COMPTAGE du livré. On ignore toute
+// ligne contenant un de ces marqueurs (ils n'apparaissent jamais sur une vraie ligne).
+export const SUMMARY_RE = /qté|tot\.|colis|récapitul|\btotal\b/i;
+
 // Regroupe les items en lignes par coordonnée y (tolérance), triées de haut en bas
 // puis de gauche à droite.
 export function groupRows(items, tol = 3) {
@@ -38,6 +45,8 @@ export function parseLines(items) {
     const toks = row.items;
     const refTok = toks.find((t) => REF_RE.test(t.s));
     if (refTok) curRef = refTok.s;
+    // Bloc totaux/récapitulatif → ne jamais en extraire de quantités (sur-comptage).
+    if (toks.some((t) => SUMMARY_RE.test(t.s))) continue;
     const codeTok = toks.find((t) => t.x < 40 && /^\d{2,3}$/.test(t.s)); // code couleur (gauche)
     // En-tête tailles : ligne SANS code couleur, avec des tailles à droite de la zone
     // libellé (x>=60). >=1 alpha (ex: TU) OU >=2 numériques (pantalons/denim).

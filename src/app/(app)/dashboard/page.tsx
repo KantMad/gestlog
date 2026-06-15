@@ -12,6 +12,7 @@ import {
   Users,
   TrendingUp,
   AlertTriangle,
+  Receipt,
 } from "lucide-react";
 import { formatNumber, cn } from "@/lib/utils";
 import {
@@ -31,21 +32,27 @@ import {
 interface DashboardStats {
   totalOrders: number;
   totalPieces: number;
+  deliveredPieces: number;
+  invoicedPieces: number;
   receptionRate: number;
   deliveryRate: number;
+  invoiceRate: number;
   pendingAllocations: number;
   activeClients: number;
 }
 
 interface ChartData {
-  clientBreakdown: { name: string; commandé: number; livré: number; soldé: number; restant: number }[];
+  clientBreakdown: { name: string; commandé: number; livré: number; facturé: number; soldé: number; restant: number }[];
   supplierConformity: { name: string; commandé: number; reçu: number; conformité: number }[];
   deliveryStatus: { name: string; value: number }[];
+  invoiceStatus: { name: string; value: number }[];
   deliveryTimeline: { date: string; client: string; pièces: number }[];
 }
 
 // Couleurs des statuts : Livrées / Soldées / Partielles / Non livrées
 const PIE_COLORS = ["#10B981", "#0EA5E9", "#F59E0B", "#9CA3AF"];
+// Statut facturation : Facturées / Partielles / À facturer
+const INVOICE_PIE_COLORS = ["#10B981", "#F59E0B", "#F43F5E"];
 
 export default function DashboardPage() {
   const { activeSeason, loading } = useSeason();
@@ -99,6 +106,13 @@ export default function DashboardPage() {
       bg: "bg-violet-50",
     },
     {
+      title: "Taux de facturation",
+      value: stats ? `${stats.invoiceRate}%` : "—",
+      icon: Receipt,
+      color: "text-rose-600",
+      bg: "bg-rose-50",
+    },
+    {
       title: "Clients actifs",
       value: stats ? formatNumber(stats.activeClients) : "—",
       icon: Users,
@@ -117,7 +131,8 @@ export default function DashboardPage() {
   const hasChartData = charts && (
     charts.clientBreakdown.length > 0 ||
     charts.supplierConformity.length > 0 ||
-    charts.deliveryStatus.some((d) => d.value > 0)
+    charts.deliveryStatus.some((d) => d.value > 0) ||
+    charts.invoiceStatus?.some((d) => d.value > 0)
   );
 
   return (
@@ -260,6 +275,45 @@ export default function DashboardPage() {
                               <Cell
                                 key={`cell-${index}`}
                                 fill={PIE_COLORS[index % PIE_COLORS.length]}
+                              />
+                            ))}
+                          </Pie>
+                          <Tooltip />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {charts!.invoiceStatus?.some((d) => d.value > 0) && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base">
+                        Statut de facturation{" "}
+                        <span className="text-xs font-normal text-muted-foreground">(facturé vs livré)</span>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="flex items-center justify-center">
+                      <ResponsiveContainer width="100%" height={250}>
+                        <PieChart>
+                          <Pie
+                            data={charts!.invoiceStatus.filter((d) => d.value > 0)}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={60}
+                            outerRadius={90}
+                            paddingAngle={4}
+                            dataKey="value"
+                            label={({ name, value }) => `${name}: ${value}`}
+                          >
+                            {charts!.invoiceStatus.filter((d) => d.value > 0).map((entry, index) => (
+                              <Cell
+                                key={`cell-inv-${index}`}
+                                fill={
+                                  entry.name === "Facturées" ? INVOICE_PIE_COLORS[0]
+                                  : entry.name === "Partielles" ? INVOICE_PIE_COLORS[1]
+                                  : INVOICE_PIE_COLORS[2]
+                                }
                               />
                             ))}
                           </Pie>

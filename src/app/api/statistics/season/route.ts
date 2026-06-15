@@ -65,14 +65,30 @@ export async function GET(request: NextRequest) {
   const deliveryRate =
     effectivePieces > 0 ? Math.round((deliveredPieces / effectivePieces) * 100) : 0;
 
+  // Facturé = cumul des FAC des commandes de la saison. Taux = facturé / livré
+  // (la facture suit la livraison ; < 100 % = pièces livrées restant à facturer).
+  const facAgg = await prisma.$queryRawUnsafe<{ invoiced: bigint }[]>(
+    `SELECT COALESCE(SUM(l.quantity),0)::bigint AS invoiced
+     FROM "ClientOrder" co
+     JOIN "WarehouseDocument" d ON d."tioOrderNumber" = co."orderNumber" AND d."docType" = 'FAC'
+     JOIN "WarehouseDocumentLine" l ON l."documentId" = d.id
+     WHERE co."seasonId" = $1`,
+    seasonId
+  );
+  const invoicedPieces = Number(facAgg[0]?.invoiced || 0);
+  const invoiceRate =
+    deliveredPieces > 0 ? Math.round((invoicedPieces / deliveredPieces) * 100) : 0;
+
   return NextResponse.json({
     data: {
       totalOrders: clientOrderCount,
       totalPieces,
       cancelledPieces,
       deliveredPieces,
+      invoicedPieces,
       receptionRate,
       deliveryRate,
+      invoiceRate,
       pendingAllocations: allocationCount,
       activeClients: clientCount,
       supplierOrderCount,

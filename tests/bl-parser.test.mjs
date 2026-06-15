@@ -93,6 +93,26 @@ describe("parseLines — dédoublonnage", () => {
   });
 });
 
+describe("parseLines — bloc totaux/récapitulatif ignoré (anti sur-comptage)", () => {
+  it("n'ajoute pas de ligne fantôme depuis « Qté pièce / Tot. colis »", () => {
+    const items = [
+      I(17, 100, "ZZZF_P0044"),
+      I(196, 80, "S"), I(218, 80, "M"), I(240, 80, "L"),
+      // vraie ligne quantité
+      I(17, 60, "208"), I(49, 60, "Marine"), I(199, 60, "2"), I(221, 60, "3"),
+      // bloc totaux de fin de BL : ses nombres tombent dans la plage des colonnes tailles
+      I(19, 40, "Tot. colis"), I(120, 40, "14"), I(220, 40, "Qté pièce"), I(245, 40, "877"),
+      I(220, 20, "Qté unités"), I(245, 20, "877"), I(300, 20, "Qté packs"), I(320, 20, "0"),
+    ];
+    const lines = parseLines(items);
+    expect(lines).toEqual([
+      { reference: "ZZZF_P0044", colorCode: "208", colorLabel: "Marine", size: "S", quantity: 2 },
+      { reference: "ZZZF_P0044", colorCode: "208", colorLabel: "Marine", size: "M", quantity: 3 },
+    ]);
+    expect(lines.every((l) => l.quantity < 100)).toBe(true); // pas de fuite du total 877
+  });
+});
+
 // ── FAC (factures récapitulatives) ────────────────────────────────────────────
 describe("parseFacLines — facture récapitulative (1 qté par coloris)", () => {
   it("extrait la quantité Qté en excluant prix et montant", () => {
