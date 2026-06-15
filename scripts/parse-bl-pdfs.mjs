@@ -65,13 +65,13 @@ for (const d of docs) {
     const lines = await pdfToLines(Buffer.from(j.b64, "base64"), d.docType);
     if (lines.length === 0) { empty++; continue; } // laissé hasLines=false (réessayable)
     const flat = []; const tuples = lines.map((l) => {
-      const v = [genId(), d.id, l.reference, l.colorCode, l.colorLabel || null, l.size, l.quantity];
+      const v = [genId(), d.id, l.reference, l.colorCode, l.colorLabel || null, l.size, l.quantity, l.unitPrice || 0, l.amount || 0];
       const ph = v.map((x) => { flat.push(x); return `$${flat.length}`; });
       return `(${ph.join(",")}, NOW())`;
     });
     await c.query("BEGIN");
     await c.query(`DELETE FROM "WarehouseDocumentLine" WHERE "documentId"=$1`, [d.id]);
-    await c.query(`INSERT INTO "WarehouseDocumentLine" (id,"documentId",reference,"colorCode","colorLabel",size,quantity,"createdAt") VALUES ${tuples.join(",")}`, flat);
+    await c.query(`INSERT INTO "WarehouseDocumentLine" (id,"documentId",reference,"colorCode","colorLabel",size,quantity,"unitPrice",amount,"createdAt") VALUES ${tuples.join(",")}`, flat);
     const totQ = lines.reduce((s, l) => s + l.quantity, 0);
     await c.query(`UPDATE "WarehouseDocument" SET "hasLines"=true,"totalQuantity"=$1,"updatedAt"=NOW() WHERE id=$2`, [totQ, d.id]);
     await c.query("COMMIT");

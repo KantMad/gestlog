@@ -129,6 +129,15 @@ export function parseFacLines(items) {
     if (!qtyToks.length) continue;
     const quantity = parseInt(qtyToks[0].s, 10);
     if (!quantity) continue;
+    // Colonnes monétaires (x>200) : Prix unitaire (Pu, x~498) puis Montant HT (x~554),
+    // toutes deux décimales. Le séparateur de milliers peut être un espace ("1 782,00").
+    const money = (s) => parseFloat(s.replace(/[\s ]/g, "").replace(",", "."));
+    const decToks = toks
+      .filter((t) => t.x > 200 && /^\d[\d\s ]*[.,]\d{2}$/.test(t.s))
+      .sort((a, b) => a.x - b.x);
+    // Montant HT = décimale la plus à droite ; Pu = la plus à gauche s'il y en a ≥2.
+    const amount = decToks.length ? money(decToks[decToks.length - 1].s) : 0;
+    const unitPrice = decToks.length >= 2 ? money(decToks[0].s) : 0;
     // Libellé coloris : tokens entre le code et la colonne "Tailles" (x 40→100).
     const colorLabel = toks
       .filter((t) => t.x >= 40 && t.x < 100 && !/^\d+$/.test(t.s))
@@ -138,14 +147,16 @@ export function parseFacLines(items) {
     // Plage de tailles indicative, ex. "Tailles : S - 3XL" → "S - 3XL".
     const sizeTok = toks.find((t) => /^Tailles\s*:/.test(t.s));
     const size = sizeTok ? sizeTok.s.replace(/^Tailles\s*:\s*/, "").trim() : "";
-    lines.push({ reference: curRef, colorCode: codeTok.s, colorLabel, size, quantity });
+    lines.push({ reference: curRef, colorCode: codeTok.s, colorLabel, size, quantity, unitPrice, amount });
   }
-  // fusionne d'éventuels doublons (réf+couleur)
+  // fusionne d'éventuels doublons (réf+couleur) — quantités et montants cumulés.
   const m = new Map();
   for (const l of lines) {
     const k = `${l.reference}|${l.colorCode}`;
-    if (m.has(k)) m.get(k).quantity += l.quantity;
-    else m.set(k, { ...l });
+    if (m.has(k)) {
+      m.get(k).quantity += l.quantity;
+      m.get(k).amount += l.amount;
+    } else m.set(k, { ...l });
   }
   return [...m.values()];
 }

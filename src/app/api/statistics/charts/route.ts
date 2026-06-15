@@ -56,9 +56,10 @@ export async function GET(request: NextRequest) {
     const clientBlDelivered = new Map<string, number>();
     for (const r of blRows) clientBlDelivered.set(r.clientId, Number(r.delivered));
 
-    // ─── Facturé = cumul des FAC (par client) ────────────────
-    const facRows = await prisma.$queryRawUnsafe<{ clientId: string; invoiced: bigint }[]>(
-      `SELECT co."clientId", COALESCE(SUM(l.quantity),0)::bigint AS invoiced
+    // ─── Facturé = cumul des FAC (par client) : quantités + montants HT ──
+    const facRows = await prisma.$queryRawUnsafe<{ clientId: string; invoiced: bigint; amount: number }[]>(
+      `SELECT co."clientId", COALESCE(SUM(l.quantity),0)::bigint AS invoiced,
+              COALESCE(SUM(l.amount),0)::float8 AS amount
        FROM "ClientOrder" co
        JOIN "WarehouseDocument" d ON d."tioOrderNumber" = co."orderNumber" AND d."docType" = 'FAC'
        JOIN "WarehouseDocumentLine" l ON l."documentId" = d.id
@@ -67,7 +68,11 @@ export async function GET(request: NextRequest) {
       ...(referenceFilter ? [seasonId, referenceFilter] : [seasonId])
     );
     const clientFacInvoiced = new Map<string, number>();
-    for (const r of facRows) clientFacInvoiced.set(r.clientId, Number(r.invoiced));
+    const clientFacAmount = new Map<string, number>();
+    for (const r of facRows) {
+      clientFacInvoiced.set(r.clientId, Number(r.invoiced));
+      clientFacAmount.set(r.clientId, Number(r.amount));
+    }
 
     // ─── Deliveries ──────────────────────────────────────────
     const deliveries = await prisma.delivery.findMany({
@@ -120,11 +125,13 @@ export async function GET(request: NextRequest) {
       .map(([clientId, data]) => {
         const livré = clientBlDelivered.get(clientId) || 0;
         const facturé = clientFacInvoiced.get(clientId) || 0;
+        const montantFacturé = Math.round(clientFacAmount.get(clientId) || 0);
         return {
           name: data.name,
           commandé: data.ordered,
           livré,
           facturé,
+          montantFacturé,
           soldé: data.cancelled,
           restant: Math.max(0, data.ordered - data.cancelled - livré),
         };
@@ -273,6 +280,10 @@ export async function GET(request: NextRequest) {
       supplierReceptions,
       deliveryStatus,
       invoiceStatus,
+      // Montant HT facturé total de la saison (tous clients, pas seulement le top 15).
+      invoicedAmount: Math.round(
+        Array.from(clientFacAmount.values()).reduce((s, v) => s + v, 0)
+      ),
       deliveryTimeline,
     });
   } catch (e) {

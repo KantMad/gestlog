@@ -664,7 +664,8 @@ model WarehouseDocumentLine {
   size         String? // "Taille"
   ean          String? // "Code Barre" → ProductSizeEan.ean
   quantity     Int     @default(0) // "Qté"
-  unitPrice    Float   @default(0) // "Prix Unitaire"
+  unitPrice    Float   @default(0) // "Prix Unitaire" (Pu) — renseigné pour les FAC
+  amount       Float   @default(0) // "Montant HT" de la ligne — renseigné pour les FAC
   parcelNo     String? // "N° Colis"
   location     String? // "Code Emplacement"
   statFamily   String? // "Libellé famille statistique"

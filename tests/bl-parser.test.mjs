@@ -125,7 +125,7 @@ describe("parseFacLines — facture récapitulative (1 qté par coloris)", () =>
     ];
     const lines = parseFacLines(items);
     expect(lines).toEqual([
-      { reference: "JMPOMC_C012", colorCode: "001", colorLabel: "Blanc", size: "S - 3XL", quantity: 34 },
+      { reference: "JMPOMC_C012", colorCode: "001", colorLabel: "Blanc", size: "S - 3XL", quantity: 34, unitPrice: 23, amount: 782 },
     ]);
   });
 
@@ -140,13 +140,13 @@ describe("parseFacLines — facture récapitulative (1 qté par coloris)", () =>
     ];
     const lines = parseFacLines(items);
     expect(lines).toEqual([
-      { reference: "JMPOMC_C012", colorCode: "001", colorLabel: "Blanc", size: "S - 3XL", quantity: 34 },
-      { reference: "JMPOMC_C012", colorCode: "753", colorLabel: "Bleu vintage", size: "M - 3XL", quantity: 22 },
-      { reference: "OMD201_D550", colorCode: "000", colorLabel: "Bleu jean", size: "31 - 38", quantity: 17 },
+      { reference: "JMPOMC_C012", colorCode: "001", colorLabel: "Blanc", size: "S - 3XL", quantity: 34, unitPrice: 23, amount: 782 },
+      { reference: "JMPOMC_C012", colorCode: "753", colorLabel: "Bleu vintage", size: "M - 3XL", quantity: 22, unitPrice: 23, amount: 506 },
+      { reference: "OMD201_D550", colorCode: "000", colorLabel: "Bleu jean", size: "31 - 38", quantity: 17, unitPrice: 39.67, amount: 674.39 },
     ]);
   });
 
-  it("ne confond pas le prix décimal avec une quantité", () => {
+  it("ne confond pas le prix décimal avec une quantité et extrait le montant HT", () => {
     const items = [
       I(17, 100, "MMCHML_L009"),
       I(17, 80, "822"), I(49, 80, "Vert thym"), I(103, 80, "Tailles : M - 3XL"),
@@ -154,8 +154,9 @@ describe("parseFacLines — facture récapitulative (1 qté par coloris)", () =>
     ];
     const lines = parseFacLines(items);
     expect(lines).toEqual([
-      { reference: "MMCHML_L009", colorCode: "822", colorLabel: "Vert thym", size: "M - 3XL", quantity: 8 },
+      { reference: "MMCHML_L009", colorCode: "822", colorLabel: "Vert thym", size: "M - 3XL", quantity: 8, unitPrice: 36.33, amount: 290.64 },
     ]);
-    expect(lines[0].quantity).toBe(8);
+    expect(lines[0].quantity).toBe(8); // qté, pas le prix
+    expect(lines[0].amount).toBe(290.64); // montant HT = décimale la plus à droite
   });
 });

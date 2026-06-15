@@ -53,6 +53,15 @@ export function formatNumber(n: number): string {
   return new Intl.NumberFormat("fr-FR").format(n);
 }
 
+// Montant en euros, sans décimales (les montants HT facturés sont des totaux).
+export function formatEuro(n: number): string {
+  return new Intl.NumberFormat("fr-FR", {
+    style: "currency",
+    currency: "EUR",
+    maximumFractionDigits: 0,
+  }).format(n);
+}
+
 export function formatPercent(n: number): string {
   return new Intl.NumberFormat("fr-FR", {
     style: "percent",

@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { BarChart3, Search, X } from "lucide-react";
-import { cn, formatNumber } from "@/lib/utils";
+import { cn, formatNumber, formatEuro } from "@/lib/utils";
 import {
   BarChart,
   Bar,
@@ -33,8 +33,10 @@ interface ChartData {
     commandé: number;
     livré: number;
     facturé: number;
+    montantFacturé: number;
     restant: number;
   }[];
+  invoicedAmount: number;
   clientDeliveries: {
     name: string;
     planifiées: number;
@@ -139,6 +141,11 @@ export default function StatisticsPage() {
     data?.clientBreakdown.reduce((s, c) => s + c.livré, 0) || 0;
   const totalInvoiced =
     data?.clientBreakdown.reduce((s, c) => s + (c.facturé || 0), 0) || 0;
+  // Montant facturé par client (HT), trié décroissant, pour le graphe dédié.
+  const clientAmounts = (data?.clientBreakdown || [])
+    .filter((c) => (c.montantFacturé || 0) > 0)
+    .map((c) => ({ name: c.name, montant: c.montantFacturé }))
+    .sort((a, b) => b.montant - a.montant);
   const avgConformity =
     data?.supplierConformity.length
       ? Math.round(
@@ -257,10 +264,10 @@ export default function StatisticsPage() {
                   <Card>
                     <CardContent className="pt-6">
                       <div className="text-2xl font-bold">
-                        {formatNumber(totalInvoiced)}
+                        {formatEuro(data?.invoicedAmount || 0)}
                       </div>
                       <p className="text-sm text-muted-foreground">
-                        Total facturé
+                        Montant facturé (HT)
                       </p>
                       <div className="mt-2 h-2 rounded-full bg-zinc-100 overflow-hidden">
                         <div
@@ -271,10 +278,10 @@ export default function StatisticsPage() {
                         />
                       </div>
                       <p className="text-xs text-muted-foreground mt-1">
+                        {formatNumber(totalInvoiced)} pièces facturées
                         {totalDelivered > 0
-                          ? Math.round((totalInvoiced / totalDelivered) * 100)
-                          : 0}
-                        % du livré facturé
+                          ? ` (${Math.round((totalInvoiced / totalDelivered) * 100)}% du livré)`
+                          : ""}
                       </p>
                     </CardContent>
                   </Card>
@@ -626,6 +633,39 @@ export default function StatisticsPage() {
                             </Pie>
                             <Tooltip />
                           </PieChart>
+                        </ResponsiveContainer>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {/* Montant facturé par client (HT) */}
+                  {clientAmounts.length > 0 && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-base">
+                          Montant facturé par client{" "}
+                          <span className="text-xs font-normal text-muted-foreground">(HT)</span>
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <ResponsiveContainer width="100%" height={Math.max(220, clientAmounts.length * 28 + 40)}>
+                          <BarChart data={clientAmounts} layout="vertical" margin={{ left: 8, right: 24 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false} />
+                            <XAxis
+                              type="number"
+                              tick={{ fontSize: 11 }}
+                              tickFormatter={(v) => formatEuro(v)}
+                            />
+                            <YAxis
+                              type="category"
+                              dataKey="name"
+                              width={120}
+                              tick={{ fontSize: 11 }}
+                              interval={0}
+                            />
+                            <Tooltip formatter={(value) => [formatEuro(Number(value)), "Montant HT"]} />
+                            <Bar dataKey="montant" fill="#F43F5E" radius={[0, 4, 4, 0]} />
+                          </BarChart>
                         </ResponsiveContainer>
                       </CardContent>
                     </Card>
