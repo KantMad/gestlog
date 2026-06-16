@@ -14,6 +14,7 @@ export const APP_SCREENS: { key: string; label: string }[] = [
   { key: "/recap", label: "Récap clients" },
   { key: "/configuration", label: "Configuration" },
   { key: "/statistics", label: "Statistiques" },
+  { key: "/repartition", label: "Répartition magasin" },
   { key: "/btoc", label: "BtoC" },
 ];
 
@@ -48,6 +49,7 @@ const API_SCREEN_MAP: [string, string][] = [
   ["/api/product-info", "/product-info"],
   ["/api/reassort", "/reassort"],
   ["/api/recap", "/recap"],
+  ["/api/repartition", "/repartition"],
   ["/api/shipments", "/shipments"],
   ["/api/statistics", "/statistics"],
 ];

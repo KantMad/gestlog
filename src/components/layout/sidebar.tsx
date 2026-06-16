@@ -21,6 +21,7 @@ import {
   Receipt,
   RefreshCw,
   ShoppingBag,
+  Store,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
@@ -40,6 +41,7 @@ const NAV_ITEMS = [
   { href: "/recap", label: "Récap clients", icon: Receipt },
   { href: "/configuration", label: "Configuration", icon: Settings },
   { href: "/statistics", label: "Statistiques", icon: BarChart3 },
+  { href: "/repartition", label: "Répartition magasin", icon: Store },
   { href: "/btoc", label: "BtoC", icon: ShoppingBag },
 ];
 
