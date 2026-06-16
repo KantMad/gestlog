@@ -250,24 +250,27 @@ export function BtocStatsTab() {
               <label className="block text-xs font-medium text-muted-foreground">
                 Référence produit
               </label>
-              <Select
-                value={parentProduct || "all"}
-                onValueChange={(v) => setParentProduct(!v || v === "all" ? "" : v)}
-              >
-                <SelectTrigger className="w-56 h-9">
-                  <span className={`text-sm truncate ${!parentProduct ? "text-muted-foreground" : ""}`}>
-                    {parentProduct || "Toutes"}
-                  </span>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Toutes</SelectItem>
+              {/* Recherche PARTIELLE sur la référence (SKU) uniquement — pas le libellé/titre.
+                  L'API filtre en « sku ILIKE %saisie% » : la suite de caractères peut être
+                  au début, au milieu ou à la fin de la référence. Datalist = autocomplétion. */}
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  list="btoc-parent-skus"
+                  placeholder="Réf. contient… (ex. TSM)"
+                  value={parentProduct}
+                  onChange={(e) => setParentProduct(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && applyFilters()}
+                  className="pl-9 w-56 h-9"
+                />
+                <datalist id="btoc-parent-skus">
                   {data.availableParentProducts.map((p) => (
-                    <SelectItem key={p.wooId} value={p.sku}>
-                      {p.sku}
-                    </SelectItem>
+                    <option key={p.wooId} value={p.sku}>
+                      {p.name}
+                    </option>
                   ))}
-                </SelectContent>
-              </Select>
+                </datalist>
+              </div>
             </div>
             <Button onClick={applyFilters} className="gap-1 h-9">
               <Search className="h-4 w-4" />
