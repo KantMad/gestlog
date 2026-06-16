@@ -92,8 +92,8 @@ describe("buildRepartition", () => {
     expect(res.totalDropped).toBe(0);
   });
 
-  it("compte les pièces perdues si une taille produit est hors grille fournisseur", () => {
-    // fournisseur dominé par TU mais un produit apporte des tailles S/M absentes de la grille
+  it("grille ÉLARGIE : un fournisseur multi-familles couvre toutes les tailles, 0 perte", () => {
+    // fournisseur avec des produits TU ET des produits S/M → grille élargie S/M/TU
     const rows = [
       { client: "C1", ville: "V", reference: "TU1", coloris: "a", supplier: "MIX", totalQ: 10, q: [10] },
       { client: "C1", ville: "V", reference: "TU2", coloris: "b", supplier: "MIX", totalQ: 8, q: [8] },
@@ -102,7 +102,31 @@ describe("buildRepartition", () => {
     const gridByRef = { TU1: ["TU"], TU2: ["TU"], AP1: ["S", "M"] };
     const res = buildRepartition(rows, gridByRef);
     const mix = res.report.find((r) => r.supplier === "MIX")!;
-    expect(mix.grid).toBe("TU"); // dominante
-    expect(res.totalDropped).toBe(5); // 2+3 de AP1 hors grille TU
+    expect(mix.grid).toBe("S/M/TU"); // ordre canonique (la grille la plus longue d'abord)
+    expect(res.totalDropped).toBe(0); // rien n'est laissé de côté
+    const sheet = res.sheets.find((s) => s.supplier === "MIX")!;
+    expect(sheet.header).toEqual(["Client", "Ville", "Référence", "Coloris", "Fournisseur", "S", "M", "TU", "TOTAL"]);
+    // le produit TU1 : sa pièce sous TU, 0 en S/M ; TOTAL conservé
+    const tu1 = sheet.rows.find((r) => r[2] === "TU1")!;
+    expect(tu1).toEqual(["C1", "V", "TU1", "a", "MIX", 0, 0, 10, 10]);
+    const ap1 = sheet.rows.find((r) => r[2] === "AP1")!;
+    expect(ap1).toEqual(["C1", "V", "AP1", "c", "MIX", 2, 3, 0, 5]);
+  });
+
+  it("élargit la grille apparel quand un produit dépasse (CEI + HAU → S..6XL)", () => {
+    const rows = [
+      { client: "C1", ville: "V", reference: "P_CEI", coloris: "x", supplier: "AP", totalQ: 6, q: [1, 2, 3] },
+      { client: "C1", ville: "V", reference: "P_HAU", coloris: "y", supplier: "AP", totalQ: 4, q: [0, 0, 0, 0, 0, 0, 0, 1, 3] },
+    ];
+    const gridByRef = {
+      P_CEI: ["S", "M", "L", "XL", "XXL", "3XL", "4XL"],
+      P_HAU: ["S", "M", "L", "XL", "XXL", "3XL", "4XL", "5XL", "6XL"],
+    };
+    const res = buildRepartition(rows, gridByRef);
+    const ap = res.sheets.find((s) => s.supplier === "AP")!;
+    expect(ap.header).toEqual(["Client", "Ville", "Référence", "Coloris", "Fournisseur", "S", "M", "L", "XL", "XXL", "3XL", "4XL", "5XL", "6XL", "TOTAL"]);
+    expect(res.totalDropped).toBe(0);
+    const hau = ap.rows.find((r) => r[2] === "P_HAU")!;
+    expect(hau.slice(-3)).toEqual([1, 3, 4]); // 5XL=1, 6XL=3, TOTAL=4
   });
 });

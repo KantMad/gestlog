@@ -80,7 +80,7 @@ export default function RepartitionPage() {
       <div className="p-4 sm:p-6 lg:p-8 space-y-6">
         <PageHeader
           title="Répartition magasin"
-          description="Importez un export commande client (TIO) — l'outil le réorganise en un classeur avec un onglet par fournisseur, tailles replacées sous les bons libellés."
+          description="Importez un export commande client (TIO) — l'outil le réorganise en un classeur avec un onglet par fournisseur. La grille de chaque onglet est élargie pour couvrir toutes les tailles des produits du fournisseur (aucune pièce laissée de côté)."
         />
 
         <Card>

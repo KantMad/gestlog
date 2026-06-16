@@ -118,6 +118,17 @@ export function sanitizeSheetName(name: string): string {
   return name.replace(/[[\]:*?/\\]/g, "").trim().slice(0, 31) || "Inconnu";
 }
 
+// Ordre canonique global des libellés de taille, dérivé des grilles produits
+// (les plus longues d'abord → elles fixent l'ossature ; les nouvelles tailles
+// sont ajoutées à leur position). Sert à ordonner une grille fournisseur élargie.
+export function buildSizeOrder(gridByRef: Record<string, string[]>): string[] {
+  const order: string[] = [];
+  const seen = new Set<string>();
+  const grids = Object.values(gridByRef).slice().sort((a, b) => b.length - a.length);
+  for (const g of grids) for (const lab of g) if (!seen.has(lab)) { seen.add(lab); order.push(lab); }
+  return order;
+}
+
 // Construit les onglets : un par fournisseur, grille = grille dominante de ses
 // produits, quantités replacées PAR LIBELLÉ. `gridByRef` = réf → libellés ordonnés.
 export function buildRepartition(
@@ -128,21 +139,17 @@ export function buildRepartition(
   const sheets: SupplierSheet[] = [];
   const report: RepartitionReportRow[] = [];
   const usedNames = new Set<string>();
+  const sizeOrder = buildSizeOrder(gridByRef);
   let totalDropped = 0;
 
   for (const sup of suppliers) {
     const supRows = dataRows.filter((d) => d.supplier === sup);
-    // grille dominante (signature la plus fréquente ; à égalité, la plus longue)
-    const count = new Map<string, { labels: string[]; n: number }>();
-    for (const d of supRows) {
-      const g = gridByRef[d.reference] || [];
-      const key = g.join("|");
-      const e = count.get(key);
-      if (e) e.n++;
-      else count.set(key, { labels: g, n: 1 });
-    }
-    const grid =
-      [...count.values()].sort((a, b) => b.n - a.n || b.labels.length - a.labels.length)[0]?.labels || [];
+    // grille ÉLARGIE : union de toutes les tailles des produits du fournisseur,
+    // ordonnée selon l'ordre canonique global → aucune pièce laissée hors grille.
+    const needed = new Set<string>();
+    for (const d of supRows) for (const lab of gridByRef[d.reference] || []) needed.add(lab);
+    const grid = sizeOrder.filter((l) => needed.has(l));
+    for (const lab of needed) if (!grid.includes(lab)) grid.push(lab); // libellés hors ordre global
     const gridSet = new Set(grid);
 
     let dropped = 0;
