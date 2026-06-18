@@ -14,6 +14,7 @@ export const APP_SCREENS: { key: string; label: string }[] = [
   { key: "/recap", label: "Récap clients" },
   { key: "/configuration", label: "Configuration" },
   { key: "/statistics", label: "Statistiques" },
+  { key: "/season-comparison", label: "Comparaison saisons" },
   { key: "/repartition", label: "Répartition magasin" },
   { key: "/btoc", label: "BtoC" },
 ];
@@ -51,6 +52,8 @@ const API_SCREEN_MAP: [string, string][] = [
   ["/api/recap", "/recap"],
   ["/api/repartition", "/repartition"],
   ["/api/shipments", "/shipments"],
+  // plus spécifique AVANT /api/statistics (premier préfixe gagnant)
+  ["/api/statistics/season-comparison", "/season-comparison"],
   ["/api/statistics", "/statistics"],
 ];
 
