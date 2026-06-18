@@ -73,16 +73,31 @@ export async function POST(request: NextRequest) {
         const effectiveClientCode = clientCode || `UNKNOWN_${orderNumber}`;
         const effectiveClientName = clientName || effectiveClientCode;
 
-        // Les catalogues réassort (Réassort, Réassort hiver, Réassort femme) sont
-        // regroupés dans UNE saison dédiée "Réassort" (sentinelle year=0/type=REASSORT),
-        // indépendamment de l'année. Sinon, parse normal (W26 → AH 2026, S26 → PE 2026).
+        // Catalogues de DÉMO / TEST → données factices : on les retire de gestlog
+        // (suppression si déjà présents) et on ne les importe pas.
+        if (/d[ée]mo|\btest\b/i.test(String(seasonName))) {
+          if (orderNumber) {
+            const r = await prisma.clientOrder.deleteMany({ where: { orderNumber: String(orderNumber) } });
+            if (r.count > 0) removed += r.count;
+          }
+          continue;
+        }
+
+        // Détermination de la saison :
+        //  - Réassort (Réassort, Réassort hiver…) → saison sentinelle "Réassort" (year=0/REASSORT).
+        //  - Code saison reconnu (W26 → AH 2026, S26 → PE 2026) → saison normale.
+        //  - SANS code saison (promos, déstockage, stock, offres…) → saison sentinelle
+        //    "Hors-saison" (year=0/DIVERS) au lieu de polluer la saison courante.
         const isReassort = /r[ée]assort/i.test(String(seasonName));
         const parsed = isReassort ? null : parseSeasonFromCatalog(seasonName);
-        const seasonType = isReassort ? "REASSORT" : parsed?.type || "AH";
-        const seasonYear = isReassort ? 0 : parsed?.year || new Date().getFullYear();
+        const isUnseasoned = !isReassort && !parsed;
+        const seasonType = isReassort ? "REASSORT" : isUnseasoned ? "DIVERS" : parsed!.type;
+        const seasonYear = isReassort || isUnseasoned ? 0 : parsed!.year;
         const canonicalName = isReassort
           ? "Réassort"
-          : parsed?.canonicalName || `AH${String(seasonYear).slice(-2)}`;
+          : isUnseasoned
+            ? "Hors-saison"
+            : parsed!.canonicalName;
         const seasonKey = `${seasonYear}_${seasonType}`;
 
         // Find or auto-create season (cached)
