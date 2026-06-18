@@ -28,7 +28,9 @@ export async function GET(request: NextRequest) {
         dimension === "catalog"
           ? `JOIN "Catalog" dim ON dim.id = co."catalogId"`
           : `JOIN "Season" dim ON dim.id = co."seasonId"`;
-      const conds = ["dim.name = $1"];
+      // PLV (publicité sur lieu de vente / présentoirs) = pas du produit vendu → exclu
+      // des comparaisons saison/catalogue. IS DISTINCT FROM gère le cas catégorie NULL.
+      const conds = ["dim.name = $1", "p.category IS DISTINCT FROM 'PLV'"];
       if (end) {
         params.push(end);
         conds.push(`co."orderDate" IS NOT NULL AND co."orderDate" <= $${params.length}::timestamp`);
