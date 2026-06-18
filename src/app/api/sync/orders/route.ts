@@ -206,6 +206,13 @@ export async function POST(request: NextRequest) {
           },
         });
 
+        // Même commande sous une AUTRE saison (changement de catalogue/saison, ex.
+        // reclassement en "Hors-saison") → la clé unique (orderNumber, seasonId) crée
+        // sinon un DOUBLON. On supprime les autres exemplaires du même numéro.
+        await prisma.clientOrder.deleteMany({
+          where: { orderNumber: String(orderNumber), id: { not: clientOrder.id } },
+        });
+
         // Process lines
         if (Array.isArray(lines)) {
           const keptProductIds: string[] = []; // produits présents dans la commande ACTUELLE
