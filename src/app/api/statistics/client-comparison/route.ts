@@ -1,0 +1,81 @@
+import { NextRequest, NextResponse } from "next/server";
+import { handleApiError } from "@/lib/api";
+import { prisma } from "@/lib/prisma";
+
+// GET — Comparaison CLIENT entre deux saisons B2B.
+// Par client (boutique/enseigne) : CA + quantité des 2 saisons. CA = ClientOrderLine.amount.
+// Renvoie aussi les totaux globaux (nb clients, CA, quantité) + % saison2/saison1.
+// Le filtrage par enseigne (multi-sélection) se fait côté écran sur la liste renvoyée.
+export async function GET(request: NextRequest) {
+  try {
+    const p = request.nextUrl.searchParams;
+    const season1 = p.get("season1");
+    const season2 = p.get("season2");
+    if (!season1 || !season2) {
+      return NextResponse.json({ error: "season1 et season2 requis" }, { status: 400 });
+    }
+
+    const rows = await prisma.$queryRawUnsafe<
+      { code: string; name: string; qty1: bigint; ca1: number; qty2: bigint; ca2: number }[]
+    >(
+      `SELECT cl.code, cl.name,
+              COALESCE(SUM(col."totalQuantity") FILTER (WHERE se.name = $1), 0)::bigint AS qty1,
+              COALESCE(SUM(col.amount)          FILTER (WHERE se.name = $1), 0)::float8 AS ca1,
+              COALESCE(SUM(col."totalQuantity") FILTER (WHERE se.name = $2), 0)::bigint AS qty2,
+              COALESCE(SUM(col.amount)          FILTER (WHERE se.name = $2), 0)::float8 AS ca2
+       FROM "ClientOrder" co
+       JOIN "Client" cl ON cl.id = co."clientId"
+       JOIN "Season" se ON se.id = co."seasonId"
+       JOIN "ClientOrderLine" col ON col."clientOrderId" = co.id
+       WHERE se.name IN ($1, $2)
+       GROUP BY cl.id, cl.code, cl.name`,
+      season1,
+      season2
+    );
+
+    const pct = (num: number, den: number) => (den > 0 ? (num / den) * 100 : 0);
+
+    const clients = rows
+      .map((r) => {
+        const ca1 = Number(r.ca1), qty1 = Number(r.qty1), ca2 = Number(r.ca2), qty2 = Number(r.qty2);
+        return {
+          code: r.code,
+          name: r.name,
+          s1: { ca: Math.round(ca1), qty: qty1 },
+          s2: { ca: Math.round(ca2), qty: qty2 },
+          caPct: pct(ca2, ca1),
+          qtyPct: pct(qty2, qty1),
+        };
+      })
+      // on ne garde que les clients ayant une activité sur au moins une des deux saisons
+      .filter((c) => c.s1.ca || c.s1.qty || c.s2.ca || c.s2.qty)
+      .sort((a, b) => b.s1.ca - a.s1.ca);
+
+    const sum = (sel: (c: (typeof clients)[number]) => number) => clients.reduce((s, c) => s + sel(c), 0);
+    const s1 = {
+      clients: clients.filter((c) => c.s1.ca || c.s1.qty).length,
+      ca: sum((c) => c.s1.ca),
+      qty: sum((c) => c.s1.qty),
+    };
+    const s2 = {
+      clients: clients.filter((c) => c.s2.ca || c.s2.qty).length,
+      ca: sum((c) => c.s2.ca),
+      qty: sum((c) => c.s2.qty),
+    };
+
+    return NextResponse.json({
+      season1,
+      season2,
+      global: {
+        s1,
+        s2,
+        clientsPct: pct(s2.clients, s1.clients),
+        caPct: pct(s2.ca, s1.ca),
+        qtyPct: pct(s2.qty, s1.qty),
+      },
+      clients,
+    });
+  } catch (e) {
+    return handleApiError(e, "api/statistics/client-comparison");
+  }
+}
