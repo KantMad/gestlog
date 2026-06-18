@@ -21,6 +21,7 @@ export async function POST(request: NextRequest) {
 
     const errors: string[] = [];
     let imported = 0;
+    let removed = 0; // commandes annulées/supprimées dans TIO, retirées de gestlog
 
     // Cache for seasons and catalogs to avoid repeated DB queries
     const seasonCache = new Map<string, { id: string }>();
@@ -40,8 +41,19 @@ export async function POST(request: NextRequest) {
           orderType,
           orderDate,    // date_crea TIO (date de commande) — ISO ou "YYYY-MM-DD HH:mm:ss"
           totalAmount,  // total_price TIO (CA net de la commande)
+          deleted,      // true = commande annulée/supprimée dans TIO → à retirer de gestlog
           lines,
         } = order;
+
+        // Auto-nettoyage : une commande annulée/supprimée dans TIO est retirée de
+        // gestlog (cascade sur ses lignes) → pas de quantités/CA fantômes.
+        if (deleted) {
+          if (orderNumber) {
+            const r = await prisma.clientOrder.deleteMany({ where: { orderNumber: String(orderNumber) } });
+            if (r.count > 0) removed += r.count;
+          }
+          continue;
+        }
 
         // Date de commande (date_crea) — parsée si fournie et valide.
         const parsedOrderDate = (() => {
@@ -264,7 +276,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      data: { imported, errors, total: orders.length },
+      data: { imported, removed, errors, total: orders.length },
     });
   } catch (e) {
     return handleApiError(e, "api/sync/orders");
