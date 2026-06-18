@@ -181,6 +181,7 @@ export async function POST(request: NextRequest) {
 
         // Process lines
         if (Array.isArray(lines)) {
+          const keptProductIds: string[] = []; // produits présents dans la commande ACTUELLE
           for (const line of lines) {
             const { reference, color, colorLabel, quantities, category, sizeTypeCode, externalId, amount } = line;
             const lineAmount = amount != null && !isNaN(Number(amount)) ? Number(amount) : 0;
@@ -237,6 +238,21 @@ export async function POST(request: NextRequest) {
                 sizeTypeCode: sizeTypeCode || null,
               },
             });
+            keptProductIds.push(product.id);
+          }
+
+          // Supprime les lignes PÉRIMÉES : produits présents en base mais plus dans la
+          // commande TIO actuelle (commande rééditée → lignes retirées/mises à 0).
+          // Sans ça, le sync upsert n'efface jamais ces lignes → sur-comptage des quantités.
+          // Garde-fou : si AUCUNE ligne n'a résolu (lines>0 mais produits non synchronisés),
+          // on ne touche à rien — on évite d'effacer des données sur un sync incomplet.
+          if (keptProductIds.length > 0) {
+            await prisma.clientOrderLine.deleteMany({
+              where: { clientOrderId: clientOrder.id, productId: { notIn: keptProductIds } },
+            });
+          } else if (lines.length === 0) {
+            // commande réellement vidée dans TIO
+            await prisma.clientOrderLine.deleteMany({ where: { clientOrderId: clientOrder.id } });
           }
         }
 

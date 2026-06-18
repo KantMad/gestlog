@@ -119,7 +119,7 @@ export default function ClientComparisonPage() {
         />
 
         {/* Sélecteurs saisons + filtre enseigne */}
-        <Card>
+        <Card className="overflow-visible">
           <CardContent className="pt-6 space-y-4">
             <div className="flex flex-wrap items-end gap-3">
               <div className="space-y-1">
