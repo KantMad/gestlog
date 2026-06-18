@@ -123,6 +123,7 @@ export async function importClientOrders(
         },
       });
 
+      const keptProductIds: string[] = []; // produits de la commande dans CE fichier
       for (const row of rows) {
         const reference = String(row[mapping.reference] || "").trim();
         const color = String(row[mapping.color] || "").trim();
@@ -203,8 +204,17 @@ export async function importClientOrders(
             sizeTypeCode,
           },
         });
+        keptProductIds.push(product.id);
 
         imported++;
+      }
+
+      // Supprime les lignes périmées (produits plus dans le fichier ré-importé) →
+      // évite le sur-comptage des quantités. Cf. même correctif dans /api/sync/orders.
+      if (keptProductIds.length > 0) {
+        await prisma.clientOrderLine.deleteMany({
+          where: { clientOrderId: clientOrder.id, productId: { notIn: keptProductIds } },
+        });
       }
     } catch (e) {
       errors.push(`Commande ${orderNumber}: ${String(e)}`);

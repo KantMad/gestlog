@@ -55,6 +55,7 @@ export async function importSupplierOrders(
         },
       });
 
+      const keptProductIds: string[] = [];
       for (const row of rows) {
         const reference = String(row[mapping.reference] || "").trim();
         const color = String(row[mapping.color] || "").trim();
@@ -95,8 +96,16 @@ export async function importSupplierOrders(
             totalQuantity: sumQuantities(quantities),
           },
         });
+        keptProductIds.push(product.id);
 
         imported++;
+      }
+
+      // Supprime les lignes périmées (produits plus dans le fichier ré-importé).
+      if (keptProductIds.length > 0) {
+        await prisma.supplierOrderLine.deleteMany({
+          where: { supplierOrderId: supplierOrder.id, productId: { notIn: keptProductIds } },
+        });
       }
     } catch (e) {
       errors.push(`Commande ${orderNumber}: ${String(e)}`);
