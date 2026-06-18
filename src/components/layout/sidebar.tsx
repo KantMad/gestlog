@@ -43,7 +43,7 @@ const NAV_ITEMS = [
   { href: "/recap", label: "Récap clients", icon: Receipt },
   { href: "/configuration", label: "Configuration", icon: Settings },
   { href: "/statistics", label: "Statistiques", icon: BarChart3 },
-  { href: "/season-comparison", label: "Comparaison saisons", icon: ArrowLeftRight },
+  { href: "/season-comparison", label: "Comparaison saisons / catalogues", icon: ArrowLeftRight },
   { href: "/client-comparison", label: "Comparaison clients", icon: Building2 },
   { href: "/repartition", label: "Répartition magasin", icon: Store },
   { href: "/btoc", label: "BtoC", icon: ShoppingBag },

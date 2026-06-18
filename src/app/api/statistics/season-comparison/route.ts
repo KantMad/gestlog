@@ -2,37 +2,57 @@ import { NextRequest, NextResponse } from "next/server";
 import { handleApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 
-// GET — Comparaison de deux saisons B2B par catégorie.
-//  - saison 1 : TOTALE (toutes les commandes).
-//  - saison 2 : filtrée jusqu'à une date (commandes dont orderDate <= endDate).
-// CA = ClientOrderLine.amount (CA net réparti depuis TIO). Catégorie = Product.category.
-// Pour chaque catégorie : quantité + CA des 2 saisons, poids (% de la saison),
-// % saison2/saison1 (CA et qté) et écart de poids (points) entre les 2 saisons.
+// GET — Comparaison de deux SAISONS ou deux CATALOGUES DE VENTE B2B, par catégorie.
+//  - item 1 : TOTAL (toutes les commandes).
+//  - item 2 : filtré jusqu'à une date (commandes dont orderDate <= endDate).
+// dimension = "season" (défaut) ou "catalog". CA = ClientOrderLine.amount.
+// Filtre boutique : filterMode "exclude" (toutes sauf) | "include" (aucune sauf),
+// clients = codes séparés par des virgules. Catégorie = Product.category.
 export async function GET(request: NextRequest) {
   try {
     const p = request.nextUrl.searchParams;
     const season1 = p.get("season1");
     const season2 = p.get("season2");
-    const endDate = p.get("endDate"); // ISO (YYYY-MM-DD) — borne haute pour la saison 2
+    const endDate = p.get("endDate"); // ISO (YYYY-MM-DD) — borne haute pour l'item 2
+    const dimension = p.get("dimension") === "catalog" ? "catalog" : "season";
+    const filterMode = p.get("filterMode") === "include" ? "include" : "exclude";
+    const clientCodes = (p.get("clients") || "").split(",").map((s) => s.trim()).filter(Boolean);
     if (!season1 || !season2) {
       return NextResponse.json({ error: "season1 et season2 requis" }, { status: 400 });
     }
 
     type Row = { cat: string; qty: bigint; ca: number };
-    const groupQuery = async (seasonName: string, end: string | null) =>
-      prisma.$queryRawUnsafe<Row[]>(
+    const groupQuery = async (itemName: string, end: string | null) => {
+      const params: unknown[] = [itemName];
+      const dimJoin =
+        dimension === "catalog"
+          ? `JOIN "Catalog" dim ON dim.id = co."catalogId"`
+          : `JOIN "Season" dim ON dim.id = co."seasonId"`;
+      const conds = ["dim.name = $1"];
+      if (end) {
+        params.push(end);
+        conds.push(`co."orderDate" IS NOT NULL AND co."orderDate" <= $${params.length}::timestamp`);
+      }
+      let clientJoin = "";
+      if (clientCodes.length) {
+        clientJoin = `JOIN "Client" cl ON cl.id = co."clientId"`;
+        params.push(clientCodes);
+        conds.push(filterMode === "include" ? `cl.code = ANY($${params.length})` : `cl.code <> ALL($${params.length})`);
+      }
+      return prisma.$queryRawUnsafe<Row[]>(
         `SELECT COALESCE(NULLIF(p.category,''),'Sans catégorie') AS cat,
                 SUM(col."totalQuantity")::bigint AS qty,
                 COALESCE(SUM(col.amount),0)::float8 AS ca
          FROM "ClientOrder" co
          JOIN "ClientOrderLine" col ON col."clientOrderId" = co.id
          JOIN "Product" p ON p.id = col."productId"
-         JOIN "Season" se ON se.id = co."seasonId"
-         WHERE se.name = $1
-           ${end ? `AND co."orderDate" IS NOT NULL AND co."orderDate" <= $2::timestamp` : ""}
+         ${dimJoin}
+         ${clientJoin}
+         WHERE ${conds.join(" AND ")}
          GROUP BY 1`,
-        ...(end ? [seasonName, end] : [seasonName])
+        ...params
       );
+    };
 
     // saison 1 = totale ; saison 2 = filtrée par date (fin de journée incluse)
     const endTs = endDate ? `${endDate} 23:59:59` : null;

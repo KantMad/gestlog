@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { toast } from "sonner";
 import { useSeason } from "@/lib/season-context";
 import { Topbar } from "@/components/layout/topbar";
@@ -31,7 +31,7 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
-import { Loader2, ArrowLeftRight } from "lucide-react";
+import { Loader2, ArrowLeftRight, Search, X } from "lucide-react";
 import { cn, formatNumber, formatEuro } from "@/lib/utils";
 
 interface CatRow {
@@ -49,39 +49,63 @@ interface CompData {
   global: { qtyPct: number; caPct: number };
   categories: CatRow[];
 }
+interface Catalog { name: string; seasonName: string | null }
+interface ClientLite { code: string; name: string }
 
-function pctCls(p: number) {
-  return p >= 100 ? "text-emerald-600" : "text-rose-600";
-}
-function gapCls(g: number) {
-  return g > 0.05 ? "text-emerald-600" : g < -0.05 ? "text-rose-600" : "text-muted-foreground";
-}
+const pctCls = (p: number) => (p >= 100 ? "text-emerald-600" : "text-rose-600");
+const gapCls = (g: number) => (g > 0.05 ? "text-emerald-600" : g < -0.05 ? "text-rose-600" : "text-muted-foreground");
 const fmtPct = (p: number) => `${p.toFixed(0)}%`;
 const fmtPts = (g: number) => `${g >= 0 ? "+" : ""}${g.toFixed(1)} pts`;
 const fmtW = (w: number) => `${w.toFixed(1)}%`;
 
 export default function SeasonComparisonPage() {
   const { seasons } = useSeason();
-  const [season1, setSeason1] = useState("");
-  const [season2, setSeason2] = useState("");
+  const [dimension, setDimension] = useState<"season" | "catalog">("season");
+  const [item1, setItem1] = useState("");
+  const [item2, setItem2] = useState("");
   const [endDate, setEndDate] = useState("");
   const [data, setData] = useState<CompData | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // Défauts : saison 2 = la plus récente, saison 1 = la précédente.
+  const [catalogs, setCatalogs] = useState<Catalog[]>([]);
+  const [clients, setClients] = useState<ClientLite[]>([]);
+
+  // filtre boutique : mode + sélection
+  const [filterMode, setFilterMode] = useState<"exclude" | "include">("exclude");
+  const [selected, setSelected] = useState<string[]>([]);
+  const [search, setSearch] = useState("");
+
+  // listes de référence
   useEffect(() => {
-    if (seasons.length && !season1 && !season2) {
-      setSeason2(seasons[0]?.name || "");
-      setSeason1(seasons[1]?.name || seasons[0]?.name || "");
-    }
-  }, [seasons, season1, season2]);
+    fetch("/api/catalogs").then((r) => r.json()).then((d) => setCatalogs(d.data || [])).catch(() => {});
+    fetch("/api/clients").then((r) => r.json()).then((d) => setClients(d.data || [])).catch(() => {});
+  }, []);
+
+  const seasonNames = useMemo(() => [...new Set(seasons.map((s) => s.name))], [seasons]);
+  const catalogNames = useMemo(() => catalogs.map((c) => c.name), [catalogs]);
+  const options = dimension === "season" ? seasonNames : catalogNames;
+  const labelOf = (name: string) =>
+    dimension === "catalog"
+      ? `${name}${catalogs.find((c) => c.name === name)?.seasonName ? ` · ${catalogs.find((c) => c.name === name)?.seasonName}` : ""}`
+      : name;
+
+  // (ré)initialise les deux items quand la dimension ou les listes changent
+  useEffect(() => {
+    if (!options.length) return;
+    if (!options.includes(item2)) setItem2(options[0] || "");
+    if (!options.includes(item1)) setItem1(options[1] || options[0] || "");
+  }, [dimension, options]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const load = useCallback(async () => {
-    if (!season1 || !season2) return;
+    if (!item1 || !item2) return;
     setLoading(true);
     try {
-      const p = new URLSearchParams({ season1, season2 });
+      const p = new URLSearchParams({ dimension, season1: item1, season2: item2 });
       if (endDate) p.set("endDate", endDate);
+      if (selected.length) {
+        p.set("filterMode", filterMode);
+        p.set("clients", selected.join(","));
+      }
       const res = await fetch(`/api/statistics/season-comparison?${p}`);
       if (!res.ok) throw new Error();
       setData(await res.json());
@@ -90,21 +114,27 @@ export default function SeasonComparisonPage() {
     } finally {
       setLoading(false);
     }
-  }, [season1, season2, endDate]);
+  }, [dimension, item1, item2, endDate, filterMode, selected]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  // noms de saisons uniques pour les sélecteurs
-  const seasonNames = [...new Set(seasons.map((s) => s.name))];
+  const dimLabel = dimension === "season" ? "saison" : "catalogue";
 
-  const globalCa = data
-    ? [{ name: "CA", [data.season1.name]: data.season1.ca, [data.season2.name]: data.season2.ca }]
-    : [];
-  const globalQty = data
-    ? [{ name: "Quantité", [data.season1.name]: data.season1.qty, [data.season2.name]: data.season2.qty }]
-    : [];
+  // suggestions boutiques
+  const suggestions = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return [];
+    return clients
+      .filter((c) => !selected.includes(c.code))
+      .filter((c) => c.name.toLowerCase().includes(q) || c.code.toLowerCase().includes(q))
+      .slice(0, 8);
+  }, [search, clients, selected]);
+  const nameByCode = (code: string) => clients.find((c) => c.code === code)?.name || code;
+
+  const globalCa = data ? [{ name: "CA", [data.season1.name]: data.season1.ca, [data.season2.name]: data.season2.ca }] : [];
+  const globalQty = data ? [{ name: "Quantité", [data.season1.name]: data.season1.qty, [data.season2.name]: data.season2.qty }] : [];
   const catCa = (data?.categories || []).slice(0, 12).map((c) => ({
     name: c.category,
     [data!.season1.name]: c.s1.ca,
@@ -113,40 +143,91 @@ export default function SeasonComparisonPage() {
 
   return (
     <div>
-      <Topbar title="Comparaison saisons" />
+      <Topbar title="Comparaison saisons / catalogues" />
       <div className="p-4 sm:p-6 lg:p-8 space-y-6">
         <PageHeader
-          title="Comparaison saisons"
-          description="Saison 1 (totale) vs Saison 2 (filtrée jusqu'à une date) — écarts de CA et de quantité, par catégorie, avec poids et évolution."
+          title="Comparaison saisons / catalogues"
+          description="Compare deux saisons OU deux catalogues de vente. Item 1 (total) vs item 2 (filtrable par date), par catégorie : CA, quantité, poids et évolution. Filtre boutique inclusion/exclusion."
         />
 
         {/* Sélecteurs */}
         <Card>
-          <CardContent className="pt-6">
+          <CardContent className="pt-6 space-y-4">
             <div className="flex flex-wrap items-end gap-3">
               <div className="space-y-1">
-                <label className="block text-xs font-medium text-muted-foreground">Saison 1 (totale)</label>
-                <Select value={season1} onValueChange={(v) => v && setSeason1(v)}>
-                  <SelectTrigger className="w-44 h-9"><span className="text-sm truncate">{season1 || "—"}</span></SelectTrigger>
-                  <SelectContent>{seasonNames.map((n) => <SelectItem key={n} value={n}>{n}</SelectItem>)}</SelectContent>
+                <label className="block text-xs font-medium text-muted-foreground">Comparer par</label>
+                <Select value={dimension} onValueChange={(v) => v && setDimension(v as "season" | "catalog")}>
+                  <SelectTrigger className="w-44 h-9"><span className="text-sm">{dimension === "season" ? "Saison" : "Catalogue de vente"}</span></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="season">Saison</SelectItem>
+                    <SelectItem value="catalog">Catalogue de vente</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <label className="block text-xs font-medium text-muted-foreground">{dimLabel} 1 (total)</label>
+                <Select value={item1} onValueChange={(v) => v && setItem1(v)}>
+                  <SelectTrigger className="w-56 h-9"><span className="text-sm truncate">{item1 ? labelOf(item1) : "—"}</span></SelectTrigger>
+                  <SelectContent>{options.map((n) => <SelectItem key={n} value={n}>{labelOf(n)}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <ArrowLeftRight className="h-4 w-4 text-muted-foreground mb-2.5" />
               <div className="space-y-1">
-                <label className="block text-xs font-medium text-muted-foreground">Saison 2 (filtrée)</label>
-                <Select value={season2} onValueChange={(v) => v && setSeason2(v)}>
-                  <SelectTrigger className="w-44 h-9"><span className="text-sm truncate">{season2 || "—"}</span></SelectTrigger>
-                  <SelectContent>{seasonNames.map((n) => <SelectItem key={n} value={n}>{n}</SelectItem>)}</SelectContent>
+                <label className="block text-xs font-medium text-muted-foreground">{dimLabel} 2 (filtré)</label>
+                <Select value={item2} onValueChange={(v) => v && setItem2(v)}>
+                  <SelectTrigger className="w-56 h-9"><span className="text-sm truncate">{item2 ? labelOf(item2) : "—"}</span></SelectTrigger>
+                  <SelectContent>{options.map((n) => <SelectItem key={n} value={n}>{labelOf(n)}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div className="space-y-1">
-                <label className="block text-xs font-medium text-muted-foreground">Commandes saison 2 jusqu&apos;au</label>
+                <label className="block text-xs font-medium text-muted-foreground">Commandes {dimLabel} 2 jusqu&apos;au</label>
                 <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-44 h-9" />
               </div>
-              {endDate && (
-                <button onClick={() => setEndDate("")} className="text-xs text-muted-foreground underline mb-2.5">tout prendre</button>
-              )}
+              {endDate && <button onClick={() => setEndDate("")} className="text-xs text-muted-foreground underline mb-2.5">tout prendre</button>}
             </div>
+
+            {/* Filtre boutique */}
+            <div className="flex flex-wrap items-end gap-3 border-t pt-4">
+              <div className="space-y-1">
+                <label className="block text-xs font-medium text-muted-foreground">Filtre boutique</label>
+                <Select value={filterMode} onValueChange={(v) => v && setFilterMode(v as "exclude" | "include")}>
+                  <SelectTrigger className="w-56 h-9"><span className="text-sm">{filterMode === "exclude" ? "Toutes les boutiques sauf…" : "Aucune boutique sauf…"}</span></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="exclude">Toutes les boutiques sauf…</SelectItem>
+                    <SelectItem value="include">Aucune boutique sauf…</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1 relative">
+                <label className="block text-xs font-medium text-muted-foreground">Boutiques {filterMode === "exclude" ? "à exclure" : "à inclure"}</label>
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input placeholder="Rechercher une boutique…" value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9 w-72 h-9" />
+                </div>
+                {suggestions.length > 0 && (
+                  <div className="absolute z-20 mt-1 w-72 max-h-64 overflow-auto rounded-md border bg-popover shadow-md">
+                    {suggestions.map((c) => (
+                      <button key={c.code} onClick={() => { setSelected((p) => [...p, c.code]); setSearch(""); }} className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-muted">
+                        <span className="truncate">{c.name}</span>
+                        <span className="font-mono text-[10px] text-muted-foreground shrink-0">{c.code}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {selected.length === 0 && <span className="text-xs text-muted-foreground mb-2.5">Aucun filtre — toutes les boutiques.</span>}
+            </div>
+            {selected.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2">
+                {selected.map((code) => (
+                  <span key={code} className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-xs">
+                    {nameByCode(code)}
+                    <button onClick={() => setSelected((p) => p.filter((x) => x !== code))} aria-label="Retirer"><X className="h-3 w-3" /></button>
+                  </span>
+                ))}
+                <button onClick={() => setSelected([])} className="text-xs text-muted-foreground underline">tout effacer</button>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -156,30 +237,12 @@ export default function SeasonComparisonPage() {
           <>
             {/* KPI globaux */}
             <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-              <Card><CardContent className="p-4">
-                <p className="text-xs text-muted-foreground">CA — {data.season1.name} (total)</p>
-                <p className="text-2xl font-bold">{formatEuro(data.season1.ca)}</p>
-              </CardContent></Card>
-              <Card><CardContent className="p-4">
-                <p className="text-xs text-muted-foreground">CA — {data.season2.name}{data.season2.endDate ? ` (≤ ${data.season2.endDate})` : ""}</p>
-                <p className="text-2xl font-bold">{formatEuro(data.season2.ca)}</p>
-              </CardContent></Card>
-              <Card><CardContent className="p-4">
-                <p className="text-xs text-muted-foreground">CA saison 2 / saison 1</p>
-                <p className={cn("text-2xl font-bold", pctCls(data.global.caPct))}>{fmtPct(data.global.caPct)}</p>
-              </CardContent></Card>
-              <Card><CardContent className="p-4">
-                <p className="text-xs text-muted-foreground">Quantité — {data.season1.name} (total)</p>
-                <p className="text-2xl font-bold">{formatNumber(data.season1.qty)}</p>
-              </CardContent></Card>
-              <Card><CardContent className="p-4">
-                <p className="text-xs text-muted-foreground">Quantité — {data.season2.name}{data.season2.endDate ? ` (≤ ${data.season2.endDate})` : ""}</p>
-                <p className="text-2xl font-bold">{formatNumber(data.season2.qty)}</p>
-              </CardContent></Card>
-              <Card><CardContent className="p-4">
-                <p className="text-xs text-muted-foreground">Quantité saison 2 / saison 1</p>
-                <p className={cn("text-2xl font-bold", pctCls(data.global.qtyPct))}>{fmtPct(data.global.qtyPct)}</p>
-              </CardContent></Card>
+              <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">CA — {data.season1.name} (total)</p><p className="text-2xl font-bold">{formatEuro(data.season1.ca)}</p></CardContent></Card>
+              <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">CA — {data.season2.name}{data.season2.endDate ? ` (≤ ${data.season2.endDate})` : ""}</p><p className="text-2xl font-bold">{formatEuro(data.season2.ca)}</p></CardContent></Card>
+              <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">CA item 2 / item 1</p><p className={cn("text-2xl font-bold", pctCls(data.global.caPct))}>{fmtPct(data.global.caPct)}</p></CardContent></Card>
+              <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Quantité — {data.season1.name} (total)</p><p className="text-2xl font-bold">{formatNumber(data.season1.qty)}</p></CardContent></Card>
+              <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Quantité — {data.season2.name}{data.season2.endDate ? ` (≤ ${data.season2.endDate})` : ""}</p><p className="text-2xl font-bold">{formatNumber(data.season2.qty)}</p></CardContent></Card>
+              <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Quantité item 2 / item 1</p><p className={cn("text-2xl font-bold", pctCls(data.global.qtyPct))}>{fmtPct(data.global.qtyPct)}</p></CardContent></Card>
             </div>
 
             {/* Graphiques écarts globaux */}
@@ -242,7 +305,7 @@ export default function SeasonComparisonPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">Détail par catégorie</CardTitle>
-                <p className="text-xs text-muted-foreground">Poids = part de la catégorie dans sa saison. % = saison 2 / saison 1. Écart de poids en points entre les deux saisons.</p>
+                <p className="text-xs text-muted-foreground">Poids = part de la catégorie dans son {dimLabel}. % = item 2 / item 1. Écart de poids en points entre les deux.</p>
               </CardHeader>
               <CardContent className="p-0 overflow-x-auto">
                 <Table>

@@ -14,7 +14,7 @@ export const APP_SCREENS: { key: string; label: string }[] = [
   { key: "/recap", label: "Récap clients" },
   { key: "/configuration", label: "Configuration" },
   { key: "/statistics", label: "Statistiques" },
-  { key: "/season-comparison", label: "Comparaison saisons" },
+  { key: "/season-comparison", label: "Comparaison saisons / catalogues" },
   { key: "/client-comparison", label: "Comparaison clients" },
   { key: "/repartition", label: "Répartition magasin" },
   { key: "/btoc", label: "BtoC" },
