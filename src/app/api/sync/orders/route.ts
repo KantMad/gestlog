@@ -38,8 +38,19 @@ export async function POST(request: NextRequest) {
           deliveryWindowStart,
           deliveryWindowEnd,
           orderType,
+          orderDate,    // date_crea TIO (date de commande) — ISO ou "YYYY-MM-DD HH:mm:ss"
+          totalAmount,  // total_price TIO (CA net de la commande)
           lines,
         } = order;
+
+        // Date de commande (date_crea) — parsée si fournie et valide.
+        const parsedOrderDate = (() => {
+          if (!orderDate) return null;
+          const d = new Date(String(orderDate).replace(" ", "T"));
+          return isNaN(d.getTime()) ? null : d;
+        })();
+        const orderAmount =
+          totalAmount != null && !isNaN(Number(totalAmount)) ? Number(totalAmount) : null;
 
         if (!orderNumber || !seasonName) {
           errors.push(`Commande ${orderNumber || "?"}: donnees manquantes (orderNumber ou seasonName)`);
@@ -151,6 +162,8 @@ export async function POST(request: NextRequest) {
             orderType: orderType === "VSS" ? "VSS" : "COMMANDE",
             catalogId: catalog?.id || undefined,
             tioOrderNumber: String(orderNumber),
+            ...(parsedOrderDate ? { orderDate: parsedOrderDate } : {}),
+            ...(orderAmount != null ? { totalAmount: orderAmount } : {}),
           },
           create: {
             orderNumber: String(orderNumber),
@@ -161,13 +174,16 @@ export async function POST(request: NextRequest) {
             deliveryWindow,
             orderType: orderType === "VSS" ? "VSS" : "COMMANDE",
             tioOrderNumber: String(orderNumber),
+            orderDate: parsedOrderDate,
+            totalAmount: orderAmount,
           },
         });
 
         // Process lines
         if (Array.isArray(lines)) {
           for (const line of lines) {
-            const { reference, color, colorLabel, quantities, category, sizeTypeCode, externalId } = line;
+            const { reference, color, colorLabel, quantities, category, sizeTypeCode, externalId, amount } = line;
+            const lineAmount = amount != null && !isNaN(Number(amount)) ? Number(amount) : 0;
 
             let product = null;
 
@@ -210,12 +226,13 @@ export async function POST(request: NextRequest) {
                   productId: product.id,
                 },
               },
-              update: { quantitiesBySize, totalQuantity, category: category || null, sizeTypeCode: sizeTypeCode || null },
+              update: { quantitiesBySize, totalQuantity, amount: lineAmount, category: category || null, sizeTypeCode: sizeTypeCode || null },
               create: {
                 clientOrderId: clientOrder.id,
                 productId: product.id,
                 quantitiesBySize,
                 totalQuantity,
+                amount: lineAmount,
                 category: category || null,
                 sizeTypeCode: sizeTypeCode || null,
               },

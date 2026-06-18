@@ -258,6 +258,7 @@ model ClientOrderLine {
   productId        String
   quantitiesBySize String   // JSON
   totalQuantity    Int
+  amount           Float    @default(0) // CA NET de la ligne (€), réparti depuis le total commande TIO
   category         String?  // catégorie produit
   sizeTypeCode     String?  // code du type de taille (lien vers SizeType)
   // Pièces SOLDÉES (ne seront jamais livrées) : retirées du compte "à livrer".
