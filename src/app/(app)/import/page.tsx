@@ -16,6 +16,13 @@ import {
 } from "@/components/import/column-mapper";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  detectMcsFormat,
+  parseMcsStatgen,
+  parseMcsPackingList,
+  type McsFormat,
+} from "@/lib/import/mcs-format";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -110,13 +117,37 @@ function ImportTab({
     imported: number;
     errors: string[];
   } | null>(null);
+  // Format MCS auto-détecté (StatGen / Packing List) → import sans mapping manuel.
+  const [mcsFormat, setMcsFormat] = useState<McsFormat | null>(null);
+  const [mcsRowCount, setMcsRowCount] = useState(0);
+  const [supplierOrderNumber, setSupplierOrderNumber] = useState("");
+
+  // Format MCS attendu pour cet onglet (les autres onglets restent en mapping générique).
+  const expectedMcs: McsFormat | null =
+    tab.id === "supplier-orders" ? "statgen" : tab.id === "receptions" ? "packing-list" : null;
 
   const handleFileSelected = useCallback(
     async (selectedFile: File) => {
       setFile(selectedFile);
       setResult(null);
+      setMcsFormat(null);
+      setMcsRowCount(0);
       try {
         const buffer = await selectedFile.arrayBuffer();
+
+        // Détection prioritaire du format MCS (réception / commande fournisseur).
+        const fmt = detectMcsFormat(buffer);
+        if (fmt) {
+          setMcsFormat(fmt);
+          setMcsRowCount(
+            fmt === "statgen"
+              ? parseMcsStatgen(buffer).length
+              : parseMcsPackingList(buffer).length
+          );
+          setParsed({ headers: [], rows: [] });
+          return;
+        }
+
         const workbook = XLSX.read(buffer, { type: "array" });
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
         const data = XLSX.utils.sheet_to_json<Record<string, string | number | null>>(sheet, {
@@ -132,14 +163,23 @@ function ImportTab({
     [tab.patterns]
   );
 
+  const useMcs = mcsFormat !== null && mcsFormat === expectedMcs;
+
   const handleImport = async () => {
     if (!file || !parsed) return;
 
-    const requiredFields = tab.fields.filter((f) => f.required);
-    const missing = requiredFields.filter((f) => !mapping[f.key]);
-    if (missing.length > 0) {
-      toast.error(`Colonnes requises manquantes : ${missing.map((f) => f.label).join(", ")}`);
-      return;
+    if (useMcs) {
+      if (mcsFormat === "packing-list" && !supplierOrderNumber.trim()) {
+        toast.error("Entrez le n° de commande fournisseur de la réception");
+        return;
+      }
+    } else {
+      const requiredFields = tab.fields.filter((f) => f.required);
+      const missing = requiredFields.filter((f) => !mapping[f.key]);
+      if (missing.length > 0) {
+        toast.error(`Colonnes requises manquantes : ${missing.map((f) => f.label).join(", ")}`);
+        return;
+      }
     }
 
     setImporting(true);
@@ -147,7 +187,12 @@ function ImportTab({
       const formData = new FormData();
       formData.append("file", file);
       formData.append("seasonId", seasonId);
-      formData.append("mapping", JSON.stringify(mapping));
+      if (useMcs) {
+        if (supplierOrderNumber.trim())
+          formData.append("supplierOrderNumber", supplierOrderNumber.trim());
+      } else {
+        formData.append("mapping", JSON.stringify(mapping));
+      }
 
       const res = await fetch(tab.endpoint, { method: "POST", body: formData });
       const json = await res.json();
@@ -177,6 +222,9 @@ function ImportTab({
     setFile(null);
     setMapping({});
     setResult(null);
+    setMcsFormat(null);
+    setMcsRowCount(0);
+    setSupplierOrderNumber("");
   };
 
   if (result) {
@@ -224,11 +272,62 @@ function ImportTab({
     );
   }
 
+  // Fichier MCS reconnu mais déposé dans le mauvais onglet.
+  const mcsMismatch = mcsFormat !== null && mcsFormat !== expectedMcs;
+
   return (
     <div className="space-y-6">
       <Dropzone onFileSelected={handleFileSelected} />
 
-      {parsed && (
+      {mcsMismatch && (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+          <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+          <span>
+            Ce fichier ressemble à un format MCS «{" "}
+            {mcsFormat === "statgen" ? "commande fournisseur" : "réception (liste de colisage)"} ».
+            Sélectionne l'onglet correspondant pour l'importer.
+          </span>
+        </div>
+      )}
+
+      {parsed && useMcs && (
+        <>
+          <div className="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+            <Check className="h-4 w-4 shrink-0 mt-0.5" />
+            <span>
+              Format MCS détecté ({mcsFormat === "statgen" ? "StatGen" : "Packing List"}) —{" "}
+              <strong>{mcsRowCount}</strong> ligne{mcsRowCount > 1 ? "s" : ""} prête
+              {mcsRowCount > 1 ? "s" : ""}. Pas de mapping de colonnes nécessaire.
+            </span>
+          </div>
+
+          {mcsFormat === "packing-list" && (
+            <div className="space-y-1.5">
+              <label htmlFor="supplierOrderNumber" className="text-sm font-medium">
+                N° de commande fournisseur
+              </label>
+              <Input
+                id="supplierOrderNumber"
+                value={supplierOrderNumber}
+                onChange={(e) => setSupplierOrderNumber(e.target.value)}
+                placeholder="ex. 100739"
+                disabled={importing}
+              />
+              <p className="text-xs text-muted-foreground">
+                La réception sera rattachée à cette commande (importe d'abord la commande
+                fournisseur correspondante).
+              </p>
+            </div>
+          )}
+
+          <Button onClick={handleImport} disabled={importing} className="w-full">
+            {importing && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+            {importing ? "Import en cours..." : `Importer ${mcsRowCount} lignes`}
+          </Button>
+        </>
+      )}
+
+      {parsed && !useMcs && !mcsMismatch && (
         <>
           <ImportPreview headers={parsed.headers} rows={parsed.rows} />
           <ColumnMapper

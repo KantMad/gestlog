@@ -3,6 +3,8 @@ import { handleApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { parseExcelBuffer } from "@/lib/import/parser";
 import { importReception } from "@/lib/import/reception-mapper";
+import { detectMcsFormat } from "@/lib/import/mcs-format";
+import { importMcsReceptions } from "@/lib/import/mcs-mapper";
 
 export async function POST(request: NextRequest) {
   try {
@@ -11,31 +13,37 @@ export async function POST(request: NextRequest) {
     const seasonId = formData.get("seasonId") as string | null;
     const mappingJson = formData.get("mapping") as string | null;
     const receptionNumber = formData.get("receptionNumber") as string | null;
+    // N° de commande fournisseur saisi à l'import (format MCS : absent du fichier).
+    const supplierOrderNumber = formData.get("supplierOrderNumber") as string | null;
 
-    if (!file || !seasonId || !mappingJson) {
-      return NextResponse.json(
-        { error: "Fichier, saison et mapping requis" },
-        { status: 400 }
-      );
+    if (!file || !seasonId) {
+      return NextResponse.json({ error: "Fichier et saison requis" }, { status: 400 });
     }
 
-    const mapping = JSON.parse(mappingJson);
     const buffer = await file.arrayBuffer();
-    const sheets = parseExcelBuffer(buffer);
+    const recNumber = receptionNumber || `REC-${Date.now()}`;
 
-    if (sheets.length === 0 || sheets[0].rows.length === 0) {
-      return NextResponse.json(
-        { error: "Fichier vide ou format invalide" },
-        { status: 400 }
-      );
+    let result;
+    if (detectMcsFormat(buffer) === "packing-list") {
+      // Format MCS (liste de colisage) : parsing dédié + n° de commande saisi.
+      if (!supplierOrderNumber) {
+        return NextResponse.json(
+          { error: "N° de commande fournisseur requis pour ce fichier" },
+          { status: 400 }
+        );
+      }
+      result = await importMcsReceptions(buffer, seasonId, supplierOrderNumber, recNumber);
+    } else {
+      // Format générique : mapping de colonnes requis.
+      if (!mappingJson) {
+        return NextResponse.json({ error: "Mapping des colonnes requis" }, { status: 400 });
+      }
+      const sheets = parseExcelBuffer(buffer);
+      if (sheets.length === 0 || sheets[0].rows.length === 0) {
+        return NextResponse.json({ error: "Fichier vide ou format invalide" }, { status: 400 });
+      }
+      result = await importReception(sheets[0], JSON.parse(mappingJson), seasonId, recNumber);
     }
-
-    const result = await importReception(
-      sheets[0],
-      mapping,
-      seasonId,
-      receptionNumber || `REC-${Date.now()}`
-    );
 
     await prisma.importLog.create({
       data: {
@@ -49,11 +57,7 @@ export async function POST(request: NextRequest) {
     });
 
     return NextResponse.json({
-      data: {
-        imported: result.imported,
-        errors: result.errors,
-        fileName: file.name,
-      },
+      data: { imported: result.imported, errors: result.errors, fileName: file.name },
     });
   } catch (e) {
     return handleApiError(e, "api/import/receptions");
