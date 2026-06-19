@@ -82,6 +82,9 @@ model Product {
   sizeScale   String   // "XS,S,M,L,XL,XXL"
   category    String?  // catégorie BtoB (ex: "Pantalon")
   subCategory String?  // sous-catégorie BtoB (ex: "Pantalon 5 poches")
+  label       String?  // désignation produit (TIO label_fr) — pour la création caisse
+  salePrice   Float?   // prix de vente public (TIO prices[catalogue 209].min_retail_price)
+  costPrice   Float?   // prix de gros / coût (TIO prices[catalogue 209].min_price)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

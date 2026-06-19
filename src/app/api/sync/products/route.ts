@@ -33,8 +33,13 @@ export async function POST(request: NextRequest) {
           sizeTypeCode,
           category,
           subCategory,
+          label,      // désignation (label_fr)
+          salePrice,  // prix de vente public (retail, catalogue 209)
+          costPrice,  // prix de gros / coût
           variations,
         } = prod;
+        const saleP = salePrice != null && !isNaN(Number(salePrice)) ? Number(salePrice) : null;
+        const costP = costPrice != null && !isNaN(Number(costPrice)) ? Number(costPrice) : null;
 
         if (!reference) {
           errors.push("Produit ignore: reference manquante");
@@ -49,8 +54,8 @@ export async function POST(request: NextRequest) {
 
         // 1) Upsert Product (RETURNING id → évite un SELECT plus loin)
         const prodUpsert = await prisma.$queryRawUnsafe<{ id: string }[]>(
-          `INSERT INTO "Product" (id, reference, color, "colorCode", "sizeScale", "externalId", category, "subCategory", "createdAt", "updatedAt")
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
+          `INSERT INTO "Product" (id, reference, color, "colorCode", "sizeScale", "externalId", category, "subCategory", label, "salePrice", "costPrice", "createdAt", "updatedAt")
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW())
            ON CONFLICT (reference, color)
            DO UPDATE SET
              "colorCode" = COALESCE(NULLIF($4, ''), "Product"."colorCode"),
@@ -58,6 +63,9 @@ export async function POST(request: NextRequest) {
              "externalId" = COALESCE($6, "Product"."externalId"),
              category = COALESCE(NULLIF($7, ''), "Product".category),
              "subCategory" = COALESCE(NULLIF($8, ''), "Product"."subCategory"),
+             label = COALESCE(NULLIF($9, ''), "Product".label),
+             "salePrice" = COALESCE($10, "Product"."salePrice"),
+             "costPrice" = COALESCE($11, "Product"."costPrice"),
              "updatedAt" = NOW()
            RETURNING id`,
           genId(),
@@ -67,7 +75,10 @@ export async function POST(request: NextRequest) {
           sizeScale || null,
           extId,
           category || null,
-          subCategory || null
+          subCategory || null,
+          label || null,
+          saleP,
+          costP
         );
         const pid = prodUpsert[0]?.id;
 

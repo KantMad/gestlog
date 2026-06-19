@@ -15,20 +15,37 @@ export type CaisseSyncStatus = "SENT" | "ALREADY" | "FAILED" | "SKIPPED";
 
 export interface CaisseSyncResult {
   status: CaisseSyncStatus;
-  matched?: number;
-  unmatchedEans?: string[];
+  matched?: number; // EAN reconnus (ancien contrat) ou lignes appliquées (nouveau)
+  unmatchedEans?: unknown[]; // EAN inconnus / lignes manquant d'infos (needsData)
+  createdProducts?: number; // produits créés côté caisse (nouveau contrat)
   error?: string;
 }
 
-const isEan13 = (s: string) => /^\d{13}$/.test(s);
+// Objet produit envoyé pour permettre la création d'un produit vendable côté caisse.
+interface CaisseProduct {
+  name?: string;
+  price?: number; // prix de vente public
+  sku?: string;
+  color?: string;
+  size?: string;
+  colorCode?: string;
+  category?: string;
+  taxRate?: number;
+  costPrice?: number;
+}
+interface CaisseLine { ean: string; quantity: number; product?: CaisseProduct }
 
-// Construit le corps de la requête : agrège les quantités par EAN-13 valide.
-// `missingEans` = (réf, coloris, taille) sans EAN dans le référentiel — à logger.
+const isEan13 = (s: string) => /^\d{13}$/.test(s);
+const TAX_RATE = 0.2; // TVA standard FR (non disponible dans TIO)
+
+// Construit le corps : une ligne par EAN-13 valide, avec quantité agrégée ET l'objet
+// `product` (nom + prix de vente public + SKU/couleur/taille…) pour création caisse.
+// `missing` = (réf, coloris, taille) sans EAN dans le référentiel — à logger.
 export async function buildCaissePayload(deliveryId: string): Promise<{
   deliveryId: string;
   supplier?: string;
   storeId?: string;
-  lines: { ean: string; quantity: number }[];
+  lines: CaisseLine[];
   missing: string[];
 }> {
   const delivery = await prisma.delivery.findUnique({
@@ -37,27 +54,42 @@ export async function buildCaissePayload(deliveryId: string): Promise<{
   });
   if (!delivery) throw new Error("Livraison introuvable");
 
-  const byEan = new Map<string, number>();
+  // par EAN : quantité cumulée + l'objet produit (cohérent par EAN = réf/couleur/taille)
+  const byEan = new Map<string, CaisseLine>();
   const missing: string[] = [];
 
+  const clean = <T extends object>(o: T): T =>
+    Object.fromEntries(Object.entries(o).filter(([, v]) => v !== null && v !== undefined && v !== "")) as T;
+
   for (const line of delivery.lines) {
+    const p = line.product;
     const quantities = parseSizeQuantities(line.quantitiesBySize);
     for (const [size, qty] of Object.entries(quantities)) {
       const q = Number(qty) || 0;
       if (q <= 0) continue;
       const rec = await prisma.productSizeEan.findUnique({
-        where: {
-          reference_color_size: {
-            reference: line.product.reference,
-            color: line.product.color,
-            size,
-          },
-        },
+        where: { reference_color_size: { reference: p.reference, color: p.color, size } },
       });
-      if (rec && isEan13(rec.ean)) {
-        byEan.set(rec.ean, (byEan.get(rec.ean) || 0) + q);
+      if (!rec || !isEan13(rec.ean)) {
+        missing.push(`${p.reference}/${p.color}/${size}`);
+        continue;
+      }
+      const existing = byEan.get(rec.ean);
+      if (existing) {
+        existing.quantity += q;
       } else {
-        missing.push(`${line.product.reference}/${line.product.color}/${size}`);
+        const product = clean<CaisseProduct>({
+          name: p.label ?? undefined,
+          price: p.salePrice ?? undefined, // prix de vente public (catalogue 209)
+          sku: p.reference,
+          color: p.color,
+          size,
+          colorCode: p.colorCode ?? undefined,
+          category: p.category ?? undefined,
+          taxRate: TAX_RATE,
+          costPrice: p.costPrice ?? undefined,
+        });
+        byEan.set(rec.ean, { ean: rec.ean, quantity: q, product });
       }
     }
   }
@@ -67,7 +99,7 @@ export async function buildCaissePayload(deliveryId: string): Promise<{
     deliveryId: delivery.id, // id cuid = identifiant unique ET stable
     supplier: "MCS",
     ...(storeId ? { storeId } : {}),
-    lines: [...byEan.entries()].map(([ean, quantity]) => ({ ean, quantity })),
+    lines: [...byEan.values()],
     missing,
   };
 }
@@ -76,17 +108,21 @@ export async function buildCaissePayload(deliveryId: string): Promise<{
 // la Delivery. Réessaie en interne sur 5xx / erreur réseau (transitoires).
 export async function sendDeliveryToCaisse(deliveryId: string): Promise<CaisseSyncResult> {
   const record = async (r: CaisseSyncResult) => {
+    let info: string | null = null;
+    if (r.error) info = r.error;
+    else if (r.createdProducts || (r.unmatchedEans && r.unmatchedEans.length)) {
+      info = JSON.stringify({
+        createdProducts: r.createdProducts,
+        needsData: r.unmatchedEans?.length ? r.unmatchedEans : undefined,
+      });
+    }
     await prisma.delivery.update({
       where: { id: deliveryId },
       data: {
         caisseSyncStatus: r.status,
         caisseSyncAt: new Date(),
         caisseSyncMatched: r.matched ?? null,
-        caisseSyncInfo: r.error
-          ? r.error
-          : r.unmatchedEans && r.unmatchedEans.length
-            ? JSON.stringify({ unmatchedEans: r.unmatchedEans })
-            : null,
+        caisseSyncInfo: info,
       },
     }).catch(() => {});
     return r;
@@ -111,15 +147,21 @@ export async function sendDeliveryToCaisse(deliveryId: string): Promise<CaisseSy
         signal: AbortSignal.timeout(20000),
       });
 
-      // Succès
+      // Succès — gère l'ancien contrat (matched/unmatchedEans) ET le nouveau
+      // (applied/createdProducts/needsData).
+      const parseOk = (d: Record<string, unknown>): CaisseSyncResult => ({
+        status: "SENT",
+        matched: Number(d.applied ?? d.matched) || 0,
+        createdProducts: d.createdProducts != null ? Number(d.createdProducts) : undefined,
+        unmatchedEans: (d.needsData ?? d.unmatchedEans ?? []) as unknown[],
+      });
       if (res.status === 201) {
-        const d = await res.json().catch(() => ({}));
-        return record({ status: "SENT", matched: Number(d.matched) || 0, unmatchedEans: d.unmatchedEans || [] });
+        return record(parseOk(await res.json().catch(() => ({}))));
       }
       if (res.status === 200) {
         const d = await res.json().catch(() => ({}));
         if (d.alreadyProcessed) return record({ status: "ALREADY" });
-        return record({ status: "SENT", matched: Number(d.matched) || 0, unmatchedEans: d.unmatchedEans || [] });
+        return record(parseOk(d));
       }
       // Secret invalide → inutile de réessayer
       if (res.status === 401) {
