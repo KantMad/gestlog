@@ -1,3 +1,16 @@
+# GestLog
+
+SaaS de gestion logistique B2B + BtoC pour la marque **MCS**.
+
+> **📚 Documentation complète : [`docs/`](docs/) — commence par [`docs/README.md`](docs/README.md).**
+> Elle contient tout (architecture, déploiement, base de données, sources/n8n, auth,
+> intégration caisse, BtoC, fonctionnalités, pièges) et **doit être tenue à jour** quand le
+> code change (voir la règle dans [`AGENTS.md`](AGENTS.md)).
+
+Déploiement : VPS OVH, `bash deploy.sh` (voir [`docs/02-deploiement.md`](docs/02-deploiement.md)).
+
+---
+
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started
