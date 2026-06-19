@@ -86,6 +86,9 @@ export function canAccessScreen(
     pathname === "/users" || pathname.startsWith("/users/");
   if (role === "ADMIN") return true;
   if (isUsersScreen) return false;
+  // Le compte personnel (/account) est accessible à TOUT utilisateur connecté,
+  // quelles que soient ses permissions d'écran.
+  if (pathname === "/account" || pathname.startsWith("/account/")) return true;
   // null/undefined access = all screens allowed
   if (!screenAccess) return true;
   return screenAccess.some(

@@ -24,6 +24,7 @@ import {
   Store,
   ArrowLeftRight,
   Building2,
+  UserCog,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
@@ -47,6 +48,7 @@ const NAV_ITEMS = [
   { href: "/client-comparison", label: "Comparaison clients", icon: Building2 },
   { href: "/repartition", label: "Répartition magasin", icon: Store },
   { href: "/btoc", label: "BtoC", icon: ShoppingBag },
+  { href: "/account", label: "Mon compte", icon: UserCog },
 ];
 
 const ADMIN_NAV_ITEMS = [
