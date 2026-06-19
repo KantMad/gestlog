@@ -34,9 +34,9 @@ export function SeasonSelector() {
 
   return (
     <Select value={activeSeasonId} onValueChange={(v) => v && setActiveSeasonId(v)}>
-      <SelectTrigger className="w-56">
-        <div className="flex items-center gap-2">
-          <Calendar className="h-4 w-4 text-muted-foreground" />
+      <SelectTrigger className="w-36 sm:w-56">
+        <div className="flex min-w-0 items-center gap-2">
+          <Calendar className="h-4 w-4 shrink-0 text-muted-foreground" />
           <span className="truncate text-sm">
             {activeSeason ? formatSeasonLabel(activeSeason) : "Saison..."}
           </span>

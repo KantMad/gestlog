@@ -126,5 +126,11 @@
   }
   html {
     @apply font-sans;
+    /* Empêche le scroll horizontal de la PAGE (mobile/PWA) : un élément trop large
+       ne fait plus défiler tout l'écran (ce qui masquait le hamburger collé en haut).
+       `clip` n'établit pas de conteneur de défilement → préserve `position: sticky`.
+       `hidden` = repli pour les navigateurs sans support de `clip`. */
+    overflow-x: hidden;
+    overflow-x: clip;
   }
 }
