@@ -27,6 +27,12 @@ sont gérés par écran (cf. [`05-authentification.md`](05-authentification.md))
 
 ## Notions transverses
 
+- **Répartition magasin — 2 dispositions d'export TIO** : l'export commande client existe en
+  format **« court »** (réf en col 1 « Fiche produit fini », ~38 col) et **« long »** (mêmes
+  en-têtes + bloc répété en fin de ligne, réf aussi en col 41, ~45 col). `src/lib/repartition.ts`
+  résout les colonnes **par NOM d'en-tête** (`resolveColumns`, repli sur positions par défaut)
+  → les deux marchent. Les colonnes de quantité sont `Q. 1`…`Q. 16` (s'arrêtent à `Total CA`).
+  Si « Aucune ligne détectée » : vérifier que les en-têtes attendus sont présents.
 - **Saison Réassort (sentinelle)** : les commandes de réassort sont routées vers une saison
   dédiée par `/api/sync/orders` (cf. [`04`](04-sources-et-n8n.md)).
 - **Lien BL/FAC ↔ commande TIO** : via le **nom de fichier** (`IS-xxx`) →

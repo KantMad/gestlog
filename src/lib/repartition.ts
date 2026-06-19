@@ -64,16 +64,53 @@ export function normalizeSize(s: string): string {
   return u === "2XL" ? "XXL" : u;
 }
 
+interface ResolvedCols {
+  client: number;
+  reference: number;
+  coloris: number;
+  supplier: number;
+  totalQ: number;
+  ville: number;
+  qStart: number;
+  qEnd: number; // exclusif
+}
+
+// Résout les colonnes par NOM d'en-tête (ligne 0), avec repli sur les positions
+// par défaut (COL). Robuste aux deux dispositions des exports TIO :
+//  - format « court » : réf en col 1 ("Fiche produit fini"), pas de bloc répété ;
+//  - format « long »  : mêmes en-têtes en tête + bloc répété (réf aussi en col 41).
+// Les en-têtes de quantité sont "Q. 1".."Q. 16" ; le bloc s'arrête à "Total CA".
+export function resolveColumns(aoa: unknown[][]): ResolvedCols {
+  const header = (aoa[0] ?? []).map((h) => String(h ?? "").trim().toUpperCase());
+  const find = (pred: (h: string) => boolean, fallback: number) => {
+    const i = header.findIndex(pred);
+    return i >= 0 ? i : fallback;
+  };
+  const qStart = find((h) => /^Q\.\s*1$/.test(h), COL.qStart);
+  const caIdx = header.findIndex((h) => h === "TOTAL CA" || /^CA\.\s*1$/.test(h));
+  return {
+    client: find((h) => h === "FICHE CLIENT" || h.includes("CODE CLIENT"), COL.client),
+    reference: find((h) => h === "FICHE PRODUIT FINI" || h.includes("CODE PRODUIT FINI"), COL.reference),
+    coloris: find((h) => h.includes("COLORIS"), COL.coloris),
+    supplier: find((h) => h.includes("FOURNISSEUR"), COL.supplier),
+    totalQ: find((h) => h === "TOTAL Q", COL.totalQ),
+    ville: find((h) => h.includes("VILLE"), COL.ville),
+    qStart,
+    qEnd: caIdx > qStart ? caIdx : qStart + 16,
+  };
+}
+
 // Légende = lignes SANS référence produit mais avec un code en colonne "Total Q",
 // et des libellés de taille dans Q.1..Q.16 (dans l'ordre des positions).
 export function parseLegend(aoa: unknown[][]): Legend {
+  const c = resolveColumns(aoa);
   const legend: Legend = {};
   for (const r of aoa.slice(1)) {
-    const ref = String(r[COL.reference] ?? "").trim();
-    const code = String(r[COL.totalQ] ?? "").trim();
+    const ref = String(r[c.reference] ?? "").trim();
+    const code = String(r[c.totalQ] ?? "").trim();
     if (ref || !code) continue;
     const labels = r
-      .slice(COL.qStart, COL.qEnd)
+      .slice(c.qStart, c.qEnd)
       .map((x) => String(x ?? "").trim())
       .filter(Boolean)
       .map(normalizeSize);
@@ -84,19 +121,20 @@ export function parseLegend(aoa: unknown[][]): Legend {
 
 // Lignes de données = référence ET fournisseur renseignés.
 export function extractDataRows(aoa: unknown[][]): RepartitionRow[] {
+  const c = resolveColumns(aoa);
   const out: RepartitionRow[] = [];
   for (const r of aoa.slice(1)) {
-    const reference = String(r[COL.reference] ?? "").trim();
-    const supplier = String(r[COL.supplier] ?? "").trim();
+    const reference = String(r[c.reference] ?? "").trim();
+    const supplier = String(r[c.supplier] ?? "").trim();
     if (!reference || !supplier) continue;
     out.push({
-      client: String(r[COL.client] ?? "").trim(),
-      ville: String(r[COL.ville] ?? "").trim(),
+      client: String(r[c.client] ?? "").trim(),
+      ville: c.ville >= 0 ? String(r[c.ville] ?? "").trim() : "",
       reference,
-      coloris: String(r[COL.coloris] ?? "").trim(),
+      coloris: String(r[c.coloris] ?? "").trim(),
       supplier,
-      totalQ: Number(r[COL.totalQ]) || 0,
-      q: r.slice(COL.qStart, COL.qEnd).map((x) => Number(x) || 0),
+      totalQ: Number(r[c.totalQ]) || 0,
+      q: r.slice(c.qStart, c.qEnd).map((x) => Number(x) || 0),
     });
   }
   return out;
