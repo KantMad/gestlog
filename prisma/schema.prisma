@@ -78,6 +78,7 @@ model Product {
   reference   String
   color       String
   colorCode   String?
+  colorLabel  String?  // nom/libellé de la couleur (TIO lng_content.text2, ex. "Chocolat") — pour la caisse
   externalId  String?  @unique // B2B product_id + color_id (e.g. "3119_53")
   sizeScale   String   // "XS,S,M,L,XL,XXL"
   category    String?  // catégorie BtoB (ex: "Pantalon")

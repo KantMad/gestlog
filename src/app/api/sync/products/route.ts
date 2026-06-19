@@ -30,6 +30,7 @@ export async function POST(request: NextRequest) {
           reference,
           color,
           colorCode,
+          colorLabel, // nom de la couleur (text2 TIO, ex. "Chocolat")
           sizeTypeCode,
           category,
           subCategory,
@@ -54,11 +55,12 @@ export async function POST(request: NextRequest) {
 
         // 1) Upsert Product (RETURNING id → évite un SELECT plus loin)
         const prodUpsert = await prisma.$queryRawUnsafe<{ id: string }[]>(
-          `INSERT INTO "Product" (id, reference, color, "colorCode", "sizeScale", "externalId", category, "subCategory", label, "salePrice", "costPrice", "createdAt", "updatedAt")
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW())
+          `INSERT INTO "Product" (id, reference, color, "colorCode", "sizeScale", "externalId", category, "subCategory", label, "salePrice", "costPrice", "colorLabel", "createdAt", "updatedAt")
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW())
            ON CONFLICT (reference, color)
            DO UPDATE SET
              "colorCode" = COALESCE(NULLIF($4, ''), "Product"."colorCode"),
+             "colorLabel" = COALESCE(NULLIF($12, ''), "Product"."colorLabel"),
              "sizeScale" = COALESCE(NULLIF($5, ''), "Product"."sizeScale"),
              "externalId" = COALESCE($6, "Product"."externalId"),
              category = COALESCE(NULLIF($7, ''), "Product".category),
@@ -78,7 +80,8 @@ export async function POST(request: NextRequest) {
           subCategory || null,
           label || null,
           saleP,
-          costP
+          costP,
+          colorLabel || null
         );
         const pid = prodUpsert[0]?.id;
 

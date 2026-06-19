@@ -82,9 +82,9 @@ export async function buildCaissePayload(deliveryId: string): Promise<{
           name: p.label ?? undefined,
           price: p.salePrice ?? undefined, // prix de vente public (catalogue 209)
           sku: p.reference,
-          color: p.color,
+          color: p.colorLabel ?? p.color, // NOM de la couleur (repli sur le code si inconnu)
           size,
-          colorCode: p.colorCode ?? undefined,
+          colorCode: p.colorCode ?? p.color, // CODE de la couleur
           category: p.category ?? undefined,
           taxRate: TAX_RATE,
           costPrice: p.costPrice ?? undefined,
