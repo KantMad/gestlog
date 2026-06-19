@@ -138,7 +138,7 @@ export function Sidebar() {
               </p>
             </div>
             <button
-              onClick={logout}
+              onClick={() => logout()}
               className="flex h-11 w-11 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
               title="Se déconnecter"
               aria-label="Se déconnecter"

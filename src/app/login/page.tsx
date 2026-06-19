@@ -3,15 +3,26 @@
 import { useState, useRef, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Package, Lock, AlertCircle } from "lucide-react";
+import { Package, Lock, AlertCircle, ChevronDown, Clock, User } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+// Clé du cache local : retient le dernier utilisateur choisi sur CETTE machine
+// pour le pré-sélectionner à la prochaine connexion.
+const LAST_USER_KEY = "gestlog_last_user_id";
+
+interface LoginUser {
+  id: string;
+  name: string;
+}
 
 export default function LoginPage() {
   const { login, user, loading } = useAuth();
   const [code, setCode] = useState(["", "", "", ""]);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [users, setUsers] = useState<LoginUser[]>([]);
+  const [selectedUserId, setSelectedUserId] = useState("");
+  const [expired, setExpired] = useState(false);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   useEffect(() => {
@@ -20,9 +31,45 @@ export default function LoginPage() {
     }
   }, [user, loading]);
 
+  // Bannière si l'utilisateur a été déconnecté pour inactivité (?expired=1).
   useEffect(() => {
-    inputRefs.current[0]?.focus();
+    if (
+      typeof window !== "undefined" &&
+      new URLSearchParams(window.location.search).get("expired") === "1"
+    ) {
+      setExpired(true);
+    }
   }, []);
+
+  // Charge la liste des utilisateurs + pré-sélectionne le dernier choisi (cache local).
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/auth/users")
+      .then((r) => (r.ok ? r.json() : { users: [] }))
+      .then((d) => {
+        if (cancelled) return;
+        const list: LoginUser[] = d.users || [];
+        setUsers(list);
+        const cached =
+          typeof window !== "undefined" ? localStorage.getItem(LAST_USER_KEY) : null;
+        if (cached && list.some((u) => u.id === cached)) setSelectedUserId(cached);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const onSelectUser = (id: string) => {
+    setSelectedUserId(id);
+    setError("");
+    setCode(["", "", "", ""]);
+    if (typeof window !== "undefined") {
+      if (id) localStorage.setItem(LAST_USER_KEY, id);
+      else localStorage.removeItem(LAST_USER_KEY);
+    }
+    inputRefs.current[0]?.focus();
+  };
 
   const handleInput = (index: number, value: string) => {
     if (!/^\d*$/.test(value)) return;
@@ -68,8 +115,10 @@ export default function LoginPage() {
       setError(result.error);
       setCode(["", "", "", ""]);
       inputRefs.current[0]?.focus();
+      setSubmitting(false);
     }
-    setSubmitting(false);
+    // Succès → redirection gérée par login(). Le cache utilisateur est déjà à jour
+    // (mis lors de la sélection dans le menu déroulant).
   };
 
   if (loading) {
@@ -79,6 +128,8 @@ export default function LoginPage() {
       </div>
     );
   }
+
+  const selectedName = users.find((u) => u.id === selectedUserId)?.name;
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-zinc-50">
@@ -90,16 +141,57 @@ export default function LoginPage() {
           <div>
             <CardTitle className="text-xl">GestLog</CardTitle>
             <p className="text-sm text-muted-foreground mt-1">
-              Entrez votre code pour vous connecter
+              {selectedName
+                ? `Bonjour ${selectedName}, entrez votre code`
+                : "Choisissez votre utilisateur et entrez votre code"}
             </p>
           </div>
         </CardHeader>
         <CardContent className="space-y-6">
+          {expired && (
+            <div className="flex items-center gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-700">
+              <Clock className="h-4 w-4 shrink-0" />
+              Vous avez été déconnecté pour inactivité.
+            </div>
+          )}
+
+          {/* Menu déroulant des utilisateurs (facultatif — aide à choisir / mémorise). */}
+          {users.length > 0 && (
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                <User className="h-3.5 w-3.5" />
+                Utilisateur
+              </label>
+              <div className="relative">
+                <select
+                  value={selectedUserId}
+                  onChange={(e) => onSelectUser(e.target.value)}
+                  disabled={submitting}
+                  className={cn(
+                    "w-full appearance-none rounded-xl border-2 border-zinc-200 bg-white px-3 py-2.5 pr-10 text-sm font-medium",
+                    "outline-none transition-all focus:border-zinc-900 focus:ring-2 focus:ring-zinc-900/10",
+                    "disabled:opacity-50"
+                  )}
+                >
+                  <option value="">Sélectionner un utilisateur…</option>
+                  {users.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              </div>
+            </div>
+          )}
+
           <div className="flex items-center justify-center gap-3">
             {code.map((digit, i) => (
               <input
                 key={i}
-                ref={(el) => { inputRefs.current[i] = el; }}
+                ref={(el) => {
+                  inputRefs.current[i] = el;
+                }}
                 type="text"
                 inputMode="numeric"
                 maxLength={1}
