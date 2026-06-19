@@ -38,6 +38,25 @@ sont gérés par écran (cf. [`05-authentification.md`](05-authentification.md))
 - **Logique d'allocation** : `src/lib/allocation/`. **Préparation/livraison** :
   `src/lib/delivery/`. **Imports** : `src/lib/import/`.
 
+### Formats d'import MCS (auto-détectés)
+
+Les fichiers réels MCS ne sont pas des tableaux plats → l'import les **auto-détecte**
+(`src/lib/import/mcs-format.ts`) et les parse sans mapping manuel (`mcs-mapper.ts`) :
+- **« StatGen » (commande fournisseur)** : en-tête ligne 0 (`Numéro de commande`,
+  `Fiche fournisseur`, `Fiche produit fini`, `Coloris produit fini`, `Q. 1`…`Q. 16`).
+  Les colonnes `Q.N` sont des **positions** décodées en tailles **via la grille du produit**
+  (`Product.sizeScale`, car elle varie : 7 tailles `S..4XL` ou 2 tailles `L,3XL`). Couleur =
+  **code avant le `-`** (`208-Cognac` → `208`). N° de commande présent dans le fichier.
+- **« Packing List » (réception)** : en-tête enfoui (~ligne 18), réf **tiret→underscore**
+  (`EPOMC-C001` → `EPOMC_C001`), couleur = colonne `COLOR CODE`, tailles en **lettres**,
+  **somme des lignes de colis** (hors `TOTAL`/récap). **N° de commande fournisseur saisi à
+  l'import** (absent du fichier) → la réception se rattache à la commande.
+- Matching sur le **référentiel existant** (par réf + **code** couleur, tolérance zéro
+  initial) — **pas de création de produit** (évite les doublons). Les lignes sans produit
+  correspondant sont remontées en erreurs.
+- Les autres formats / onglets (commandes clients, stock) restent en **mapping manuel** de
+  colonnes (`src/lib/import/parser.ts` + `*-mapper.ts`).
+
 > Cette table est un index. Pour les détails d'un écran, lire la page + ses API + le module
 > `lib/` associé. Si tu ajoutes/déplaces un écran, **mets à jour cette table** et
 > [`05-authentification.md`](05-authentification.md).

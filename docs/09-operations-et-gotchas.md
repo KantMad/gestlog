@@ -68,6 +68,14 @@ Nettoie les fichiers `/tmp` après usage (local **et** VPS).
    `Product.colorLabel` = nom ("Chocolat"), rempli depuis TIO `lng_content.text2`. Pour la
    caisse : `color`=nom (repli code), `colorCode`=code.
 6. **TVA absente de TIO** → toujours **0.20** par défaut.
+6bis. **Imports MCS** : ne JAMAIS supposer que l'en-tête est en ligne 1. *StatGen* (commande
+   fournisseur) = en-tête L0 + quantités **positionnelles** `Q.1..Q.16` décodées via
+   `Product.sizeScale` (grille variable, pas une taille fixe). *Packing List* (réception) =
+   en-tête ~L18, réf **tiret→underscore**, couleur = **code** (le nom peut comporter des
+   fautes : « CHOCALAT », ou « BLEU DENIM » pour le 752). **Toujours matcher par CODE
+   couleur, jamais par nom.** Détails : [`08`](08-fonctionnalites.md). Garde-fou : d'anciens
+   imports ont créé des **doublons** `Product` (couleur=nom, `colorCode`=`REF-CODE`,
+   `sizeScale` vide) — 275 supprimés le 19/06/2026 (backup `/var/backups/gestlog/junk-products-*.json`).
 7. **`DeliveryLine.totalQuantity` est NOT NULL** — toujours le renseigner lors d'inserts de
    test.
 8. **WooCommerce `total_spent` = 0** via REST → recalculer côté GestLog
