@@ -28,7 +28,7 @@ const AuthContext = createContext<AuthContextType>({
 
 // Déconnexion automatique après ce délai SANS activité (sécurité : un compte ne
 // reste pas ouvert indéfiniment sur une machine laissée sans surveillance).
-const INACTIVITY_MS = 30 * 60 * 1000; // 30 minutes
+const INACTIVITY_MS = 4 * 60 * 60 * 1000; // 4 heures
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);

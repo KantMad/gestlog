@@ -33,7 +33,7 @@ export async function setSessionCookie(
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax" as const,
     path: "/",
-    maxAge: 60 * 60 * 12, // 12h (= durée de vie du jeton, cf. session.ts)
+    maxAge: 60 * 60 * 24, // 24h (= durée de vie du jeton, cf. session.ts)
   };
 }
 

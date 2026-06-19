@@ -11,7 +11,7 @@ const dec = new TextDecoder();
 
 // Durée de vie ABSOLUE d'une session (sécurité : un compte ne reste pas ouvert
 // indéfiniment). Complétée par une déconnexion sur INACTIVITÉ côté client (AuthProvider).
-const DEFAULT_TTL_MS = 1000 * 60 * 60 * 12; // 12 heures
+const DEFAULT_TTL_MS = 1000 * 60 * 60 * 24; // 24 heures
 
 export interface SessionPayload {
   uid: string;
