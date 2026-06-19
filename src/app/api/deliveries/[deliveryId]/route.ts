@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { handleApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { updateDeliveryDetailsSchema } from "@/lib/validators";
+import { sendDeliveryToCaisse, CAISSE_TRIGGER_STATUS, type CaisseSyncResult } from "@/lib/caisse/delivery-sync";
 
 export async function GET(
   request: NextRequest,
@@ -68,7 +69,18 @@ export async function PATCH(
       data: updateData,
     });
 
-    return NextResponse.json({ data: delivery });
+    // Livraison validée → envoi automatique à la caisse (réception de stock).
+    // Idempotent côté caisse ; un échec est enregistré (caisseSyncStatus=FAILED)
+    // et repris par le cron de retry — il ne bloque pas la validation.
+    let caisseSync: CaisseSyncResult | undefined;
+    if (d.status === CAISSE_TRIGGER_STATUS) {
+      caisseSync = await sendDeliveryToCaisse(deliveryId).catch((e) => ({
+        status: "FAILED" as const,
+        error: e instanceof Error ? e.message : String(e),
+      }));
+    }
+
+    return NextResponse.json({ data: delivery, caisseSync });
   } catch (e) {
     return handleApiError(e, "api/deliveries/[deliveryId]");
   }

@@ -356,6 +356,11 @@ model Delivery {
   sentToDepotAt       DateTime?
   validatedAt         DateTime?
   shippedAt           DateTime?
+  // Intégration CaissePro : envoi de la livraison validée → réception de stock caisse.
+  caisseSyncStatus    String?   // SENT, ALREADY, FAILED, SKIPPED (null = pas encore envoyé)
+  caisseSyncAt        DateTime?
+  caisseSyncMatched   Int?      // nb d'EAN reconnus par le catalogue caisse
+  caisseSyncInfo      String?   // EAN inconnus (JSON) ou message d'erreur
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
