@@ -48,8 +48,10 @@ sont gérés par écran (cf. [`05-authentification.md`](05-authentification.md))
 
 Les fichiers réels MCS ne sont pas des tableaux plats → l'import les **auto-détecte**
 (`src/lib/import/mcs-format.ts`) et les parse sans mapping manuel (`mcs-mapper.ts`) :
-- **« StatGen » (commande fournisseur)** : en-tête ligne 0 (`Numéro de commande`,
-  `Fiche fournisseur`, `Fiche produit fini`, `Coloris produit fini`, `Q. 1`…`Q. 16`).
+- **« StatGen » (commande fournisseur)** : détecté par les en-têtes `Fiche fournisseur` +
+  `Fiche produit fini` (l'**ordre des colonnes** et le **libellé du n° de commande** varient
+  selon l'export — `Numéro de commande` OU `N° commande PF fournisseur` ; repérage par nom,
+  pas par position).
   Les colonnes `Q.N` sont des **positions** décodées en tailles **via la grille du produit**
   (`Product.sizeScale`, car elle varie : 7 tailles `S..4XL` ou 2 tailles `L,3XL`). Couleur =
   **code avant le `-`** (`208-Cognac` → `208`). N° de commande présent dans le fichier.

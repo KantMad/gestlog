@@ -36,14 +36,20 @@ function splitColor(raw: Cell): { code: string; name: string } {
   return { code: s.slice(0, i).trim(), name: s.slice(i + 1).trim() };
 }
 
+// En-tête d'une commande fournisseur StatGen : présence du fournisseur ET de la
+// référence produit. L'ordre des colonnes et le libellé exact du n° de commande
+// varient selon l'export TIO (« Numéro de commande » OU « N° commande PF
+// fournisseur ») → on ne s'appuie PAS sur le libellé du n° de commande pour détecter.
+const isStatgenHeader = (cells: string[]): boolean =>
+  cells.includes("FICHE FOURNISSEUR") && cells.includes("FICHE PRODUIT FINI");
+
 // ---------------------------------------------------------------- détection
 export function detectMcsFormat(buffer: ArrayBuffer): McsFormat | null {
   for (const { grid } of eachSheet(buffer)) {
     for (let r = 0; r < Math.min(grid.length, 30); r++) {
       const cells = (grid[r] || []).map(up);
       if (cells.includes("FULL MCS PRODUCT REF")) return "packing-list";
-      if (cells.includes("NUMÉRO DE COMMANDE") && cells.includes("FICHE PRODUIT FINI"))
-        return "statgen";
+      if (isStatgenHeader(cells)) return "statgen";
     }
   }
   return null;
@@ -63,8 +69,7 @@ export function parseMcsStatgen(buffer: ArrayBuffer): McsSupplierLine[] {
   for (const { grid } of eachSheet(buffer)) {
     let h = -1;
     for (let r = 0; r < Math.min(grid.length, 10); r++) {
-      const c = (grid[r] || []).map(up);
-      if (c.includes("NUMÉRO DE COMMANDE") && c.includes("FICHE PRODUIT FINI")) {
+      if (isStatgenHeader((grid[r] || []).map(up))) {
         h = r;
         break;
       }
@@ -72,11 +77,11 @@ export function parseMcsStatgen(buffer: ArrayBuffer): McsSupplierLine[] {
     if (h === -1) continue;
 
     const header = (grid[h] || []).map(up);
-    const idx = (label: string) => header.indexOf(label);
-    const cOrder = idx("NUMÉRO DE COMMANDE");
-    const cSupplier = idx("FICHE FOURNISSEUR");
-    const cRef = idx("FICHE PRODUIT FINI");
-    const cColor = idx("COLORIS PRODUIT FINI");
+    // Repérage par NOM (robuste à l'ordre des colonnes et au libellé du n° de commande).
+    const cOrder = header.findIndex((hh) => hh.includes("COMMANDE"));
+    const cSupplier = header.findIndex((hh) => hh.includes("FOURNISSEUR"));
+    const cRef = header.indexOf("FICHE PRODUIT FINI");
+    const cColor = header.findIndex((hh) => hh.includes("COLORIS"));
     const qCols: number[] = [];
     header.forEach((hh, i) => {
       if (/^Q\.\s*\d+$/.test(hh)) qCols.push(i);
