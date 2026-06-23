@@ -12,6 +12,17 @@
 - **Repo** : GitHub **`KantMad/gestlog`**, branche **`main`**. Le VPS fait `git pull` depuis
   `main`. **Pousser sur `main` ne déploie pas tout seul** : il faut lancer `deploy.sh`.
 
+### Reverse proxy nginx
+Le site est servi par **nginx** (`/etc/nginx/sites-available/gestlog`, **bloc isolé** — la
+caisse est dans un autre fichier). Réglages non-défaut importants (sinon « erreur réseau » à
+l'usage) :
+- **`client_max_body_size 50M`** — sans ça, défaut **1 Mo** → upload d'un gros fichier
+  (commande 1000+ lignes ≈ 1,3 Mo) rejeté en **413** → le front affiche « erreur réseau ».
+- **`proxy_read_timeout 300s` / `proxy_send_timeout 300s`** (dans `location /`) — défaut 60s
+  → imports volumineux et `POST /api/sync/orders` (synchro commandes n8n) timeoutaient (504).
+- Modifier le fichier, puis **`sudo nginx -t && sudo systemctl reload nginx`** (faire un
+  backup `.bak-<date>` avant). Ces réglages vivent sur le VPS, **pas dans le repo**.
+
 ## ⚠️ Coexistence avec la caisse — NE PAS TOUCHER
 
 Sur **le même VPS** tourne une **autre application**, la caisse **CaissePro** :
