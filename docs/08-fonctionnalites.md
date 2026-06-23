@@ -33,6 +33,12 @@ sont gérés par écran (cf. [`05-authentification.md`](05-authentification.md))
   résout les colonnes **par NOM d'en-tête** (`resolveColumns`, repli sur positions par défaut)
   → les deux marchent. Les colonnes de quantité sont `Q. 1`…`Q. 16` (s'arrêtent à `Total CA`).
   Si « Aucune ligne détectée » : vérifier que les en-têtes attendus sont présents.
+- **Répartition (`/allocation`) — filtre fournisseur** : sélectionner un/des fournisseur(s)
+  restreint le **disponible** (réceptions de ce fournisseur) **ET la demande** (produits
+  qu'il a commandés ou livrés). Le périmètre fournisseur→produits vient de `SupplierOrderLine`
+  + `ReceptionLine` ; il faut donc que la **commande fournisseur (et/ou la réception) soit
+  importée dans la même saison** que les commandes clients. Sinon : 0 produit pour ce
+  fournisseur. (`src/app/api/allocation/simulate/route.ts`, `supplierProductFilter`.)
 - **Saison Réassort (sentinelle)** : les commandes de réassort sont routées vers une saison
   dédiée par `/api/sync/orders` (cf. [`04`](04-sources-et-n8n.md)).
 - **Lien BL/FAC ↔ commande TIO** : via le **nom de fichier** (`IS-xxx`) →
