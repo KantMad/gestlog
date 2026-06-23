@@ -71,10 +71,18 @@ export async function POST(request: NextRequest) {
       include: { client: true },
     });
 
+    // Quand un/des fournisseur(s) sont sélectionnés, on restreint la DEMANDE à
+    // leurs produits (commandés OU reçus). Sinon la simulation listerait tous les
+    // fournisseurs (les produits des autres apparaissant juste à 0 alloué).
+    const supplierProductFilter =
+      supplierIds && supplierIds.length > 0 ? new Set<string>() : null;
+
     const receivedByProduct = new Map<string, SizeQuantities>();
     for (const so of supplierOrders) {
+      for (const line of so.lines) supplierProductFilter?.add(line.productId);
       for (const reception of so.receptions) {
         for (const rl of reception.lines) {
+          supplierProductFilter?.add(rl.productId);
           const qty = parseSizeQuantities(rl.quantitiesBySize);
           const existing = receivedByProduct.get(rl.productId) || {};
           receivedByProduct.set(rl.productId, addQuantities(existing, qty));
@@ -97,6 +105,8 @@ export async function POST(request: NextRequest) {
       for (const line of order.lines) {
         // Skip products not in the reference filter
         if (refFilter && !refFilter.has(line.product.reference)) continue;
+        // Skip products not supplied by the selected supplier(s)
+        if (supplierProductFilter && !supplierProductFilter.has(line.productId)) continue;
         demands.push({
           clientId: order.clientId,
           clientOrderId: order.id,
