@@ -59,11 +59,17 @@ Les fichiers réels MCS ne sont pas des tableaux plats → l'import les **auto-d
   (`EPOMC-C001` → `EPOMC_C001`), couleur = colonne `COLOR CODE`, tailles en **lettres**,
   **somme des lignes de colis** (hors `TOTAL`/récap). **N° de commande fournisseur saisi à
   l'import** (absent du fichier) → la réception se rattache à la commande.
+- **« StatGen » (commande client)** : détecté par `Fiche client` + `Fiche produit fini` (et
+  PAS `Fiche fournisseur`). `N° commande client` + nom client (`Raison sociale`), couleur par
+  code, `Q.N` décodé par produit. **Optimisé gros volume** (8000+ lignes / 200+ commandes) :
+  produits préchargés en 1 requête, clients dédupliqués, écriture par commande
+  (`deleteMany`+`createMany` en transaction), **annulations/soldes préservées au ré-import**.
+  Erreurs « introuvable » **dédupliquées** (ex. `ZZZ_LOGO` = produit fictif, normal).
 - Matching sur le **référentiel existant** (par réf + **code** couleur, tolérance zéro
   initial) — **pas de création de produit** (évite les doublons). Les lignes sans produit
   correspondant sont remontées en erreurs.
-- Les autres formats / onglets (commandes clients, stock) restent en **mapping manuel** de
-  colonnes (`src/lib/import/parser.ts` + `*-mapper.ts`).
+- Seul l'onglet **Stock** reste en **mapping manuel** de colonnes
+  (`src/lib/import/parser.ts` + `*-mapper.ts`).
 
 > Cette table est un index. Pour les détails d'un écran, lire la page + ses API + le module
 > `lib/` associé. Si tu ajoutes/déplaces un écran, **mets à jour cette table** et
