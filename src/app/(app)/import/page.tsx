@@ -21,6 +21,7 @@ import {
   detectMcsFormat,
   parseMcsStatgen,
   parseMcsPackingList,
+  parseMcsClientOrders,
   type McsFormat,
 } from "@/lib/import/mcs-format";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -141,14 +142,16 @@ function ImportTab({
       try {
         const buffer = await selectedFile.arrayBuffer();
 
-        // Détection prioritaire du format MCS (réception / commande fournisseur).
+        // Détection prioritaire du format MCS (commande fournisseur / client / réception).
         const fmt = detectMcsFormat(buffer);
         if (fmt) {
           setMcsFormat(fmt);
           setMcsRowCount(
             fmt === "statgen"
               ? parseMcsStatgen(buffer).length
-              : parseMcsPackingList(buffer).length
+              : fmt === "client-order"
+                ? parseMcsClientOrders(buffer).length
+                : parseMcsPackingList(buffer).length
           );
           setParsed({ headers: [], rows: [] });
           return;
