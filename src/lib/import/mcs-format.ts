@@ -9,7 +9,7 @@ import * as XLSX from "xlsx";
 // ET côté serveur (parsing autoritatif). Le mapping vers les produits/tailles se fait
 // dans mcs-mapper.ts (qui a accès à la base).
 
-export type McsFormat = "statgen" | "packing-list";
+export type McsFormat = "statgen" | "packing-list" | "client-order";
 
 type Cell = string | number | boolean | null | undefined;
 type Grid = Cell[][];
@@ -43,6 +43,11 @@ function splitColor(raw: Cell): { code: string; name: string } {
 const isStatgenHeader = (cells: string[]): boolean =>
   cells.includes("FICHE FOURNISSEUR") && cells.includes("FICHE PRODUIT FINI");
 
+// En-tête d'une commande CLIENT StatGen : « Fiche client » + « Fiche produit fini »
+// (et PAS « Fiche fournisseur », qui caractérise une commande fournisseur).
+const isClientOrderHeader = (cells: string[]): boolean =>
+  cells.includes("FICHE CLIENT") && cells.includes("FICHE PRODUIT FINI");
+
 // ---------------------------------------------------------------- détection
 export function detectMcsFormat(buffer: ArrayBuffer): McsFormat | null {
   for (const { grid } of eachSheet(buffer)) {
@@ -50,6 +55,7 @@ export function detectMcsFormat(buffer: ArrayBuffer): McsFormat | null {
       const cells = (grid[r] || []).map(up);
       if (cells.includes("FULL MCS PRODUCT REF")) return "packing-list";
       if (isStatgenHeader(cells)) return "statgen";
+      if (isClientOrderHeader(cells)) return "client-order";
     }
   }
   return null;
@@ -107,6 +113,65 @@ export function parseMcsStatgen(buffer: ArrayBuffer): McsSupplierLine[] {
         colorCode: code,
         colorName: name,
         quantities,
+      });
+    }
+    if (lines.length) return lines;
+  }
+  return [];
+}
+
+// ---------------------------------------------------------------- Commande client
+export interface McsClientLine {
+  orderNumber: string;
+  clientCode: string;
+  clientName: string;
+  reference: string;
+  colorCode: string;
+  colorName: string;
+  quantities: number[];
+}
+
+export function parseMcsClientOrders(buffer: ArrayBuffer): McsClientLine[] {
+  for (const { grid } of eachSheet(buffer)) {
+    let h = -1;
+    for (let r = 0; r < Math.min(grid.length, 10); r++) {
+      if (isClientOrderHeader((grid[r] || []).map(up))) {
+        h = r;
+        break;
+      }
+    }
+    if (h === -1) continue;
+
+    const header = (grid[h] || []).map(up);
+    const cOrder = header.findIndex((hh) => hh.includes("COMMANDE")); // "N° commande client"
+    const cClient = header.indexOf("FICHE CLIENT");
+    const cName = header.findIndex((hh) => hh.includes("RAISON SOCIALE"));
+    const cRef = header.indexOf("FICHE PRODUIT FINI");
+    const cColor = header.findIndex((hh) => hh.includes("COLORIS"));
+    const qCols: number[] = [];
+    header.forEach((hh, i) => {
+      if (/^Q\.\s*\d+$/.test(hh)) qCols.push(i);
+    });
+
+    const lines: McsClientLine[] = [];
+    for (let r = h + 1; r < grid.length; r++) {
+      const row = grid[r] || [];
+      const orderNumber = norm(row[cOrder]);
+      const reference = norm(row[cRef]);
+      if (!orderNumber || !reference || reference.toUpperCase() === "TOTAL") continue;
+      const { code, name } = splitColor(row[cColor]);
+      lines.push({
+        orderNumber,
+        clientCode: norm(row[cClient]),
+        clientName: cName >= 0 ? norm(row[cName]) : "",
+        reference,
+        colorCode: code,
+        colorName: name,
+        quantities: qCols.map((ci) => {
+          const v = row[ci];
+          const n = typeof v === "number" ? v : parseInt(String(v || "0"), 10);
+          return isNaN(n) ? 0 : n;
+        }),
       });
     }
     if (lines.length) return lines;

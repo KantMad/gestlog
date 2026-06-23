@@ -124,7 +124,13 @@ function ImportTab({
 
   // Format MCS attendu pour cet onglet (les autres onglets restent en mapping générique).
   const expectedMcs: McsFormat | null =
-    tab.id === "supplier-orders" ? "statgen" : tab.id === "receptions" ? "packing-list" : null;
+    tab.id === "supplier-orders"
+      ? "statgen"
+      : tab.id === "receptions"
+        ? "packing-list"
+        : tab.id === "client-orders"
+          ? "client-order"
+          : null;
 
   const handleFileSelected = useCallback(
     async (selectedFile: File) => {
@@ -284,7 +290,12 @@ function ImportTab({
           <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
           <span>
             Ce fichier ressemble à un format MCS «{" "}
-            {mcsFormat === "statgen" ? "commande fournisseur" : "réception (liste de colisage)"} ».
+            {mcsFormat === "statgen"
+              ? "commande fournisseur"
+              : mcsFormat === "client-order"
+                ? "commande client"
+                : "réception (liste de colisage)"}{" "}
+            ».
             Sélectionne l'onglet correspondant pour l'importer.
           </span>
         </div>
@@ -295,7 +306,13 @@ function ImportTab({
           <div className="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
             <Check className="h-4 w-4 shrink-0 mt-0.5" />
             <span>
-              Format MCS détecté ({mcsFormat === "statgen" ? "StatGen" : "Packing List"}) —{" "}
+              Format MCS détecté (
+              {mcsFormat === "statgen"
+                ? "commande fournisseur"
+                : mcsFormat === "client-order"
+                  ? "commande client"
+                  : "Packing List"}
+              ) —{" "}
               <strong>{mcsRowCount}</strong> ligne{mcsRowCount > 1 ? "s" : ""} prête
               {mcsRowCount > 1 ? "s" : ""}. Pas de mapping de colonnes nécessaire.
             </span>
