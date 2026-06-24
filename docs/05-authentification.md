@@ -7,6 +7,11 @@
 - Page : `src/app/login/page.tsx`. Saisie en 4 cases. **Menu déroulant des utilisateurs**
   (pour choisir son profil) + **cache local** (`localStorage` clé `gestlog_last_user_id`)
   qui pré-sélectionne le dernier utilisateur de la machine. Le code reste l'authentifiant.
+- **Changer de compte** : la page de login **n'auto-redirige PAS** quand une session existe
+  (sinon une session résiduelle « piège » l'utilisateur sur le compte précédent). Le
+  formulaire est toujours accessible ; entrer un code remplace la session (note « Connecté
+  en tant que X » + lien « se déconnecter »). Après connexion, redirection vers
+  `firstAllowedScreen()` (PAS forcément `/dashboard` — cf. [`09`](09-operations-et-gotchas.md)).
 
 ## Routes `/api/auth/*`
 
