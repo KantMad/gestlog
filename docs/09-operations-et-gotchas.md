@@ -68,6 +68,12 @@ Nettoie les fichiers `/tmp` après usage (local **et** VPS).
    `Product.colorLabel` = nom ("Chocolat"), rempli depuis TIO `lng_content.text2`. Pour la
    caisse : `color`=nom (repli code), `colorCode`=code.
 6. **TVA absente de TIO** → toujours **0.20** par défaut.
+5bis. **Accès écran & boucle de redirection** : un utilisateur dont `screenAccess` **exclut
+   `/dashboard`** (ex. Audrey = `/repartition` seul) ne doit PAS être redirigé vers
+   `/dashboard` (le middleware le refuserait → redirige vers `/dashboard` → **boucle infinie,
+   ERR_TOO_MANY_REDIRECTS**). Règle : **toujours rediriger vers le 1er écran AUTORISÉ**
+   (`firstAllowedScreen`, repli `/account`). Vu dans `middleware.ts`, `auth-context.login`,
+   `login/page.tsx`. Symptôme corrigé le 23/06/2026.
 6bis. **Imports MCS** : ne JAMAIS supposer que l'en-tête est en ligne 1. *StatGen* (commande
    fournisseur) = en-tête L0 + quantités **positionnelles** `Q.1..Q.16` décodées via
    `Product.sizeScale` (grille variable, pas une taille fixe). *Packing List* (réception) =
