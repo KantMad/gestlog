@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { verifySession } from "@/lib/session";
-import { screenForPath, canAccessScreen } from "@/lib/screens";
+import { screenForPath, canAccessScreen, APP_SCREENS } from "@/lib/screens";
 
 const PUBLIC_PATHS = ["/login", "/api/auth/", "/api/sync/"];
 
@@ -53,7 +53,16 @@ export async function middleware(request: NextRequest) {
     if (pathname.startsWith("/api/")) {
       return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
     }
-    return NextResponse.redirect(new URL("/dashboard", request.url));
+    // Rediriger vers le 1er écran AUTORISÉ de l'utilisateur (et NON systématiquement
+    // /dashboard : un utilisateur sans accès au dashboard bouclerait à l'infini —
+    // ERR_TOO_MANY_REDIRECTS). Repli sur /account (toujours accessible).
+    const firstAllowed = APP_SCREENS.find((s) =>
+      canAccessScreen(session.role, session.scr, s.key)
+    );
+    const target = firstAllowed?.key ?? "/account";
+    if (target !== pathname) {
+      return NextResponse.redirect(new URL(target, request.url));
+    }
   }
 
   return NextResponse.next();

@@ -2,6 +2,13 @@
 
 import { createContext, useContext, useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { APP_SCREENS, canAccessScreen } from "@/lib/screens";
+
+// Premier écran accessible à l'utilisateur (le dashboard n'est pas garanti :
+// certains comptes n'y ont pas accès). Repli sur /account (toujours accessible).
+export function firstAllowedScreen(role: string, screenAccess: string[] | null): string {
+  return APP_SCREENS.find((s) => canAccessScreen(role, screenAccess, s.key))?.key ?? "/account";
+}
 
 interface AuthUser {
   id: string;
@@ -65,7 +72,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const data = await res.json();
       if (!res.ok) return { error: data.error || "Erreur de connexion" };
       setUser(data.user);
-      router.push("/dashboard");
+      router.push(firstAllowedScreen(data.user.role, data.user.screenAccess));
       return {};
     } catch {
       return { error: "Erreur réseau" };

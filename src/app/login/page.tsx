@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { useAuth } from "@/lib/auth-context";
+import { useAuth, firstAllowedScreen } from "@/lib/auth-context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Package, Lock, AlertCircle, ChevronDown, Clock, User } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -27,7 +27,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (!loading && user) {
-      window.location.href = "/dashboard";
+      window.location.href = firstAllowedScreen(user.role, user.screenAccess);
     }
   }, [user, loading]);
 
