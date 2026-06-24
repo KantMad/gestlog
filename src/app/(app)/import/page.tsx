@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useSeason, formatSeasonLabel } from "@/lib/season-context";
 import { Topbar } from "@/components/layout/topbar";
 import { PageHeader } from "@/components/layout/page-header";
@@ -14,7 +14,7 @@ import {
   RECEPTION_PATTERNS,
   STOCK_PATTERNS,
 } from "@/components/import/column-mapper";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -25,7 +25,6 @@ import {
   type McsFormat,
 } from "@/lib/import/mcs-format";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Badge } from "@/components/ui/badge";
 import {
   ShoppingCart,
   Factory,
@@ -34,6 +33,7 @@ import {
   Check,
   AlertTriangle,
   Loader2,
+  Calendar,
 } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
@@ -106,9 +106,11 @@ const IMPORT_TABS = [
 function ImportTab({
   tab,
   seasonId,
+  seasonLabel,
 }: {
   tab: (typeof IMPORT_TABS)[number];
   seasonId: string;
+  seasonLabel: string;
 }) {
   const [parsed, setParsed] = useState<ParsedData | null>(null);
   const [file, setFile] = useState<File | null>(null);
@@ -342,7 +344,9 @@ function ImportTab({
 
           <Button onClick={handleImport} disabled={importing} className="w-full">
             {importing && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-            {importing ? "Import en cours..." : `Importer ${mcsRowCount} lignes`}
+            {importing
+              ? "Import en cours..."
+              : `Importer ${mcsRowCount} lignes dans ${seasonLabel}`}
           </Button>
         </>
       )}
@@ -364,7 +368,7 @@ function ImportTab({
             {importing && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
             {importing
               ? "Import en cours..."
-              : `Importer ${parsed.rows.length} lignes`}
+              : `Importer ${parsed.rows.length} lignes dans ${seasonLabel}`}
           </Button>
         </>
       )}
@@ -373,7 +377,16 @@ function ImportTab({
 }
 
 export default function ImportPage() {
-  const { activeSeason } = useSeason();
+  const { seasons, activeSeason } = useSeason();
+  // Saison CIBLE de l'import, choisie explicitement (≠ saison active globale).
+  // Évite d'importer par erreur dans la saison active courante.
+  const [importSeasonId, setImportSeasonId] = useState("");
+
+  useEffect(() => {
+    if (!importSeasonId && activeSeason) setImportSeasonId(activeSeason.id);
+  }, [activeSeason, importSeasonId]);
+
+  const importSeason = seasons.find((s) => s.id === importSeasonId) || null;
 
   return (
     <div>
@@ -384,42 +397,71 @@ export default function ImportPage() {
           description="Importez vos fichiers Excel pour alimenter le système"
         />
 
-        {!activeSeason ? (
+        {seasons.length === 0 ? (
           <Card className="border-dashed">
             <CardContent className="flex flex-col items-center justify-center py-16">
               <p className="text-sm text-muted-foreground">
-                Sélectionnez une saison pour commencer les imports
+                Créez une saison pour commencer les imports
               </p>
             </CardContent>
           </Card>
         ) : (
           <Card>
             <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
-                {formatSeasonLabel(activeSeason)}
-                <Badge variant="secondary">Active</Badge>
-              </CardTitle>
+              {/* Saison CIBLE de l'import (rattachement unique et explicite). */}
+              <div className="rounded-lg border-2 border-primary/30 bg-primary/5 p-3 space-y-1.5">
+                <label
+                  htmlFor="import-season"
+                  className="text-sm font-semibold flex items-center gap-2"
+                >
+                  <Calendar className="h-4 w-4" />
+                  Importer dans la saison
+                </label>
+                <select
+                  id="import-season"
+                  value={importSeasonId}
+                  onChange={(e) => setImportSeasonId(e.target.value)}
+                  className="w-full rounded-lg border-2 border-input bg-background px-3 py-2 text-sm font-medium outline-none transition-colors focus:border-primary"
+                >
+                  {seasons.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {formatSeasonLabel(s)}
+                      {activeSeason && s.id === activeSeason.id ? " — active" : ""}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-muted-foreground">
+                  Toutes les données importées (commandes clients, commandes fournisseurs,
+                  réceptions…) seront rattachées à <strong>cette seule saison</strong>. Vérifie-la
+                  avant d'importer.
+                </p>
+              </div>
             </CardHeader>
             <CardContent>
-              <Tabs defaultValue="client-orders">
-                <TabsList className="w-full justify-start">
+              {importSeason && (
+                <Tabs defaultValue="client-orders">
+                  <TabsList className="w-full justify-start">
+                    {IMPORT_TABS.map((tab) => (
+                      <TabsTrigger key={tab.id} value={tab.id} className="gap-2">
+                        <tab.icon className="h-4 w-4" />
+                        {tab.label}
+                      </TabsTrigger>
+                    ))}
+                  </TabsList>
                   {IMPORT_TABS.map((tab) => (
-                    <TabsTrigger
-                      key={tab.id}
-                      value={tab.id}
-                      className="gap-2"
-                    >
-                      <tab.icon className="h-4 w-4" />
-                      {tab.label}
-                    </TabsTrigger>
+                    <TabsContent key={tab.id} value={tab.id} className="mt-6">
+                      {/* key sur la saison → changer de saison cible réinitialise le tab
+                          (le fichier chargé est vidé, on reconfirme consciemment). */}
+                      <ImportTab
+                        key={importSeason.id}
+                        tab={tab}
+                        seasonId={importSeason.id}
+                        seasonLabel={formatSeasonLabel(importSeason)}
+                      />
+                    </TabsContent>
                   ))}
-                </TabsList>
-                {IMPORT_TABS.map((tab) => (
-                  <TabsContent key={tab.id} value={tab.id} className="mt-6">
-                    <ImportTab tab={tab} seasonId={activeSeason.id} />
-                  </TabsContent>
-                ))}
-              </Tabs>
+                </Tabs>
+              )}
             </CardContent>
           </Card>
         )}

@@ -50,6 +50,16 @@ sont gérés par écran (cf. [`05-authentification.md`](05-authentification.md))
 - **Logique d'allocation** : `src/lib/allocation/`. **Préparation/livraison** :
   `src/lib/delivery/`. **Imports** : `src/lib/import/`.
 
+### Import — saison cible explicite
+
+L'écran `/import` a un **sélecteur de saison cible** (en haut, encadré) : chaque import
+(commandes clients, commandes fournisseurs, réceptions, stock) est rattaché à **une seule
+saison choisie explicitement** — par défaut la saison active, mais modifiable. Le `seasonId`
+envoyé aux routes `/api/import/*` est celui-ci (plus la saison active globale). Le bouton
+d'import affiche la cible (« Importer N lignes dans **AH26** ») et changer de saison
+réinitialise le formulaire (`key` sur la saison). But : éviter d'importer par erreur dans la
+mauvaise saison (cf. incident PE27/AH26 du 24/06/2026).
+
 ### Formats d'import MCS (auto-détectés)
 
 Les fichiers réels MCS ne sont pas des tableaux plats → l'import les **auto-détecte**
