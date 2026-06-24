@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { code } = await request.json();
+    const { code, userId } = await request.json();
 
     if (!code || typeof code !== "string") {
       return NextResponse.json({ error: "Code requis" }, { status: 400 });
@@ -41,6 +41,16 @@ export async function POST(request: NextRequest) {
     if (!user) {
       await prisma.loginAttempt.create({ data: { ip, success: false } });
       return NextResponse.json({ error: "Code incorrect" }, { status: 401 });
+    }
+
+    // Le code DOIT correspondre à l'utilisateur sélectionné dans le menu déroulant
+    // (sinon on connecterait quelqu'un d'autre que le profil choisi).
+    if (userId && user.id !== userId) {
+      await prisma.loginAttempt.create({ data: { ip, success: false } });
+      return NextResponse.json(
+        { error: "Ce code ne correspond pas à l'utilisateur sélectionné." },
+        { status: 401 }
+      );
     }
 
     await prisma.loginAttempt.create({ data: { ip, success: true } });

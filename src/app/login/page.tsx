@@ -107,9 +107,17 @@ export default function LoginPage() {
   };
 
   const handleSubmit = async (fullCode: string) => {
+    // Un utilisateur DOIT être sélectionné : le code sera validé contre CE profil
+    // (sinon on pourrait se connecter à quelqu'un d'autre que celui choisi).
+    if (users.length > 0 && !selectedUserId) {
+      setError("Sélectionnez d'abord votre utilisateur");
+      setCode(["", "", "", ""]);
+      inputRefs.current[0]?.focus();
+      return;
+    }
     setSubmitting(true);
     setError("");
-    const result = await login(fullCode);
+    const result = await login(fullCode, selectedUserId || undefined);
     if (result.error) {
       setError(result.error);
       setCode(["", "", "", ""]);

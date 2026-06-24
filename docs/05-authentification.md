@@ -16,6 +16,10 @@
 ## Routes `/api/auth/*`
 
 - **`POST /api/auth/login`** : vérifie le `code` (user actif), pose le cookie de session.
+  **Le code doit correspondre à l'utilisateur SÉLECTIONNÉ** : le body inclut `userId` (profil
+  choisi dans le menu) ; si le code appartient à un autre utilisateur → **401** « Ce code ne
+  correspond pas à l'utilisateur sélectionné » (pas de connexion au mauvais compte). La
+  sélection est obligatoire côté UI quand la liste est disponible.
   **Anti-brute-force** : `LoginAttempt` compte les échecs par IP, **max 10 / 5 min** → 429.
 - **`POST /api/auth/logout`** : efface le cookie.
 - **`GET /api/auth/me`** : renvoie l'utilisateur courant (`id, name, role, screenAccess`) —

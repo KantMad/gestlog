@@ -19,7 +19,7 @@ interface AuthUser {
 interface AuthContextType {
   user: AuthUser | null;
   loading: boolean;
-  login: (code: string) => Promise<{ error?: string }>;
+  login: (code: string, userId?: string) => Promise<{ error?: string }>;
   logout: (opts?: { reason?: "inactivity" }) => Promise<void>;
   refresh: () => Promise<void>;
 }
@@ -60,12 +60,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     refresh();
   }, [refresh]);
 
-  const login = async (code: string) => {
+  const login = async (code: string, userId?: string) => {
     try {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code }),
+        body: JSON.stringify({ code, userId }),
       });
       const data = await res.json();
       if (!res.ok) return { error: data.error || "Erreur de connexion" };
