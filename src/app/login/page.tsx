@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { useAuth, firstAllowedScreen } from "@/lib/auth-context";
+import { useAuth } from "@/lib/auth-context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Package, Lock, AlertCircle, ChevronDown, Clock, User } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -16,7 +16,7 @@ interface LoginUser {
 }
 
 export default function LoginPage() {
-  const { login, user, loading } = useAuth();
+  const { login, user, loading, logout } = useAuth();
   const [code, setCode] = useState(["", "", "", ""]);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -25,11 +25,10 @@ export default function LoginPage() {
   const [expired, setExpired] = useState(false);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
-  useEffect(() => {
-    if (!loading && user) {
-      window.location.href = firstAllowedScreen(user.role, user.screenAccess);
-    }
-  }, [user, loading]);
+  // Pas de redirection automatique quand une session existe : on laisse TOUJOURS
+  // le formulaire accessible pour permettre de CHANGER de compte (sinon une session
+  // résiduelle « piège » l'utilisateur sur le compte précédent). La redirection après
+  // une connexion réussie est gérée par login() (firstAllowedScreen).
 
   // Bannière si l'utilisateur a été déconnecté pour inactivité (?expired=1).
   useEffect(() => {
@@ -152,6 +151,21 @@ export default function LoginPage() {
             <div className="flex items-center gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-700">
               <Clock className="h-4 w-4 shrink-0" />
               Vous avez été déconnecté pour inactivité.
+            </div>
+          )}
+
+          {!loading && user && (
+            <div className="rounded-lg bg-blue-50 border border-blue-200 px-3 py-2 text-sm text-blue-800">
+              Connecté en tant que <strong>{user.name}</strong>. Entrez un code pour changer de
+              compte, ou{" "}
+              <button
+                type="button"
+                onClick={() => logout()}
+                className="underline font-medium hover:text-blue-900"
+              >
+                se déconnecter
+              </button>
+              .
             </div>
           )}
 
