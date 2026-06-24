@@ -46,7 +46,12 @@ export async function POST(request: NextRequest) {
     await prisma.loginAttempt.create({ data: { ip, success: true } });
 
     const response = NextResponse.json({
-      user: { id: user.id, name: user.name, role: user.role },
+      user: {
+        id: user.id,
+        name: user.name,
+        role: user.role,
+        screenAccess: parseScreenAccess(user.screenAccess),
+      },
     });
 
     response.cookies.set(

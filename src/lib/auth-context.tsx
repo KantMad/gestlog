@@ -1,7 +1,6 @@
 "use client";
 
 import { createContext, useContext, useEffect, useRef, useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
 import { APP_SCREENS, canAccessScreen } from "@/lib/screens";
 
 // Premier écran accessible à l'utilisateur (le dashboard n'est pas garanti :
@@ -40,7 +39,6 @@ const INACTIVITY_MS = 4 * 60 * 60 * 1000; // 4 heures
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
-  const router = useRouter();
 
   const refresh = useCallback(async () => {
     try {
@@ -72,7 +70,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const data = await res.json();
       if (!res.ok) return { error: data.error || "Erreur de connexion" };
       setUser(data.user);
-      router.push(firstAllowedScreen(data.user.role, data.user.screenAccess));
+      // Rechargement COMPLET (pas router.push) → la nouvelle session est relue partout
+      // (middleware + serveur + client), évite tout résidu de l'ancien compte.
+      window.location.href = firstAllowedScreen(data.user.role, data.user.screenAccess);
       return {};
     } catch {
       return { error: "Erreur réseau" };
@@ -83,9 +83,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     async (opts?: { reason?: "inactivity" }) => {
       await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
       setUser(null);
-      router.push(opts?.reason === "inactivity" ? "/login?expired=1" : "/login");
+      // Rechargement COMPLET → purge tout état résiduel de la session précédente.
+      window.location.href = opts?.reason === "inactivity" ? "/login?expired=1" : "/login";
     },
-    [router]
+    []
   );
 
   // Déconnexion sur inactivité — actif uniquement quand un utilisateur est connecté.
