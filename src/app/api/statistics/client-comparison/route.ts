@@ -33,6 +33,41 @@ export async function GET(request: NextRequest) {
       season2
     );
 
+    // Détail PAR CLIENT ET PAR CATÉGORIE (catégorie = Product.category, PLV exclu) →
+    // permet d'agréger par catégorie côté écran en respectant le filtre boutique.
+    const catRows = await prisma.$queryRawUnsafe<
+      { code: string; category: string; qty1: bigint; ca1: number; qty2: bigint; ca2: number }[]
+    >(
+      `SELECT cl.code AS code,
+              COALESCE(NULLIF(p.category,''),'Sans catégorie') AS category,
+              COALESCE(SUM(col."totalQuantity") FILTER (WHERE se.name = $1), 0)::bigint AS qty1,
+              COALESCE(SUM(col.amount)          FILTER (WHERE se.name = $1), 0)::float8 AS ca1,
+              COALESCE(SUM(col."totalQuantity") FILTER (WHERE se.name = $2), 0)::bigint AS qty2,
+              COALESCE(SUM(col.amount)          FILTER (WHERE se.name = $2), 0)::float8 AS ca2
+       FROM "ClientOrder" co
+       JOIN "Client" cl ON cl.id = co."clientId"
+       JOIN "Season" se ON se.id = co."seasonId"
+       JOIN "ClientOrderLine" col ON col."clientOrderId" = co.id
+       JOIN "Product" p ON p.id = col."productId"
+       WHERE se.name IN ($1, $2) AND p.category IS DISTINCT FROM 'PLV'
+       GROUP BY cl.code, COALESCE(NULLIF(p.category,''),'Sans catégorie')`,
+      season1,
+      season2
+    );
+    const catByClient = new Map<
+      string,
+      { category: string; s1: { ca: number; qty: number }; s2: { ca: number; qty: number } }[]
+    >();
+    for (const r of catRows) {
+      const arr = catByClient.get(r.code) || [];
+      arr.push({
+        category: r.category,
+        s1: { ca: Math.round(Number(r.ca1)), qty: Number(r.qty1) },
+        s2: { ca: Math.round(Number(r.ca2)), qty: Number(r.qty2) },
+      });
+      catByClient.set(r.code, arr);
+    }
+
     const pct = (num: number, den: number) => (den > 0 ? (num / den) * 100 : 0);
 
     const clients = rows
@@ -45,6 +80,7 @@ export async function GET(request: NextRequest) {
           s2: { ca: Math.round(ca2), qty: qty2 },
           caPct: pct(ca2, ca1),
           qtyPct: pct(qty2, qty1),
+          categories: catByClient.get(r.code) || [],
         };
       })
       // on ne garde que les clients ayant une activité sur au moins une des deux saisons

@@ -24,6 +24,11 @@ import {
 import { Loader2, ArrowLeftRight, Search, X, Users } from "lucide-react";
 import { cn, formatNumber, formatEuro } from "@/lib/utils";
 
+interface CatRow {
+  category: string;
+  s1: { ca: number; qty: number };
+  s2: { ca: number; qty: number };
+}
 interface ClientRow {
   code: string;
   name: string;
@@ -31,6 +36,7 @@ interface ClientRow {
   s2: { ca: number; qty: number };
   caPct: number;
   qtyPct: number;
+  categories: CatRow[];
 }
 interface CompData {
   season1: string;
@@ -119,6 +125,31 @@ export default function ClientComparisonPage() {
     const q1 = sum((c) => c.s1.qty), q2 = sum((c) => c.s2.qty);
     const pct = (n: number, d: number) => (d > 0 ? (n / d) * 100 : 0);
     return { s1c, s2c, ca1, ca2, q1, q2, clientsPct: pct(s2c, s1c), caPct: pct(ca2, ca1), qtyPct: pct(q2, q1) };
+  }, [filtered]);
+
+  // Détail par catégorie : agrégé sur les boutiques FILTRÉES (Qté + CA, 2 saisons).
+  const categoryBreakdown = useMemo(() => {
+    const m = new Map<string, { s1: { ca: number; qty: number }; s2: { ca: number; qty: number } }>();
+    for (const c of filtered) {
+      for (const cat of c.categories || []) {
+        const e = m.get(cat.category) || { s1: { ca: 0, qty: 0 }, s2: { ca: 0, qty: 0 } };
+        e.s1.ca += cat.s1.ca;
+        e.s1.qty += cat.s1.qty;
+        e.s2.ca += cat.s2.ca;
+        e.s2.qty += cat.s2.qty;
+        m.set(cat.category, e);
+      }
+    }
+    const pct = (n: number, d: number) => (d > 0 ? (n / d) * 100 : 0);
+    return [...m.entries()]
+      .map(([category, v]) => ({
+        category,
+        ...v,
+        caPct: pct(v.s2.ca, v.s1.ca),
+        qtyPct: pct(v.s2.qty, v.s1.qty),
+      }))
+      .filter((x) => x.s1.ca || x.s1.qty || x.s2.ca || x.s2.qty)
+      .sort((a, b) => b.s1.ca - a.s1.ca);
   }, [filtered]);
 
   const nameByCode = (code: string) => allClients.find((c) => c.code === code)?.name || code;
@@ -247,6 +278,65 @@ export default function ClientComparisonPage() {
                 <p className={cn("text-xs font-medium", pctCls(summary.qtyPct))}>{fmtPct(summary.qtyPct)} <span className="text-muted-foreground font-normal">(S2/S1)</span></p>
               </CardContent></Card>
             </div>
+
+            {/* Détail par catégorie (agrégé sur les boutiques filtrées) */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">
+                  Détail par catégorie
+                  <span className="text-xs font-normal text-muted-foreground"> — {data.season1} vs {data.season2}{selected.length ? ` · ${filtered.length} boutique(s)` : ""}</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0 overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Catégorie</TableHead>
+                      <TableHead className="text-right border-l">CA {data.season1}</TableHead>
+                      <TableHead className="text-right">CA {data.season2}</TableHead>
+                      <TableHead className="text-right">% CA</TableHead>
+                      <TableHead className="text-right border-l">Qté {data.season1}</TableHead>
+                      <TableHead className="text-right">Qté {data.season2}</TableHead>
+                      <TableHead className="text-right">% Qté</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {categoryBreakdown.map((c) => (
+                      <TableRow key={c.category}>
+                        <TableCell className="font-medium">{c.category}</TableCell>
+                        <TableCell className="text-right border-l">{formatEuro(c.s1.ca)}</TableCell>
+                        <TableCell className="text-right">{formatEuro(c.s2.ca)}</TableCell>
+                        <TableCell className={cn("text-right font-medium", pctCls(c.caPct))}>{c.s1.ca ? fmtPct(c.caPct) : "—"}</TableCell>
+                        <TableCell className="text-right border-l">{formatNumber(c.s1.qty)}</TableCell>
+                        <TableCell className="text-right">{formatNumber(c.s2.qty)}</TableCell>
+                        <TableCell className={cn("text-right font-medium", pctCls(c.qtyPct))}>{c.s1.qty ? fmtPct(c.qtyPct) : "—"}</TableCell>
+                      </TableRow>
+                    ))}
+                    {categoryBreakdown.length === 0 ? (
+                      <TableRow><TableCell colSpan={7} className="py-10 text-center text-sm text-muted-foreground">Aucune catégorie.</TableCell></TableRow>
+                    ) : (() => {
+                      const t = categoryBreakdown.reduce(
+                        (a, c) => ({ s1ca: a.s1ca + c.s1.ca, s1qty: a.s1qty + c.s1.qty, s2ca: a.s2ca + c.s2.ca, s2qty: a.s2qty + c.s2.qty }),
+                        { s1ca: 0, s1qty: 0, s2ca: 0, s2qty: 0 }
+                      );
+                      const cp = t.s1ca > 0 ? (t.s2ca / t.s1ca) * 100 : 0;
+                      const qp = t.s1qty > 0 ? (t.s2qty / t.s1qty) * 100 : 0;
+                      return (
+                        <TableRow className="border-t-2 font-semibold">
+                          <TableCell>TOTAL</TableCell>
+                          <TableCell className="text-right border-l">{formatEuro(t.s1ca)}</TableCell>
+                          <TableCell className="text-right">{formatEuro(t.s2ca)}</TableCell>
+                          <TableCell className={cn("text-right", pctCls(cp))}>{t.s1ca ? fmtPct(cp) : "—"}</TableCell>
+                          <TableCell className="text-right border-l">{formatNumber(t.s1qty)}</TableCell>
+                          <TableCell className="text-right">{formatNumber(t.s2qty)}</TableCell>
+                          <TableCell className={cn("text-right", pctCls(qp))}>{t.s1qty ? fmtPct(qp) : "—"}</TableCell>
+                        </TableRow>
+                      );
+                    })()}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
 
             {/* Détail par boutique */}
             <Card>
