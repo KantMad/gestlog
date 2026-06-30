@@ -54,6 +54,12 @@ interface StatsData {
     quantity: number;
     revenue: number;
   }[];
+  topProductsByQty: {
+    name: string;
+    sku: string | null;
+    quantity: number;
+    revenue: number;
+  }[];
   topCategories: { category: string; quantity: number; revenue: number }[];
   topCountries: { country: string; orders: number; revenue: number }[];
   ordersByStatus: { status: string; count: number }[];
@@ -109,9 +115,35 @@ function formatEuro(n: number): string {
   }).format(n);
 }
 
+// Bascule CA / Quantité (réutilisé dans le Top 15 produits et le graphe par catégorie).
+function MetricToggle({
+  metric,
+  onChange,
+}: {
+  metric: "ca" | "qty";
+  onChange: (m: "ca" | "qty") => void;
+}) {
+  const btn = (active: boolean) =>
+    `px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+      active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+    }`;
+  return (
+    <div className="inline-flex shrink-0 items-center rounded-md border p-0.5">
+      <button type="button" onClick={() => onChange("ca")} className={btn(metric === "ca")}>
+        CA
+      </button>
+      <button type="button" onClick={() => onChange("qty")} className={btn(metric === "qty")}>
+        Quantité
+      </button>
+    </div>
+  );
+}
+
 export function BtocStatsTab() {
   const [data, setData] = useState<StatsData | null>(null);
   const [loading, setLoading] = useState(true);
+  // Bascule d'affichage CA / Quantité pour le Top 15 produits et le graphe par catégorie.
+  const [metric, setMetric] = useState<"ca" | "qty">("ca");
 
   // Filters
   const [dateFrom, setDateFrom] = useState("");
@@ -449,15 +481,16 @@ export function BtocStatsTab() {
         {/* Top products */}
         {data.topProducts.length > 0 && (
           <Card className="lg:col-span-2">
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
               <CardTitle className="text-base">
-                Top 15 produits par CA
+                Top 15 produits par {metric === "ca" ? "CA" : "quantité"}
               </CardTitle>
+              <MetricToggle metric={metric} onChange={setMetric} />
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={400}>
                 <BarChart
-                  data={data.topProducts.map((p) => ({
+                  data={(metric === "ca" ? data.topProducts : data.topProductsByQty).map((p) => ({
                     ...p,
                     name:
                       p.name.length > 35
@@ -470,7 +503,7 @@ export function BtocStatsTab() {
                   <XAxis
                     type="number"
                     tick={{ fontSize: 11 }}
-                    tickFormatter={(v) => formatEuro(v)}
+                    tickFormatter={(v) => (metric === "ca" ? formatEuro(v) : formatNumber(v))}
                   />
                   <YAxis
                     dataKey="name"
@@ -479,17 +512,15 @@ export function BtocStatsTab() {
                     width={200}
                   />
                   <Tooltip
-                    formatter={(value, name) => [
-                      name === "revenue"
-                        ? formatEuro(Number(value))
-                        : formatNumber(Number(value)),
-                      name === "revenue" ? "CA" : "Quantité",
+                    formatter={(value) => [
+                      metric === "ca" ? formatEuro(Number(value)) : formatNumber(Number(value)),
+                      metric === "ca" ? "CA" : "Quantité",
                     ]}
                   />
                   <Bar
-                    dataKey="revenue"
-                    name="CA"
-                    fill="#10B981"
+                    dataKey={metric === "ca" ? "revenue" : "quantity"}
+                    name={metric === "ca" ? "CA" : "Quantité"}
+                    fill={metric === "ca" ? "#10B981" : "#6366F1"}
                     radius={[0, 4, 4, 0]}
                   />
                 </BarChart>
@@ -539,17 +570,24 @@ export function BtocStatsTab() {
         {/* Top categories */}
         {data.topCategories.length > 0 && (
           <Card>
-            <CardHeader>
-              <CardTitle className="text-base">CA par catégorie</CardTitle>
+            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
+              <CardTitle className="text-base">
+                {metric === "ca" ? "CA" : "Quantité"} par catégorie
+              </CardTitle>
+              <MetricToggle metric={metric} onChange={setMetric} />
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={280}>
                 <PieChart>
                   <Pie
-                    data={data.topCategories.map((c) => ({
-                      name: c.category,
-                      value: c.revenue,
-                    }))}
+                    data={[...data.topCategories]
+                      .sort((a, b) =>
+                        metric === "ca" ? b.revenue - a.revenue : b.quantity - a.quantity
+                      )
+                      .map((c) => ({
+                        name: c.category,
+                        value: metric === "ca" ? c.revenue : c.quantity,
+                      }))}
                     cx="50%"
                     cy="50%"
                     innerRadius={55}
@@ -566,7 +604,10 @@ export function BtocStatsTab() {
                     ))}
                   </Pie>
                   <Tooltip
-                    formatter={(value) => [formatEuro(Number(value)), "CA"]}
+                    formatter={(value) => [
+                      metric === "ca" ? formatEuro(Number(value)) : formatNumber(Number(value)),
+                      metric === "ca" ? "CA" : "Quantité",
+                    ]}
                   />
                 </PieChart>
               </ResponsiveContainer>

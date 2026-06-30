@@ -190,6 +190,29 @@ export async function GET(request: NextRequest) {
       ...tpAllParams
     );
 
+    // Même top mais classé par QUANTITÉ (pour le bascule CA/quantité côté UI).
+    const topProductsByQty = await prisma.$queryRawUnsafe<
+      { name: string; sku: string | null; quantity: bigint; revenue: number }[]
+    >(
+      `SELECT name, sku, SUM(qty) AS quantity, SUM(revenue) AS revenue
+      FROM (
+        SELECT ol.name AS name, ol.sku AS sku, ol.quantity AS qty, ol.total AS revenue
+        FROM "BtocOrderLine" ol
+        JOIN "BtocOrder" o ON o.id = ol."orderId"
+        LEFT JOIN "BtocProduct" p ON p.sku = SPLIT_PART(ol.sku, '-', 1)
+        ${tpWhere}
+        UNION ALL
+        SELECT rl.name, rl.sku, -rl.quantity, -rl.total
+        FROM "BtocRefundLine" rl
+        JOIN "BtocOrder" o ON o."wooId" = rl."orderWooId"
+        ${tpRefundWhere}
+      ) t
+      GROUP BY name, sku
+      ORDER BY quantity DESC
+      LIMIT 15`,
+      ...tpAllParams
+    );
+
     // ─── Top catégories (catégories BtoB via matching réf) + Top pays ─────────
     // Regroupement par catégorie BtoB (Product.category, PAS la catégorie BtoC),
     // matching réf par préfixe SKU avec repli "corps" saison-agnostique.
@@ -362,6 +385,12 @@ export async function GET(request: NextRequest) {
         orders: Number(r.orders),
       })),
       topProducts: topProducts.map((r) => ({
+        name: r.name,
+        sku: r.sku,
+        quantity: Number(r.quantity),
+        revenue: Number(r.revenue),
+      })),
+      topProductsByQty: topProductsByQty.map((r) => ({
         name: r.name,
         sku: r.sku,
         quantity: Number(r.quantity),
