@@ -53,12 +53,14 @@ interface StatsData {
     sku: string | null;
     quantity: number;
     revenue: number;
+    colors: { color: string; quantity: number; revenue: number }[];
   }[];
   topProductsByQty: {
     name: string;
     sku: string | null;
     quantity: number;
     revenue: number;
+    colors: { color: string; quantity: number; revenue: number }[];
   }[];
   topCategories: { category: string; quantity: number; revenue: number }[];
   topCountries: { country: string; orders: number; revenue: number }[];
@@ -135,6 +137,58 @@ function MetricToggle({
       <button type="button" onClick={() => onChange("qty")} className={btn(metric === "qty")}>
         Quantité
       </button>
+    </div>
+  );
+}
+
+// Infobulle du Top 15 produits : total + détail PAR COLORIS (code couleur).
+function ProductTooltip({
+  active,
+  payload,
+  metric,
+}: {
+  active?: boolean;
+  payload?: {
+    payload: {
+      fullName?: string;
+      name: string;
+      revenue: number;
+      quantity: number;
+      colors?: { color: string; quantity: number; revenue: number }[];
+    };
+  }[];
+  metric: "ca" | "qty";
+}) {
+  if (!active || !payload?.length) return null;
+  const p = payload[0].payload;
+  const fmt = (n: number) => (metric === "ca" ? formatEuro(n) : formatNumber(n));
+  const colors = [...(p.colors || [])].sort((a, b) =>
+    metric === "ca" ? b.revenue - a.revenue : b.quantity - a.quantity
+  );
+  return (
+    <div className="max-w-xs rounded-md border bg-popover p-2.5 text-xs shadow-md">
+      <p className="mb-1 font-medium text-foreground">{p.fullName || p.name}</p>
+      <p className="mb-1.5 text-muted-foreground">
+        Total :{" "}
+        <span className="font-semibold text-foreground">
+          {fmt(metric === "ca" ? p.revenue : p.quantity)}
+        </span>
+      </p>
+      {colors.length > 0 && (
+        <div className="space-y-0.5 border-t pt-1.5">
+          <p className="mb-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+            Par coloris
+          </p>
+          {colors.map((c) => (
+            <div key={c.color} className="flex items-center justify-between gap-4">
+              <span className="text-muted-foreground">Coloris {c.color}</span>
+              <span className="font-mono text-foreground">
+                {fmt(metric === "ca" ? c.revenue : c.quantity)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -492,6 +546,7 @@ export function BtocStatsTab() {
                 <BarChart
                   data={(metric === "ca" ? data.topProducts : data.topProductsByQty).map((p) => ({
                     ...p,
+                    fullName: p.name,
                     name:
                       p.name.length > 35
                         ? p.name.slice(0, 32) + "..."
@@ -511,12 +566,7 @@ export function BtocStatsTab() {
                     tick={{ fontSize: 10 }}
                     width={200}
                   />
-                  <Tooltip
-                    formatter={(value) => [
-                      metric === "ca" ? formatEuro(Number(value)) : formatNumber(Number(value)),
-                      metric === "ca" ? "CA" : "Quantité",
-                    ]}
-                  />
+                  <Tooltip content={<ProductTooltip metric={metric} />} />
                   <Bar
                     dataKey={metric === "ca" ? "revenue" : "quantity"}
                     name={metric === "ca" ? "CA" : "Quantité"}

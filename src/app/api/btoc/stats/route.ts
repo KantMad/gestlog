@@ -168,50 +168,58 @@ export async function GET(request: NextRequest) {
     if (customerId) { tpRefundConds.push(`o."customerId" = $${tpr++}`); tpAllParams.push(customerId); }
     const tpRefundWhere = "WHERE " + tpRefundConds.join(" AND ");
 
-    const topProducts = await prisma.$queryRawUnsafe<
-      { name: string; sku: string | null; quantity: bigint; revenue: number }[]
+    // Top produits : on agrège par RÉFÉRENCE (SPLIT_PART(sku,'-',1)) — un produit =
+    // une barre, toutes couleurs/tailles confondues — avec le détail par COULEUR
+    // (SPLIT_PART(sku,'-',2)) pour l'infobulle. Le classement (CA ou quantité) se fait
+    // ensuite côté JS pour servir les deux bascules.
+    const tpRows = await prisma.$queryRawUnsafe<
+      { ref: string; name: string; color: string; quantity: bigint; revenue: number }[]
     >(
-      `SELECT name, sku, SUM(qty) AS quantity, SUM(revenue) AS revenue
+      `SELECT ref, MAX(name) AS name, color, SUM(qty) AS quantity, SUM(revenue) AS revenue
       FROM (
-        SELECT ol.name AS name, ol.sku AS sku, ol.quantity AS qty, ol.total AS revenue
+        SELECT SPLIT_PART(ol.sku, '-', 1) AS ref, ol.name AS name, SPLIT_PART(ol.sku, '-', 2) AS color, ol.quantity AS qty, ol.total AS revenue
         FROM "BtocOrderLine" ol
         JOIN "BtocOrder" o ON o.id = ol."orderId"
         LEFT JOIN "BtocProduct" p ON p.sku = SPLIT_PART(ol.sku, '-', 1)
         ${tpWhere}
         UNION ALL
-        SELECT rl.name, rl.sku, -rl.quantity, -rl.total
+        SELECT SPLIT_PART(rl.sku, '-', 1), rl.name, SPLIT_PART(rl.sku, '-', 2), -rl.quantity, -rl.total
         FROM "BtocRefundLine" rl
         JOIN "BtocOrder" o ON o."wooId" = rl."orderWooId"
         ${tpRefundWhere}
       ) t
-      GROUP BY name, sku
-      ORDER BY revenue DESC
-      LIMIT 15`,
+      WHERE ref IS NOT NULL AND ref <> ''
+      GROUP BY ref, color`,
       ...tpAllParams
     );
 
-    // Même top mais classé par QUANTITÉ (pour le bascule CA/quantité côté UI).
-    const topProductsByQty = await prisma.$queryRawUnsafe<
-      { name: string; sku: string | null; quantity: bigint; revenue: number }[]
-    >(
-      `SELECT name, sku, SUM(qty) AS quantity, SUM(revenue) AS revenue
-      FROM (
-        SELECT ol.name AS name, ol.sku AS sku, ol.quantity AS qty, ol.total AS revenue
-        FROM "BtocOrderLine" ol
-        JOIN "BtocOrder" o ON o.id = ol."orderId"
-        LEFT JOIN "BtocProduct" p ON p.sku = SPLIT_PART(ol.sku, '-', 1)
-        ${tpWhere}
-        UNION ALL
-        SELECT rl.name, rl.sku, -rl.quantity, -rl.total
-        FROM "BtocRefundLine" rl
-        JOIN "BtocOrder" o ON o."wooId" = rl."orderWooId"
-        ${tpRefundWhere}
-      ) t
-      GROUP BY name, sku
-      ORDER BY quantity DESC
-      LIMIT 15`,
-      ...tpAllParams
-    );
+    // Agrégation par produit (ref) + détail couleurs.
+    type ColorBd = { color: string; quantity: number; revenue: number };
+    const prodMap = new Map<
+      string,
+      { name: string; quantity: number; revenue: number; colors: ColorBd[] }
+    >();
+    for (const r of tpRows) {
+      const q = Number(r.quantity);
+      const rev = Number(r.revenue);
+      let e = prodMap.get(r.ref);
+      if (!e) {
+        e = { name: r.name, quantity: 0, revenue: 0, colors: [] };
+        prodMap.set(r.ref, e);
+      }
+      e.quantity += q;
+      e.revenue += rev;
+      e.colors.push({ color: r.color || "—", quantity: q, revenue: rev });
+    }
+    const allProducts = [...prodMap.entries()].map(([ref, e]) => ({
+      name: e.name,
+      sku: ref,
+      quantity: e.quantity,
+      revenue: e.revenue,
+      colors: e.colors.filter((c) => c.revenue !== 0 || c.quantity !== 0),
+    }));
+    const topProducts = [...allProducts].sort((a, b) => b.revenue - a.revenue).slice(0, 15);
+    const topProductsByQty = [...allProducts].sort((a, b) => b.quantity - a.quantity).slice(0, 15);
 
     // ─── Top catégories (catégories BtoB via matching réf) + Top pays ─────────
     // Regroupement par catégorie BtoB (Product.category, PAS la catégorie BtoC),
@@ -384,18 +392,8 @@ export async function GET(request: NextRequest) {
         revenue: Number(r.revenue),
         orders: Number(r.orders),
       })),
-      topProducts: topProducts.map((r) => ({
-        name: r.name,
-        sku: r.sku,
-        quantity: Number(r.quantity),
-        revenue: Number(r.revenue),
-      })),
-      topProductsByQty: topProductsByQty.map((r) => ({
-        name: r.name,
-        sku: r.sku,
-        quantity: Number(r.quantity),
-        revenue: Number(r.revenue),
-      })),
+      topProducts,
+      topProductsByQty,
       topCategories: topCategories.map((r) => ({
         category: r.category,
         quantity: Number(r.quantity),
