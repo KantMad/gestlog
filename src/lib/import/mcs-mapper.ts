@@ -251,7 +251,21 @@ export async function importMcsClientOrders(
 
   const missing = new Map<string, number>(); // combos réf/couleur introuvables (dédupliqués)
 
+  // Cloisonnement saison : une commande client ne peut exister que sur UNE saison.
+  // On repère en 1 requête les n° déjà présents dans une AUTRE saison → ignorés.
+  const conflicts = await prisma.clientOrder.findMany({
+    where: { orderNumber: { in: [...byOrder.keys()] }, seasonId: { not: seasonId } },
+    select: { orderNumber: true, season: { select: { name: true } } },
+  });
+  const conflictMap = new Map(conflicts.map((c) => [c.orderNumber, c.season.name]));
+
   for (const [orderNumber, rows] of byOrder) {
+    if (conflictMap.has(orderNumber)) {
+      errors.push(
+        `Commande ${orderNumber} déjà présente en saison « ${conflictMap.get(orderNumber)} » — une commande ne peut être que sur une saison (import ignoré).`
+      );
+      continue;
+    }
     const clientCode = rows[0].clientCode || "INCONNU";
     let clientId = clientIdByCode.get(clientCode);
     if (!clientId) {
