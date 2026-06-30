@@ -177,9 +177,9 @@ function ProductTooltip({
       {colors.length > 0 && (
         <div className="space-y-0.5 border-t pt-1.5">
           <p className="mb-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
-            Par coloris
+            Par coloris ({colors.length})
           </p>
-          {colors.map((c) => (
+          {colors.slice(0, 12).map((c) => (
             <div key={c.color} className="flex items-center justify-between gap-4">
               <span className="text-muted-foreground">Coloris {c.color}</span>
               <span className="font-mono text-foreground">
@@ -187,6 +187,11 @@ function ProductTooltip({
               </span>
             </div>
           ))}
+          {colors.length > 12 && (
+            <div className="pt-0.5 text-muted-foreground">
+              … et {colors.length - 12} autre{colors.length - 12 > 1 ? "s" : ""} coloris
+            </div>
+          )}
         </div>
       )}
     </div>
