@@ -60,6 +60,19 @@ d'import affiche la cible (« Importer N lignes dans **AH26** ») et changer de 
 réinitialise le formulaire (`key` sur la saison). But : éviter d'importer par erreur dans la
 mauvaise saison (cf. incident PE27/AH26 du 24/06/2026).
 
+### Cloisonnement par saison (commandes & réceptions fournisseur)
+
+**Invariant : une commande fournisseur et une réception appartiennent à UNE seule saison.**
+- `SupplierOrder.seasonId` (season-scoped) ; `SupplierReception` n'a pas de `seasonId` mais
+  est liée à **une** `SupplierOrder` → hérite de sa saison. Toutes les requêtes
+  (`statistics/charts`, `statistics/season`, `comparison/engine`, `allocation/simulate`)
+  filtrent par `seasonId` (ou via l'`include` de la commande) — **vérifié, pas de fuite
+  inter-saison**.
+- **Garde-fou import** : importer une commande fournisseur dont le n° existe déjà dans une
+  AUTRE saison est **refusé** (message « déjà présente en saison X »). Évite les doublons
+  inter-saison comme IMDER 100739 (qui s'était retrouvée en AH26 ET PE27 avant le sélecteur
+  de saison — nettoyée le 30/06/2026, backup `pe27-supplier-misplaced-*.json`).
+
 ### Formats d'import MCS (auto-détectés)
 
 Les fichiers réels MCS ne sont pas des tableaux plats → l'import les **auto-détecte**
