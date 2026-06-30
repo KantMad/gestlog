@@ -44,6 +44,20 @@ export async function importMcsSupplierOrders(
   }
 
   for (const [orderNumber, rows] of byOrder) {
+    // Cloisonnement saison : une commande fournisseur ne peut exister que sur UNE
+    // saison. Si ce n° existe déjà dans une AUTRE saison, on refuse (pas de doublon
+    // inter-saison) — il faut d'abord la supprimer de l'autre saison.
+    const elsewhere = await prisma.supplierOrder.findFirst({
+      where: { orderNumber, seasonId: { not: seasonId } },
+      include: { season: { select: { name: true } } },
+    });
+    if (elsewhere) {
+      errors.push(
+        `Commande ${orderNumber} déjà présente en saison « ${elsewhere.season.name} » — une commande ne peut être que sur une saison (import ignoré pour cette commande).`
+      );
+      continue;
+    }
+
     const supplierCode = rows[0].supplierCode || "INCONNU";
     const supplier = await prisma.supplier.upsert({
       where: { code: supplierCode },

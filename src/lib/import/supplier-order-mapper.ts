@@ -39,6 +39,18 @@ export async function importSupplierOrders(
         continue;
       }
 
+      // Cloisonnement saison : une commande ne peut exister que sur UNE saison.
+      const elsewhere = await prisma.supplierOrder.findFirst({
+        where: { orderNumber, seasonId: { not: seasonId } },
+        include: { season: { select: { name: true } } },
+      });
+      if (elsewhere) {
+        errors.push(
+          `Commande ${orderNumber} déjà présente en saison « ${elsewhere.season.name} » — une commande ne peut être que sur une saison (import ignoré).`
+        );
+        continue;
+      }
+
       const supplier = await prisma.supplier.upsert({
         where: { code: supplierCode },
         update: { name: supplierName },
