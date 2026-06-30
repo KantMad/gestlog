@@ -14,6 +14,15 @@ produits, commandes, stock, remboursements) + **gestion VIP via Brevo**.
   sous `/api/btoc/*` : `customers`, `stats`, `size-distribution`,
   `export/{orders,products,best-sellers,top-clients}`, `settings`.
 
+## Stats BtoC — Top 15 produits
+
+Le SKU BtocOrderLine = `RÉF-COULEUR-TAILLE` (ex. `QMVEST_L001-006-L`). Le **Top 15 produits**
+(`/api/btoc/stats`) regroupe par **référence** (`SPLIT_PART(sku,'-',1)`) → **1 barre par
+produit**, toutes couleurs/tailles confondues (avant : 1 barre par variante → un produit
+occupait plusieurs barres). Une requête groupée par `(ref, color)` fournit aussi le **détail
+par coloris** (code) affiché dans l'infobulle au survol. Bascule **CA / Quantité** (re-classe
+le top + change l'axe) sur le Top 15 et le graphe par catégorie (`stats-tab.tsx`).
+
 ## VIP Brevo
 
 - `src/lib/brevo.ts` + `/api/brevo/health`. Réglages via env : `BREVO_API_KEY`,
