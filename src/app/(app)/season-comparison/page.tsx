@@ -31,8 +31,10 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
-import { Loader2, ArrowLeftRight, Search, X } from "lucide-react";
+import { Loader2, ArrowLeftRight, Search, X, Download } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { cn, formatNumber, formatEuro } from "@/lib/utils";
+import * as XLSX from "xlsx";
 
 interface CatRow {
   category: string;
@@ -141,6 +143,74 @@ export default function SeasonComparisonPage() {
   const uncheckAllVisible = () => {
     const vis = new Set(visibleClients.map((c) => c.code));
     setSelected((p) => p.filter((c) => !vis.has(c)));
+  };
+
+  // Export Excel : le détail par catégorie (tel que filtré) + en dessous les filtres
+  // (saison/catalogue, dates, boutiques) qui ont mené à ce tableau.
+  const exportExcel = () => {
+    if (!data) return;
+    const r0 = (n: number) => Math.round(n);
+    const r1 = (n: number) => Math.round(n * 10) / 10;
+    const dimCap = dimension === "season" ? "Saison" : "Catalogue";
+    const s2Title = `${data.season2.name}${data.season2.endDate ? ` (≤ ${data.season2.endDate})` : ""}`;
+
+    const aoa: (string | number)[][] = [];
+    aoa.push([`Comparaison ${dimLabel} — détail par catégorie`]);
+    aoa.push([]);
+    aoa.push([
+      "Catégorie",
+      `${data.season1.name} — Qté`, "CA (€)", "Poids qté (%)", "Poids CA (%)",
+      `${s2Title} — Qté`, "CA (€)", "Poids qté (%)", "Poids CA (%)",
+      "% CA (item2/item1)", "% Qté", "Δ poids CA (pts)", "Δ poids qté (pts)",
+    ]);
+    for (const c of data.categories) {
+      aoa.push([
+        c.category,
+        c.s1.qty, r0(c.s1.ca), r1(c.s1.qtyWeight), r1(c.s1.caWeight),
+        c.s2.qty, r0(c.s2.ca), r1(c.s2.qtyWeight), r1(c.s2.caWeight),
+        r0(c.caPct), r0(c.qtyPct), r1(c.caWeightGap), r1(c.qtyWeightGap),
+      ]);
+    }
+    aoa.push([
+      "TOTAL",
+      data.season1.qty, r0(data.season1.ca), "", "",
+      data.season2.qty, r0(data.season2.ca), "", "",
+      r0(data.global.caPct), r0(data.global.qtyPct), "", "",
+    ]);
+
+    // Filtres appliqués (en dessous du tableau)
+    aoa.push([]);
+    aoa.push([]);
+    aoa.push(["FILTRES APPLIQUÉS"]);
+    aoa.push(["Type de comparaison", dimCap]);
+    aoa.push([`${dimCap} 1 (total)`, item1]);
+    aoa.push([`${dimCap} 2`, item2]);
+    aoa.push(["Date de fin (élément 2)", data.season2.endDate || endDate || "Toutes les dates"]);
+    aoa.push([
+      "Filtre boutique",
+      filterMode === "exclude"
+        ? "Toutes les boutiques SAUF celles listées"
+        : "UNIQUEMENT les boutiques listées",
+    ]);
+    if (selected.length === 0) {
+      aoa.push(["Boutiques", "Aucune sélectionnée — toutes les boutiques"]);
+    } else {
+      aoa.push([`Boutiques ${filterMode === "exclude" ? "exclues" : "incluses"} (${selected.length})`]);
+      for (const code of selected) aoa.push(["", `${nameByCode(code)} (${code})`]);
+    }
+    aoa.push([]);
+    aoa.push(["Exporté le", new Date().toLocaleString("fr-FR")]);
+
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws["!cols"] = [
+      { wch: 30 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 },
+      { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 },
+      { wch: 16 }, { wch: 10 }, { wch: 14 }, { wch: 14 },
+    ];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Comparaison");
+    const safe = (s: string) => s.replace(/[\\/?*:[\]]/g, "_");
+    XLSX.writeFile(wb, `comparaison-${dimLabel}-${safe(item1)}-vs-${safe(item2)}.xlsx`);
   };
 
   const globalCa = data ? [{ name: "CA", [data.season1.name]: data.season1.ca, [data.season2.name]: data.season2.ca }] : [];
@@ -341,9 +411,14 @@ export default function SeasonComparisonPage() {
 
             {/* Tableau détaillé par catégorie */}
             <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Détail par catégorie</CardTitle>
-                <p className="text-xs text-muted-foreground">Poids = part de la catégorie dans son {dimLabel}. % = item 2 / item 1. Écart de poids en points entre les deux.</p>
+              <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
+                <div className="space-y-1">
+                  <CardTitle className="text-base">Détail par catégorie</CardTitle>
+                  <p className="text-xs text-muted-foreground">Poids = part de la catégorie dans son {dimLabel}. % = item 2 / item 1. Écart de poids en points entre les deux.</p>
+                </div>
+                <Button variant="outline" size="sm" onClick={exportExcel} className="shrink-0 gap-2">
+                  <Download className="h-4 w-4" /> Export Excel
+                </Button>
               </CardHeader>
               <CardContent className="p-0 overflow-x-auto">
                 <Table>
