@@ -224,7 +224,7 @@ export default function SeasonComparisonPage() {
               </div>
 
               {/* Liste de cases à cocher (cochez plusieurs boutiques) */}
-              <div className="rounded-md border max-w-2xl">
+              <div className="rounded-md border">
                 <div className="flex items-center justify-between gap-2 border-b bg-muted/30 px-3 py-2 text-xs">
                   <span className="text-muted-foreground">
                     {visibleClients.length} boutique(s){search ? " trouvée(s)" : ""}
@@ -234,9 +234,9 @@ export default function SeasonComparisonPage() {
                     <button onClick={uncheckAllVisible} className="underline hover:text-foreground">Tout décocher{search ? " (résultats)" : ""}</button>
                   </div>
                 </div>
-                <div className="max-h-56 overflow-auto divide-y">
+                <div className="grid max-h-64 grid-cols-1 gap-x-4 gap-y-0.5 overflow-auto p-1.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                   {visibleClients.map((c) => (
-                    <label key={c.code} className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted">
+                    <label key={c.code} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted">
                       <input
                         type="checkbox"
                         checked={selected.includes(c.code)}
@@ -248,7 +248,7 @@ export default function SeasonComparisonPage() {
                     </label>
                   ))}
                   {visibleClients.length === 0 && (
-                    <div className="px-3 py-4 text-xs text-muted-foreground">Aucune boutique ne correspond.</div>
+                    <div className="col-span-full px-3 py-4 text-xs text-muted-foreground">Aucune boutique ne correspond.</div>
                   )}
                 </div>
               </div>
