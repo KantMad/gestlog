@@ -48,9 +48,10 @@ export default function ClientComparisonPage() {
   const [data, setData] = useState<CompData | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // filtre enseigne (multi-sélection + recherche)
+  // filtre enseigne (mode + multi-sélection à cocher + recherche)
   const [selected, setSelected] = useState<string[]>([]);
   const [search, setSearch] = useState("");
+  const [filterMode, setFilterMode] = useState<"exclude" | "include">("include");
 
   useEffect(() => {
     if (seasons.length && !season1 && !season2) {
@@ -82,18 +83,32 @@ export default function ClientComparisonPage() {
   const seasonNames = [...new Set(seasons.map((s) => s.name))];
   const allClients = data?.clients || [];
 
-  // suggestions de recherche (clients non encore sélectionnés)
-  const suggestions = useMemo(() => {
+  // boutiques visibles dans la liste à cocher (filtrées par la recherche)
+  const visibleClients = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return [];
-    return allClients
-      .filter((c) => !selected.includes(c.code))
-      .filter((c) => c.name.toLowerCase().includes(q) || c.code.toLowerCase().includes(q))
-      .slice(0, 8);
-  }, [search, allClients, selected]);
+    const list = q
+      ? allClients.filter(
+          (c) => c.name.toLowerCase().includes(q) || c.code.toLowerCase().includes(q)
+        )
+      : allClients;
+    return list.slice(0, 500);
+  }, [search, allClients]);
 
-  // périmètre : sélection si filtre actif, sinon toutes les boutiques
-  const filtered = selected.length ? allClients.filter((c) => selected.includes(c.code)) : allClients;
+  const toggleClient = (code: string) =>
+    setSelected((p) => (p.includes(code) ? p.filter((x) => x !== code) : [...p, code]));
+  const checkAllVisible = () =>
+    setSelected((p) => [...new Set([...p, ...visibleClients.map((c) => c.code)])]);
+  const uncheckAllVisible = () => {
+    const vis = new Set(visibleClients.map((c) => c.code));
+    setSelected((p) => p.filter((c) => !vis.has(c)));
+  };
+
+  // périmètre : selon le mode (aucune sélection → toutes les boutiques)
+  const filtered = !selected.length
+    ? allClients
+    : filterMode === "include"
+      ? allClients.filter((c) => selected.includes(c.code))
+      : allClients.filter((c) => !selected.includes(c.code));
 
   // résumé (scopé au filtre)
   const summary = useMemo(() => {
@@ -107,7 +122,6 @@ export default function ClientComparisonPage() {
   }, [filtered]);
 
   const nameByCode = (code: string) => allClients.find((c) => c.code === code)?.name || code;
-  const addClient = (code: string) => { setSelected((p) => [...p, code]); setSearch(""); };
 
   return (
     <div>
@@ -137,35 +151,64 @@ export default function ClientComparisonPage() {
                   <SelectContent>{seasonNames.map((n) => <SelectItem key={n} value={n}>{n}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
-              <div className="space-y-1 relative">
-                <label className="block text-xs font-medium text-muted-foreground">Filtrer par enseigne</label>
+              <div className="space-y-1">
+                <label className="block text-xs font-medium text-muted-foreground">Filtre boutique</label>
+                <Select value={filterMode} onValueChange={(v) => v && setFilterMode(v as "exclude" | "include")}>
+                  <SelectTrigger className="w-56 h-9"><span className="text-sm">{filterMode === "exclude" ? "Toutes les boutiques sauf…" : "Aucune boutique sauf…"}</span></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="include">Aucune boutique sauf…</SelectItem>
+                    <SelectItem value="exclude">Toutes les boutiques sauf…</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <label className="block text-xs font-medium text-muted-foreground">Rechercher une boutique</label>
                 <div className="relative">
                   <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
-                    placeholder="Rechercher une boutique…"
+                    placeholder="Filtrer la liste…"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     className="pl-9 w-72 h-9"
                   />
                 </div>
-                {suggestions.length > 0 && (
-                  <div className="absolute z-20 mt-1 w-72 max-h-64 overflow-auto rounded-md border bg-popover shadow-md">
-                    {suggestions.map((c) => (
-                      <button
-                        key={c.code}
-                        onClick={() => addClient(c.code)}
-                        className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-muted"
-                      >
-                        <span className="truncate">{c.name}</span>
-                        <span className="font-mono text-[10px] text-muted-foreground shrink-0">{c.code}</span>
-                      </button>
-                    ))}
-                  </div>
+              </div>
+              <span className="text-xs text-muted-foreground mb-2.5">
+                {selected.length === 0
+                  ? "Aucune cochée — toutes les boutiques."
+                  : `${selected.length} boutique(s) ${filterMode === "exclude" ? "exclue(s)" : "incluse(s)"}.`}
+              </span>
+            </div>
+
+            {/* Liste de cases à cocher (cochez plusieurs boutiques) */}
+            <div className="rounded-md border max-w-2xl">
+              <div className="flex items-center justify-between gap-2 border-b bg-muted/30 px-3 py-2 text-xs">
+                <span className="text-muted-foreground">{visibleClients.length} boutique(s){search ? " trouvée(s)" : ""}</span>
+                <div className="flex items-center gap-3">
+                  <button onClick={checkAllVisible} className="underline hover:text-foreground">Tout cocher{search ? " (résultats)" : ""}</button>
+                  <button onClick={uncheckAllVisible} className="underline hover:text-foreground">Tout décocher{search ? " (résultats)" : ""}</button>
+                </div>
+              </div>
+              <div className="max-h-56 overflow-auto divide-y">
+                {visibleClients.map((c) => (
+                  <label key={c.code} className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted">
+                    <input
+                      type="checkbox"
+                      checked={selected.includes(c.code)}
+                      onChange={() => toggleClient(c.code)}
+                      className="h-4 w-4 accent-primary shrink-0"
+                    />
+                    <span className="flex-1 truncate">{c.name}</span>
+                    <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{c.code}</span>
+                  </label>
+                ))}
+                {visibleClients.length === 0 && (
+                  <div className="px-3 py-4 text-xs text-muted-foreground">Aucune boutique ne correspond.</div>
                 )}
               </div>
             </div>
 
-            {/* chips sélectionnées */}
+            {/* chips des boutiques cochées */}
             {selected.length > 0 && (
               <div className="flex flex-wrap items-center gap-2">
                 {selected.map((code) => (
