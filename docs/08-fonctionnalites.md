@@ -68,10 +68,12 @@ mauvaise saison (cf. incident PE27/AH26 du 24/06/2026).
   (`statistics/charts`, `statistics/season`, `comparison/engine`, `allocation/simulate`)
   filtrent par `seasonId` (ou via l'`include` de la commande) — **vérifié, pas de fuite
   inter-saison**.
-- **Garde-fou import** : importer une commande fournisseur dont le n° existe déjà dans une
-  AUTRE saison est **refusé** (message « déjà présente en saison X »). Évite les doublons
-  inter-saison comme IMDER 100739 (qui s'était retrouvée en AH26 ET PE27 avant le sélecteur
-  de saison — nettoyée le 30/06/2026, backup `pe27-supplier-misplaced-*.json`).
+- **Garde-fou import** : importer une commande (fournisseur **ou client**) dont le n° existe
+  déjà dans une AUTRE saison est **refusé** (message « déjà présente en saison X »). Présent
+  dans les 4 mappers d'import (`mcs-mapper` × 2, `supplier-order-mapper`, `client-order-mapper`).
+  Évite les doublons inter-saison comme IMDER 100739 (AH26 + PE27) ou StatGen 4 (PE27/AH26) —
+  nettoyés le 30/06/2026, backups `pe27-*-misplaced-*.json`. Même principe pour les commandes
+  **clients**.
 
 ### Formats d'import MCS (auto-détectés)
 
