@@ -11,9 +11,17 @@ export async function GET(request: NextRequest) {
     const p = request.nextUrl.searchParams;
     const season1 = p.get("season1");
     const season2 = p.get("season2");
+    const dimension = p.get("dimension") === "catalog" ? "catalog" : "season";
     if (!season1 || !season2) {
       return NextResponse.json({ error: "season1 et season2 requis" }, { status: 400 });
     }
+
+    // Dimension : comparer deux SAISONS (co.seasonId) ou deux CATALOGUES (co.catalogId).
+    // Alias `se` conservé → les clauses `se.name` restent valables dans les deux cas.
+    const dimJoin =
+      dimension === "catalog"
+        ? `JOIN "Catalog" se ON se.id = co."catalogId"`
+        : `JOIN "Season" se ON se.id = co."seasonId"`;
 
     const rows = await prisma.$queryRawUnsafe<
       { code: string; name: string; qty1: bigint; ca1: number; qty2: bigint; ca2: number }[]
@@ -25,7 +33,7 @@ export async function GET(request: NextRequest) {
               COALESCE(SUM(col.amount)          FILTER (WHERE se.name = $2), 0)::float8 AS ca2
        FROM "ClientOrder" co
        JOIN "Client" cl ON cl.id = co."clientId"
-       JOIN "Season" se ON se.id = co."seasonId"
+       ${dimJoin}
        JOIN "ClientOrderLine" col ON col."clientOrderId" = co.id
        WHERE se.name IN ($1, $2)
        GROUP BY cl.id, cl.code, cl.name`,
@@ -46,7 +54,7 @@ export async function GET(request: NextRequest) {
               COALESCE(SUM(col.amount)          FILTER (WHERE se.name = $2), 0)::float8 AS ca2
        FROM "ClientOrder" co
        JOIN "Client" cl ON cl.id = co."clientId"
-       JOIN "Season" se ON se.id = co."seasonId"
+       ${dimJoin}
        JOIN "ClientOrderLine" col ON col."clientOrderId" = co.id
        JOIN "Product" p ON p.id = col."productId"
        WHERE se.name IN ($1, $2) AND p.category IS DISTINCT FROM 'PLV'

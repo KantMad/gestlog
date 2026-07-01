@@ -43,14 +43,21 @@ interface CompData {
   season2: string;
   clients: ClientRow[];
 }
+interface Catalog {
+  name: string;
+  seasonName: string | null;
+}
 
 const pctCls = (p: number) => (p >= 100 ? "text-emerald-600" : "text-rose-600");
 const fmtPct = (p: number) => `${p.toFixed(0)}%`;
 
 export default function ClientComparisonPage() {
   const { seasons } = useSeason();
+  // Dimension : comparer deux SAISONS ou deux CATALOGUES de vente (comme comparaison saison).
+  const [dimension, setDimension] = useState<"season" | "catalog">("season");
   const [season1, setSeason1] = useState("");
   const [season2, setSeason2] = useState("");
+  const [catalogs, setCatalogs] = useState<Catalog[]>([]);
   const [data, setData] = useState<CompData | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -60,17 +67,30 @@ export default function ClientComparisonPage() {
   const [filterMode, setFilterMode] = useState<"exclude" | "include">("include");
 
   useEffect(() => {
-    if (seasons.length && !season1 && !season2) {
-      setSeason2(seasons[0]?.name || "");
-      setSeason1(seasons[1]?.name || seasons[0]?.name || "");
-    }
-  }, [seasons, season1, season2]);
+    fetch("/api/catalogs").then((r) => r.json()).then((d) => setCatalogs(d.data || [])).catch(() => {});
+  }, []);
+
+  const seasonNames = useMemo(() => [...new Set(seasons.map((s) => s.name))], [seasons]);
+  const catalogNames = useMemo(() => catalogs.map((c) => c.name), [catalogs]);
+  const options = dimension === "season" ? seasonNames : catalogNames;
+  const labelOf = (name: string) => {
+    if (dimension !== "catalog") return name;
+    const sn = catalogs.find((c) => c.name === name)?.seasonName;
+    return sn ? `${name} · ${sn}` : name;
+  };
+
+  // (ré)initialise les deux items quand la dimension ou les listes changent
+  useEffect(() => {
+    if (!options.length) return;
+    if (!options.includes(season2)) setSeason2(options[0] || "");
+    if (!options.includes(season1)) setSeason1(options[1] || options[0] || "");
+  }, [dimension, options]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const load = useCallback(async () => {
     if (!season1 || !season2) return;
     setLoading(true);
     try {
-      const p = new URLSearchParams({ season1, season2 });
+      const p = new URLSearchParams({ dimension, season1, season2 });
       const res = await fetch(`/api/statistics/client-comparison?${p}`);
       if (!res.ok) throw new Error();
       setData(await res.json());
@@ -80,13 +100,12 @@ export default function ClientComparisonPage() {
     } finally {
       setLoading(false);
     }
-  }, [season1, season2]);
+  }, [dimension, season1, season2]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  const seasonNames = [...new Set(seasons.map((s) => s.name))];
   const allClients = data?.clients || [];
 
   // boutiques visibles dans la liste à cocher (filtrées par la recherche)
@@ -168,18 +187,28 @@ export default function ClientComparisonPage() {
           <CardContent className="pt-6 space-y-4">
             <div className="flex flex-wrap items-end gap-3">
               <div className="space-y-1">
-                <label className="block text-xs font-medium text-muted-foreground">Saison 1</label>
+                <label className="block text-xs font-medium text-muted-foreground">Comparaison</label>
+                <Select value={dimension} onValueChange={(v) => v && setDimension(v as "season" | "catalog")}>
+                  <SelectTrigger className="w-36 h-9"><span className="text-sm">{dimension === "season" ? "Saisons" : "Catalogues"}</span></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="season">Saisons</SelectItem>
+                    <SelectItem value="catalog">Catalogues de vente</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <label className="block text-xs font-medium text-muted-foreground">{dimension === "season" ? "Saison" : "Catalogue"} 1</label>
                 <Select value={season1} onValueChange={(v) => v && setSeason1(v)}>
-                  <SelectTrigger className="w-40 h-9"><span className="text-sm truncate">{season1 || "—"}</span></SelectTrigger>
-                  <SelectContent>{seasonNames.map((n) => <SelectItem key={n} value={n}>{n}</SelectItem>)}</SelectContent>
+                  <SelectTrigger className="w-48 h-9"><span className="text-sm truncate">{season1 ? labelOf(season1) : "—"}</span></SelectTrigger>
+                  <SelectContent>{options.map((n) => <SelectItem key={n} value={n}>{labelOf(n)}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <ArrowLeftRight className="h-4 w-4 text-muted-foreground mb-2.5" />
               <div className="space-y-1">
-                <label className="block text-xs font-medium text-muted-foreground">Saison 2</label>
+                <label className="block text-xs font-medium text-muted-foreground">{dimension === "season" ? "Saison" : "Catalogue"} 2</label>
                 <Select value={season2} onValueChange={(v) => v && setSeason2(v)}>
-                  <SelectTrigger className="w-40 h-9"><span className="text-sm truncate">{season2 || "—"}</span></SelectTrigger>
-                  <SelectContent>{seasonNames.map((n) => <SelectItem key={n} value={n}>{n}</SelectItem>)}</SelectContent>
+                  <SelectTrigger className="w-48 h-9"><span className="text-sm truncate">{season2 ? labelOf(season2) : "—"}</span></SelectTrigger>
+                  <SelectContent>{options.map((n) => <SelectItem key={n} value={n}>{labelOf(n)}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div className="space-y-1">
