@@ -323,11 +323,15 @@ function ClientGroup({
                       </TableCell>
                       <TableCell
                         className={cn(
-                          "text-right text-sm",
-                          diff > 0 ? "text-red-600 font-medium" : ""
+                          "text-right text-sm tabular-nums",
+                          diff > 0 ? "text-red-600 font-medium" : diff < 0 ? "text-emerald-600 font-medium" : ""
                         )}
                       >
-                        {diff > 0 ? `-${diff}` : "—"}
+                        {diff === 0
+                          ? "—"
+                          : diff > 0
+                            ? `-${diff} (-${origTotal > 0 ? Math.round((diff / origTotal) * 100) : 0}%)`
+                            : `+${-diff} (+${origTotal > 0 ? Math.round((-diff / origTotal) * 100) : 0}%)`}
                       </TableCell>
                       <TableCell>
                         <Badge
@@ -390,8 +394,10 @@ function ProductGroup({
   const totalOriginal = lines.reduce((s, l) => s + sumQuantities(l.original), 0);
   const totalAllocated = lines.reduce((s, l) => s + sumQuantities(l.allocated), 0);
   // Total reçu (réception fournisseur) pour ce produit et écart avec la demande client.
+  // Écart = Reçu − Commande (négatif = manque de réception, positif = surplus livré),
+  // même convention de signe que la colonne Écart des lignes boutique.
   const totalReceived = received ? sumQuantities(received) : 0;
-  const demandGap = totalOriginal - totalReceived; // > 0 = commandé plus que reçu (manque)
+  const demandGap = totalReceived - totalOriginal;
   const hasReduction = totalOriginal > totalAllocated;
   const reductionPct = totalOriginal > 0
     ? Math.round(((totalOriginal - totalAllocated) / totalOriginal) * 100)
@@ -429,7 +435,7 @@ function ProductGroup({
             <span
               className={cn(
                 "block font-medium",
-                demandGap > 0 ? "text-red-600" : "text-foreground"
+                demandGap < 0 ? "text-red-600" : "text-foreground"
               )}
               title="Total reçu (réceptions fournisseur) pour ce produit"
             >
@@ -441,12 +447,11 @@ function ProductGroup({
             <span
               className={cn(
                 "block font-medium tabular-nums",
-                demandGap > 0 ? "text-red-600" : demandGap < 0 ? "text-emerald-600" : "text-muted-foreground"
+                demandGap < 0 ? "text-red-600" : demandGap > 0 ? "text-emerald-600" : "text-muted-foreground"
               )}
-              title="Commandes clients − réceptions fournisseur (positif = réception insuffisante)"
+              title="Reçu fournisseur − commandes clients (négatif = réception insuffisante, positif = surplus)"
             >
-              {demandGap > 0 ? "+" : ""}
-              {formatNumber(demandGap)}
+              {demandGap === 0 ? "—" : demandGap > 0 ? `+${formatNumber(demandGap)}` : formatNumber(demandGap)}
             </span>
           </div>
           <div className="text-right">
@@ -533,11 +538,15 @@ function ProductGroup({
                       </TableCell>
                       <TableCell
                         className={cn(
-                          "text-right text-sm",
-                          diff > 0 ? "text-red-600 font-medium" : ""
+                          "text-right text-sm tabular-nums",
+                          diff > 0 ? "text-red-600 font-medium" : diff < 0 ? "text-emerald-600 font-medium" : ""
                         )}
                       >
-                        {diff > 0 ? `-${diff}` : "—"}
+                        {diff === 0
+                          ? "—"
+                          : diff > 0
+                            ? `-${diff} (-${origTotal > 0 ? Math.round((diff / origTotal) * 100) : 0}%)`
+                            : `+${-diff} (+${origTotal > 0 ? Math.round((-diff / origTotal) * 100) : 0}%)`}
                       </TableCell>
                       <TableCell>
                         <Badge
