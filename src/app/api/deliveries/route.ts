@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { handleApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { parseSizeQuantities, sumQuantities } from "@/lib/utils";
+import { resolveOrderSource } from "@/lib/order-source";
 
 export async function GET(request: NextRequest) {
   const seasonId = request.nextUrl.searchParams.get("seasonId");
@@ -18,10 +19,13 @@ export async function GET(request: NextRequest) {
       allocationSession: { seasonId },
     };
     if (catalogId) {
+      // Source B2B active pour la saison (Texas prioritaire, repli TIO) — on ne lit
+      // qu'UNE source par saison pour éviter le double comptage TIO+TEXAS.
+      const src = await resolveOrderSource(seasonId);
       where.clientOrderId = {
         in: (
           await prisma.clientOrder.findMany({
-            where: { seasonId, catalogId },
+            where: { seasonId, catalogId, source: src },
             select: { id: true },
           })
         ).map((o) => o.id),

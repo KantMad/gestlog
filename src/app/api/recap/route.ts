@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { handleApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { parseSizeQuantities, sumQuantities } from "@/lib/utils";
+import { resolveOrderSource } from "@/lib/order-source";
 
 // GET — client recap for a season: ordered vs delivered vs remaining
 export async function GET(request: NextRequest) {
@@ -12,6 +13,10 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    // Source B2B active pour la saison (Texas prioritaire, repli TIO) — on ne lit
+    // qu'UNE source par saison pour éviter le double comptage TIO+TEXAS.
+    const src = await resolveOrderSource(seasonId);
+
     // Get all clients with their season config
     const clientSeasons = await prisma.clientSeason.findMany({
       where: { seasonId },
@@ -21,7 +26,7 @@ export async function GET(request: NextRequest) {
 
     // Get all client orders for this season
     const orders = await prisma.clientOrder.findMany({
-      where: { seasonId },
+      where: { seasonId, source: src },
       include: {
         lines: { include: { product: true } },
         catalog: { select: { id: true, name: true } },

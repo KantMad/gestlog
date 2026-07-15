@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { resolveOrderSource } from "@/lib/order-source";
 
 export async function GET(request: NextRequest) {
   const seasonId = request.nextUrl.searchParams.get("seasonId");
   if (!seasonId) {
     return NextResponse.json({ error: "seasonId requis" }, { status: 400 });
   }
+
+  // Source B2B active pour la saison (Texas prioritaire, repli TIO) — on ne lit
+  // qu'UNE source par saison pour éviter le double comptage TIO+TEXAS.
+  const src = await resolveOrderSource(seasonId);
 
   const [
     clientOrderCount,
@@ -14,7 +19,7 @@ export async function GET(request: NextRequest) {
     allocationCount,
     deliveryCount,
   ] = await Promise.all([
-    prisma.clientOrder.count({ where: { seasonId } }),
+    prisma.clientOrder.count({ where: { seasonId, source: src } }),
     prisma.supplierOrder.count({ where: { seasonId } }),
     prisma.clientSeason.count({ where: { seasonId, isActive: true } }),
     prisma.allocationSession.count({
@@ -57,8 +62,9 @@ export async function GET(request: NextRequest) {
      FROM "ClientOrder" co
      JOIN "WarehouseDocument" d ON d."tioOrderNumber" = co."orderNumber" AND d."docType" = 'BL'
      JOIN "WarehouseDocumentLine" l ON l."documentId" = d.id
-     WHERE co."seasonId" = $1`,
-    seasonId
+     WHERE co."seasonId" = $1 AND co."source" = $2`,
+    seasonId,
+    src
   );
   const deliveredPieces = Number(blAgg[0]?.delivered || 0);
   const effectivePieces = Math.max(0, totalPieces - cancelledPieces);
@@ -73,8 +79,9 @@ export async function GET(request: NextRequest) {
      FROM "ClientOrder" co
      JOIN "WarehouseDocument" d ON d."tioOrderNumber" = co."orderNumber" AND d."docType" = 'FAC'
      JOIN "WarehouseDocumentLine" l ON l."documentId" = d.id
-     WHERE co."seasonId" = $1`,
-    seasonId
+     WHERE co."seasonId" = $1 AND co."source" = $2`,
+    seasonId,
+    src
   );
   const invoicedPieces = Number(facAgg[0]?.invoiced || 0);
   const invoicedAmount = Number(facAgg[0]?.amount || 0);

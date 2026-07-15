@@ -135,6 +135,7 @@ export async function importClientOrders(
           deliveryWindow,
           catalogId: catalogId || undefined,
           importLogId,
+          source: "TIO",
         },
       });
 

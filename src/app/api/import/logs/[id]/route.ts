@@ -50,7 +50,8 @@ export async function DELETE(
         detail = `${deleted} commande(s) fournisseur supprimée(s)`;
         break;
       }
-      case "CLIENT_ORDER": {
+      case "CLIENT_ORDER":
+      case "CLIENT_ORDER_TEXAS": {
         const res = await prisma.clientOrder.deleteMany({ where: { importLogId: id } });
         deleted = res.count;
         detail = `${deleted} commande(s) client supprimée(s)`;

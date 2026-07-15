@@ -1,6 +1,11 @@
 import { prisma } from "@/lib/prisma";
 import { stringifySizeQuantities, sumQuantities } from "@/lib/utils";
-import { parseMcsStatgen, parseMcsPackingList, parseMcsClientOrders } from "./mcs-format";
+import {
+  parseMcsStatgen,
+  parseMcsPackingList,
+  parseMcsClientOrders,
+  parseTexasClientOrders,
+} from "./mcs-format";
 
 export interface ImportResult {
   imported: number;
@@ -361,8 +366,8 @@ export async function importMcsClientOrders(
     }
     const clientOrder = await prisma.clientOrder.upsert({
       where: { orderNumber_seasonId: { orderNumber, seasonId } },
-      update: { importLogId },
-      create: { orderNumber, seasonId, clientId, importLogId },
+      update: { importLogId, source: "TIO" },
+      create: { orderNumber, seasonId, clientId, importLogId, source: "TIO" },
     });
 
     // Agrège par produit (Q.N → tailles via la grille du produit ; somme si répété).
@@ -422,6 +427,158 @@ export async function importMcsClientOrders(
   const miss = [...missing.entries()].sort((a, b) => b[1] - a[1]);
   for (const [k, c] of miss.slice(0, 50)) errors.push(`Produit introuvable : ${k} (${c} ligne${c > 1 ? "s" : ""})`);
   if (miss.length > 50) errors.push(`… et ${miss.length - 50} autres produits introuvables`);
+
+  return { imported, errors };
+}
+
+// ----------------------------------------------- Commande client TEXAS (ERP)
+// Source de VÉRITÉ (source=TEXAS). Client via code (pas de nom → on n'écrase pas le nom
+// existant). Quantités décodées par gamme (line.sizes). Montant net réparti au prorata
+// des quantités pour alimenter le CA. Idempotent par commande, annulations préservées.
+export async function importTexasClientOrders(
+  buffer: ArrayBuffer,
+  seasonId: string,
+  importLogId?: string
+): Promise<ImportResult> {
+  const lines = parseTexasClientOrders(buffer);
+  const errors: string[] = [];
+  let imported = 0;
+  if (lines.length === 0) {
+    return { imported, errors: ["Aucune ligne détectée (format commande client Texas)."] };
+  }
+
+  // Préchargement produits (réf|couleur).
+  const refs = [...new Set(lines.map((l) => l.reference))];
+  const products = await prisma.product.findMany({
+    where: { reference: { in: refs } },
+    select: { id: true, reference: true, color: true },
+  });
+  const pmap = new Map<string, string>();
+  for (const p of products) pmap.set(`${p.reference}__${p.color}`, p.id);
+  const lookup = (ref: string, code: string): string | null => {
+    const cands = [code];
+    if (/^\d+$/.test(code)) cands.push(code.padStart(3, "0"), String(parseInt(code, 10)));
+    for (const c of cands) {
+      const id = pmap.get(`${ref}__${c}`);
+      if (id) return id;
+    }
+    return null;
+  };
+
+  // Clients distincts (upsert par code SANS écraser le nom existant) + ClientSeason.
+  const clientIdByCode = new Map<string, string>();
+  for (const code of new Set(lines.map((l) => l.clientCode).filter(Boolean))) {
+    const client = await prisma.client.upsert({
+      where: { code },
+      update: {},
+      create: { code, name: code },
+    });
+    clientIdByCode.set(code, client.id);
+    await prisma.clientSeason.upsert({
+      where: { clientId_seasonId: { clientId: client.id, seasonId } },
+      update: {},
+      create: { clientId: client.id, seasonId },
+    });
+  }
+
+  // Groupe par commande.
+  const byOrder = new Map<string, typeof lines>();
+  for (const l of lines) {
+    if (!byOrder.has(l.orderNumber)) byOrder.set(l.orderNumber, []);
+    byOrder.get(l.orderNumber)!.push(l);
+  }
+
+  // Cloisonnement saison (source TEXAS) : une commande = une saison.
+  const conflicts = await prisma.clientOrder.findMany({
+    where: { orderNumber: { in: [...byOrder.keys()] }, seasonId: { not: seasonId }, source: "TEXAS" },
+    select: { orderNumber: true, season: { select: { name: true } } },
+  });
+  const conflictMap = new Map(conflicts.map((c) => [c.orderNumber, c.season.name]));
+
+  const missing = new Map<string, number>();
+
+  for (const [orderNumber, rows] of byOrder) {
+    if (conflictMap.has(orderNumber)) {
+      errors.push(
+        `Commande ${orderNumber} déjà présente en saison « ${conflictMap.get(orderNumber)} » — une commande ne peut être que sur une saison (import ignoré).`
+      );
+      continue;
+    }
+    const clientCode = rows[0].clientCode || "INCONNU";
+    let clientId = clientIdByCode.get(clientCode);
+    if (!clientId) {
+      const c = await prisma.client.upsert({ where: { code: clientCode }, update: {}, create: { code: clientCode, name: clientCode } });
+      clientId = c.id;
+      clientIdByCode.set(clientCode, clientId);
+    }
+    const orderAmount = rows[0].amount || 0;
+    const sold = rows.some((r) => r.sold);
+    const clientOrder = await prisma.clientOrder.upsert({
+      where: { orderNumber_seasonId: { orderNumber, seasonId } },
+      update: { clientId, source: "TEXAS", status: sold ? "SOLDEE" : "EN_COURS", totalAmount: orderAmount, importLogId },
+      create: {
+        orderNumber,
+        seasonId,
+        clientId,
+        source: "TEXAS",
+        status: sold ? "SOLDEE" : "EN_COURS",
+        totalAmount: orderAmount,
+        importLogId,
+      },
+    });
+
+    // Agrège les quantités par produit (via line.sizes décodées par gamme).
+    const byProduct = new Map<string, Record<string, number>>();
+    for (const row of rows) {
+      const productId = lookup(row.reference, row.colorCode);
+      if (!productId) {
+        const k = `${row.reference} / ${row.colorCode}${row.colorName ? ` (${row.colorName})` : ""}`;
+        missing.set(k, (missing.get(k) || 0) + 1);
+        continue;
+      }
+      const acc = byProduct.get(productId) || {};
+      for (const [size, q] of Object.entries(row.sizes || {})) if (q > 0) acc[size] = (acc[size] || 0) + q;
+      byProduct.set(productId, acc);
+    }
+
+    // Répartition du montant net au prorata des quantités.
+    const entries = [...byProduct.entries()].filter(([, q]) => Object.keys(q).length > 0);
+    const totalQty = entries.reduce((s, [, q]) => s + sumQuantities(q), 0);
+
+    // Préserve annulations (soldes) déjà saisies au ré-import.
+    const existing = await prisma.clientOrderLine.findMany({
+      where: { clientOrderId: clientOrder.id },
+      select: { productId: true, cancelledBySize: true, cancelledTotal: true, cancelledAt: true, cancelledBy: true },
+    });
+    const cancMap = new Map(existing.map((e) => [e.productId, e]));
+
+    const data = entries.map(([productId, q]) => {
+      const c = cancMap.get(productId);
+      const lineQty = sumQuantities(q);
+      const amount = totalQty > 0 ? Math.round(((orderAmount * lineQty) / totalQty) * 100) / 100 : 0;
+      return {
+        clientOrderId: clientOrder.id,
+        productId,
+        quantitiesBySize: stringifySizeQuantities(q),
+        totalQuantity: lineQty,
+        amount,
+        cancelledBySize: c?.cancelledBySize ?? "{}",
+        cancelledTotal: c?.cancelledTotal ?? 0,
+        cancelledAt: c?.cancelledAt ?? null,
+        cancelledBy: c?.cancelledBy ?? null,
+      };
+    });
+
+    await prisma.$transaction([
+      prisma.clientOrderLine.deleteMany({ where: { clientOrderId: clientOrder.id } }),
+      ...(data.length ? [prisma.clientOrderLine.createMany({ data })] : []),
+    ]);
+    imported += data.length;
+  }
+
+  const miss2 = [...missing.entries()].sort((a, b) => b[1] - a[1]);
+  for (const [k, c] of miss2.slice(0, 50)) errors.push(`Produit introuvable : ${k} (${c} ligne${c > 1 ? "s" : ""})`);
+  if (miss2.length > 50) errors.push(`… et ${miss2.length - 50} autres produits introuvables`);
 
   return { imported, errors };
 }

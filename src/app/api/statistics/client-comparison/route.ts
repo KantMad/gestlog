@@ -23,6 +23,13 @@ export async function GET(request: NextRequest) {
         ? `JOIN "Catalog" se ON se.id = co."catalogId"`
         : `JOIN "Season" se ON se.id = co."seasonId"`;
 
+    // NOTE source B2B : on ne lit qu'UNE source par saison (Texas prioritaire, repli
+    // TIO) pour éviter le double comptage TIO+TEXAS. La dimension peut être « catalog »
+    // (se.name = nom de catalogue, pas de saison) → on ne peut pas mapper par nom de
+    // saison ; on filtre donc chaque commande par la source active de SA saison via un
+    // sous-select corrélé (même logique que resolveOrderSource). Aucun paramètre requis.
+    const srcFilter = `AND co."source" = (CASE WHEN EXISTS (SELECT 1 FROM "ClientOrder" c2 WHERE c2."seasonId" = co."seasonId" AND c2."source" = 'TEXAS') THEN 'TEXAS' ELSE 'TIO' END)`;
+
     const rows = await prisma.$queryRawUnsafe<
       { code: string; name: string; qty1: bigint; ca1: number; qty2: bigint; ca2: number }[]
     >(
@@ -35,7 +42,7 @@ export async function GET(request: NextRequest) {
        JOIN "Client" cl ON cl.id = co."clientId"
        ${dimJoin}
        JOIN "ClientOrderLine" col ON col."clientOrderId" = co.id
-       WHERE se.name IN ($1, $2)
+       WHERE se.name IN ($1, $2) ${srcFilter}
        GROUP BY cl.id, cl.code, cl.name`,
       season1,
       season2
@@ -57,7 +64,7 @@ export async function GET(request: NextRequest) {
        ${dimJoin}
        JOIN "ClientOrderLine" col ON col."clientOrderId" = co.id
        JOIN "Product" p ON p.id = col."productId"
-       WHERE se.name IN ($1, $2) AND p.category IS DISTINCT FROM 'PLV'
+       WHERE se.name IN ($1, $2) AND p.category IS DISTINCT FROM 'PLV' ${srcFilter}
        GROUP BY cl.code, COALESCE(NULLIF(p.category,''),'Sans catégorie')`,
       season1,
       season2

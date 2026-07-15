@@ -29,6 +29,7 @@ export async function GET(request: NextRequest) {
       RECEPTION: mapOf(recs),
       SUPPLIER_ORDER: mapOf(sos),
       CLIENT_ORDER: mapOf(cos),
+      CLIENT_ORDER_TEXAS: mapOf(cos),
       STOCK: mapOf(stks),
     };
 
@@ -40,7 +41,7 @@ export async function GET(request: NextRequest) {
       errorCount: l.errorCount,
       importedAt: l.importedAt,
       liveCount: byType[l.importType]?.get(l.id) ?? 0,
-      deletable: ["RECEPTION", "SUPPLIER_ORDER", "CLIENT_ORDER", "STOCK"].includes(l.importType),
+      deletable: ["RECEPTION", "SUPPLIER_ORDER", "CLIENT_ORDER", "CLIENT_ORDER_TEXAS", "STOCK"].includes(l.importType),
     }));
 
     return NextResponse.json({ data });

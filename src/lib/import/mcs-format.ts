@@ -262,6 +262,124 @@ export function parseMcsClientOrders(buffer: ArrayBuffer): McsClientLine[] {
   return [];
 }
 
+// ---------------------------------------------------------------- Texas (ERP) commande client
+// Variant StatGen « commande client » exporté par l'ERP Texas : colonne « Saison »,
+// client via « Code client(Commande client) » (pas de nom), décodage Q.N ABSOLU par
+// gamme (comme les commandes fournisseur). C'est la source de VÉRITÉ pour la répartition.
+export interface TexasClientLine {
+  orderNumber: string;
+  clientCode: string;
+  season: string; // code saison du fichier (W26…)
+  reference: string;
+  colorCode: string;
+  colorName: string;
+  amount: number; // montant NET commandé de la commande (répété sur chaque ligne)
+  sold: boolean; // commande soldée ?
+  quantities: number[];
+  sizes?: Record<string, number>;
+  sizeScale?: string;
+}
+
+// En-tête Texas : réf produit + n° commande client + code client (Commande client).
+const isTexasClientHeader = (cells: string[]): boolean =>
+  cells.includes("FICHE PRODUIT FINI") &&
+  cells.some((c) => c.includes("N° COMMANDE CLIENT") || c === "N° COMMANDE CLIENT") &&
+  cells.some((c) => c.includes("CODE CLIENT") && c.includes("COMMANDE"));
+
+export function parseTexasClientOrders(buffer: ArrayBuffer): TexasClientLine[] {
+  for (const { grid } of eachSheet(buffer)) {
+    let h = -1;
+    for (let r = 0; r < Math.min(grid.length, 10); r++) {
+      if (isTexasClientHeader((grid[r] || []).map(up))) {
+        h = r;
+        break;
+      }
+    }
+    if (h === -1) continue;
+
+    const header = (grid[h] || []).map(up);
+    const cRef = header.indexOf("FICHE PRODUIT FINI");
+    const cColor = header.findIndex((hh) => hh.includes("COLORIS"));
+    let cOrder = header.indexOf("N° COMMANDE CLIENT");
+    if (cOrder < 0) cOrder = header.findIndex((hh) => hh.startsWith("N° COMMANDE") && !hh.includes("RÉFÉRENCE"));
+    const cClient = header.findIndex((hh) => hh.includes("CODE CLIENT") && hh.includes("COMMANDE"));
+    const cSeason = header.indexOf("SAISON");
+    const cGamme = header.findIndex((hh) => hh.includes("LANGUE+GAMME"));
+    const cDeb = header.findIndex((hh) => hh.includes("TAILLE DÉBUT") || hh.includes("TAILLE DEBUT"));
+    const cFin = header.findIndex((hh) => hh.includes("TAILLE FIN"));
+    const cAmount = header.findIndex((hh) => hh.includes("MONTANT COMMANDÉ NET TOTAL"));
+    const cSold = header.findIndex((hh) => hh.includes("SOLDÉ") && hh.includes("COMMANDE CLIENT"));
+    const cLegendCode = header.indexOf("TOTAL Q");
+    const qCols: number[] = [];
+    header.forEach((hh, i) => {
+      if (/^Q\.\s*\d+$/.test(hh)) qCols.push(i);
+    });
+
+    // Légende gammes (lignes en tête, réf vide) : code dans « Total Q », tailles dans Q.N.
+    const legend = new Map<string, string[]>();
+    if (cLegendCode >= 0) {
+      for (let r = h + 1; r < grid.length; r++) {
+        if (norm(grid[r]?.[cRef])) break;
+        const codeUp = up(grid[r]?.[cLegendCode]);
+        if (!codeUp) continue;
+        const sizes = qCols.map((ci) => norm(grid[r]?.[ci])).filter(Boolean);
+        if (sizes.length) legend.set(codeUp, sizes);
+      }
+    }
+    const canDecode = legend.size > 0 && cGamme >= 0 && cDeb >= 0 && cFin >= 0;
+
+    const lines: TexasClientLine[] = [];
+    for (let r = h + 1; r < grid.length; r++) {
+      const row = grid[r] || [];
+      const reference = norm(row[cRef]);
+      const orderNumber = cOrder >= 0 ? norm(row[cOrder]) : "";
+      if (!reference || reference.toUpperCase() === "TOTAL" || !orderNumber) continue;
+      const { code, name } = splitColor(row[cColor]);
+      const quantities = qCols.map((ci) => {
+        const v = row[ci];
+        const n = typeof v === "number" ? v : parseInt(String(v || "0"), 10);
+        return isNaN(n) ? 0 : n;
+      });
+
+      let sizes: Record<string, number> | undefined;
+      let sizeScale: string | undefined;
+      if (canDecode) {
+        const gamme = up(row[cGamme]).replace(/^FRA/, "");
+        const full = legend.get(gamme);
+        const deb = parseInt(String(row[cDeb]), 10);
+        const fin = parseInt(String(row[cFin]), 10);
+        if (full && deb >= 1 && fin >= deb && fin <= full.length) {
+          sizeScale = full.slice(deb - 1, fin).join(",");
+          sizes = {};
+          for (let p = deb; p <= fin; p++) {
+            const q = quantities[p - 1] || 0;
+            if (q > 0) sizes[full[p - 1]] = q;
+          }
+        }
+      }
+
+      const amtRaw = cAmount >= 0 ? row[cAmount] : 0;
+      const amount = typeof amtRaw === "number" ? amtRaw : parseFloat(String(amtRaw || "0").replace(",", ".")) || 0;
+
+      lines.push({
+        orderNumber,
+        clientCode: cClient >= 0 ? norm(row[cClient]) : "",
+        season: cSeason >= 0 ? up(row[cSeason]) : "",
+        reference,
+        colorCode: code,
+        colorName: name,
+        amount,
+        sold: cSold >= 0 ? up(row[cSold]) === "O" : false,
+        quantities,
+        ...(sizes ? { sizes } : {}),
+        ...(sizeScale ? { sizeScale } : {}),
+      });
+    }
+    if (lines.length) return lines;
+  }
+  return [];
+}
+
 // ---------------------------------------------------------------- Packing List
 export interface McsReceptionLine {
   reference: string;

@@ -23,6 +23,7 @@ import {
   parseMcsStatgen,
   parseMcsPackingList,
   parseMcsClientOrders,
+  parseTexasClientOrders,
   type McsFormat,
 } from "@/lib/import/mcs-format";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -39,6 +40,7 @@ import {
   ChevronDown,
   Trash2,
   History,
+  Database,
 } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
@@ -72,6 +74,32 @@ const IMPORT_HELP: Record<string, { format: ReactNode; how: ReactNode; links: Re
         <strong>n° de commande</strong> (du fichier). ⚠️ Une commande ne peut exister que sur{" "}
         <strong>une seule saison</strong> : si le n° existe déjà dans une autre saison, l&apos;import
         la refuse.
+      </>
+    ),
+  },
+  "texas-orders": {
+    format: (
+      <>
+        Export <strong>Texas (ERP)</strong> « commande client » : colonne <strong>Saison</strong>,{" "}
+        <strong>Fiche produit fini</strong>, <strong>Coloris produit fini</strong>,{" "}
+        <strong>N° commande client</strong>, <strong>Code client(Commande client)</strong>, Total Q,
+        Q. 1 … Q. 16, et la <strong>légende de gammes</strong> (Clé Langue+Gamme, Taille début/fin).
+        Aucun mapping à faire.
+      </>
+    ),
+    how: (
+      <>
+        Quantités décodées par <strong>gamme</strong> (positions absolues). Client rattaché par{" "}
+        <strong>code</strong> (le nom existant n&apos;est pas écrasé). Montant net réparti au prorata
+        des quantités (pour le CA). Appariement au référentiel (réf + code couleur).
+      </>
+    ),
+    links: (
+      <>
+        Ces commandes sont taguées <strong>source = TEXAS</strong> et deviennent la{" "}
+        <strong>source de vérité</strong> de la saison : tous les écrans B2B (répartition, stats,
+        comparaisons…) basculent dessus. Les commandes <strong>TIO</strong> restent en{" "}
+        <strong>archive</strong>. Rattachées à la <strong>saison choisie en haut</strong>.
       </>
     ),
   },
@@ -201,7 +229,8 @@ interface ParsedData {
 
 // Libellés + entité supprimée par type d'import (pour l'écran « imports récents »).
 const IMPORT_TYPE_LABEL: Record<string, { label: string; unit: string }> = {
-  CLIENT_ORDER: { label: "Commandes clients", unit: "commande(s)" },
+  CLIENT_ORDER: { label: "Commandes clients (TIO)", unit: "commande(s)" },
+  CLIENT_ORDER_TEXAS: { label: "Commandes clients (Texas)", unit: "commande(s)" },
   SUPPLIER_ORDER: { label: "Commandes fournisseurs", unit: "commande(s)" },
   RECEPTION: { label: "Réception", unit: "réception(s)" },
   STOCK: { label: "Stock", unit: "entrée(s)" },
@@ -402,6 +431,14 @@ const IMPORT_TABS = [
     ],
   },
   {
+    id: "texas-orders",
+    label: "Commandes Texas (ERP)",
+    icon: Database,
+    endpoint: "/api/import/texas-orders",
+    patterns: CLIENT_ORDER_PATTERNS,
+    fields: [],
+  },
+  {
     id: "supplier-orders",
     label: "Commandes fournisseurs",
     icon: Factory,
@@ -464,6 +501,9 @@ function ImportTab({
   const [mcsFormat, setMcsFormat] = useState<McsFormat | null>(null);
   const [mcsRowCount, setMcsRowCount] = useState(0);
   const [supplierOrderNumber, setSupplierOrderNumber] = useState("");
+  // Onglet Texas (ERP) : parsing dédié (le fichier Texas ne passe PAS par detectMcsFormat).
+  const isTexas = tab.id === "texas-orders";
+  const [texasCount, setTexasCount] = useState<number | null>(null);
 
   // Format MCS attendu pour cet onglet (les autres onglets restent en mapping générique).
   const expectedMcs: McsFormat | null =
@@ -481,8 +521,16 @@ function ImportTab({
       setResult(null);
       setMcsFormat(null);
       setMcsRowCount(0);
+      setTexasCount(null);
       try {
         const buffer = await selectedFile.arrayBuffer();
+
+        // Onglet Texas : parsing dédié (pas de détection auto qui confondrait le format).
+        if (isTexas) {
+          setTexasCount(parseTexasClientOrders(buffer).length);
+          setParsed({ headers: [], rows: [] });
+          return;
+        }
 
         // Détection prioritaire du format MCS (commande fournisseur / client / réception).
         const fmt = detectMcsFormat(buffer);
@@ -511,13 +559,38 @@ function ImportTab({
         toast.error("Impossible de lire le fichier");
       }
     },
-    [tab.patterns]
+    [tab.patterns, isTexas]
   );
 
   const useMcs = mcsFormat !== null && mcsFormat === expectedMcs;
 
   const handleImport = async () => {
     if (!file || !parsed) return;
+
+    if (isTexas) {
+      // Import Texas : pas de mapping, on poste directement le fichier.
+      setImporting(true);
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("seasonId", seasonId);
+        const res = await fetch(tab.endpoint, { method: "POST", body: formData });
+        const json = await res.json();
+        if (!res.ok) {
+          toast.error(json.error || "Erreur d'import");
+          return;
+        }
+        setResult(json.data);
+        onImported();
+        if (json.data.errors.length === 0) toast.success(`${json.data.imported} lignes importées`);
+        else toast.warning(`${json.data.imported} lignes importées, ${json.data.errors.length} erreurs`);
+      } catch {
+        toast.error("Erreur réseau");
+      } finally {
+        setImporting(false);
+      }
+      return;
+    }
 
     if (useMcs) {
       // N° de commande : facultatif pour la réception (auto-rattachement via les produits),
@@ -576,6 +649,7 @@ function ImportTab({
     setResult(null);
     setMcsFormat(null);
     setMcsRowCount(0);
+    setTexasCount(null);
     setSupplierOrderNumber("");
   };
 
@@ -638,6 +712,24 @@ function ImportTab({
     <div className="space-y-6">
       <ImportHelp tabId={tab.id} />
       <Dropzone onFileSelected={handleFileSelected} />
+
+      {isTexas && parsed && (
+        <>
+          <div className="flex items-start gap-2 rounded-lg border border-violet-200 bg-violet-50 p-4 text-sm text-violet-800">
+            <Database className="h-4 w-4 shrink-0 mt-0.5" />
+            <span>
+              Fichier <strong>commandes clients Texas (ERP)</strong> — <strong>{texasCount ?? 0}</strong>{" "}
+              ligne{(texasCount ?? 0) > 1 ? "s" : ""} prête{(texasCount ?? 0) > 1 ? "s" : ""}. Ces
+              commandes deviennent la <strong>source de vérité</strong> de la saison (les écrans
+              basculent sur Texas).
+            </span>
+          </div>
+          <Button onClick={handleImport} disabled={importing || !texasCount} className="w-full">
+            {importing && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+            {importing ? "Import en cours..." : `Importer ${texasCount ?? 0} lignes dans ${seasonLabel}`}
+          </Button>
+        </>
+      )}
 
       {mcsMismatch && (
         <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
@@ -702,7 +794,7 @@ function ImportTab({
         </>
       )}
 
-      {parsed && !useMcs && !mcsMismatch && (
+      {parsed && !useMcs && !mcsMismatch && !isTexas && (
         <>
           <ImportPreview headers={parsed.headers} rows={parsed.rows} />
           <ColumnMapper

@@ -3,6 +3,7 @@ import { handleApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { allocationSimulateSchema } from "@/lib/validators";
 import { runAllocation } from "@/lib/allocation/engine";
+import { resolveOrderSource } from "@/lib/order-source";
 import {
   parseSizeQuantities,
   parseSizeScale,
@@ -30,8 +31,11 @@ export async function POST(request: NextRequest) {
 
     const { seasonId, catalogId, clientIds, supplierIds, productReferences, orderType } = parsed.data;
 
+    // Source B2B active pour la saison (Texas prioritaire, repli TIO).
+    const orderSource = await resolveOrderSource(seasonId);
+
     // Build filter — restrict by catalog, clients, order type
-    const orderWhere: Record<string, unknown> = { seasonId };
+    const orderWhere: Record<string, unknown> = { seasonId, source: orderSource };
     if (catalogId) {
       orderWhere.catalogId = catalogId;
     }

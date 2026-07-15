@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { handleApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { parseSizeQuantities, sumQuantities } from "@/lib/utils";
+import { resolveOrderSource } from "@/lib/order-source";
 
 export async function GET(request: NextRequest) {
   const seasonId = request.nextUrl.searchParams.get("seasonId");
@@ -11,9 +12,13 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    // Source B2B active pour la saison (Texas prioritaire, repli TIO) — on ne lit
+    // qu'UNE source par saison pour éviter le double comptage TIO+TEXAS.
+    const src = await resolveOrderSource(seasonId);
+
     // ─── Client Orders ───────────────────────────────────────
     const clientOrders = await prisma.clientOrder.findMany({
-      where: { seasonId },
+      where: { seasonId, source: src },
       include: {
         lines: {
           include: { product: true },
@@ -50,8 +55,9 @@ export async function GET(request: NextRequest) {
        JOIN "WarehouseDocument" d ON d."tioOrderNumber" = co."orderNumber" AND d."docType" = 'BL'
        JOIN "WarehouseDocumentLine" l ON l."documentId" = d.id
        WHERE co."seasonId" = $1 ${referenceFilter ? "AND l.reference ILIKE '%' || $2 || '%'" : ""}
+         AND co."source" = $${referenceFilter ? 3 : 2}
        GROUP BY co."clientId"`,
-      ...(referenceFilter ? [seasonId, referenceFilter] : [seasonId])
+      ...(referenceFilter ? [seasonId, referenceFilter, src] : [seasonId, src])
     );
     const clientBlDelivered = new Map<string, number>();
     for (const r of blRows) clientBlDelivered.set(r.clientId, Number(r.delivered));
@@ -64,8 +70,9 @@ export async function GET(request: NextRequest) {
        JOIN "WarehouseDocument" d ON d."tioOrderNumber" = co."orderNumber" AND d."docType" = 'FAC'
        JOIN "WarehouseDocumentLine" l ON l."documentId" = d.id
        WHERE co."seasonId" = $1 ${referenceFilter ? "AND l.reference ILIKE '%' || $2 || '%'" : ""}
+         AND co."source" = $${referenceFilter ? 3 : 2}
        GROUP BY co."clientId"`,
-      ...(referenceFilter ? [seasonId, referenceFilter] : [seasonId])
+      ...(referenceFilter ? [seasonId, referenceFilter, src] : [seasonId, src])
     );
     const clientFacInvoiced = new Map<string, number>();
     const clientFacAmount = new Map<string, number>();
@@ -215,7 +222,7 @@ export async function GET(request: NextRequest) {
           (SELECT COALESCE(SUM(col."totalQuantity"),0) FROM "ClientOrderLine" col WHERE col."clientOrderId"=co.id) ord,
           (SELECT COALESCE(SUM(col."cancelledTotal"),0) FROM "ClientOrderLine" col WHERE col."clientOrderId"=co.id) can,
           (SELECT COALESCE(SUM(l.quantity),0) FROM "WarehouseDocument" d JOIN "WarehouseDocumentLine" l ON l."documentId"=d.id WHERE d."tioOrderNumber"=co."orderNumber" AND d."docType"='BL') del
-        FROM "ClientOrder" co WHERE co."seasonId"=$1
+        FROM "ClientOrder" co WHERE co."seasonId"=$1 AND co."source"=$2
       )
       SELECT
         COUNT(*) FILTER (WHERE NOT (del=0 AND can=0) AND del >= GREATEST(ord-can,0) AND can=0)::bigint livree,
@@ -223,7 +230,8 @@ export async function GET(request: NextRequest) {
         COUNT(*) FILTER (WHERE NOT (del=0 AND can=0) AND del < GREATEST(ord-can,0))::bigint partielle,
         COUNT(*) FILTER (WHERE del=0 AND can=0)::bigint non_livree
       FROM o`,
-      seasonId
+      seasonId,
+      src
     );
     const st = stRows[0];
     const deliveryStatus = [
@@ -241,14 +249,15 @@ export async function GET(request: NextRequest) {
         SELECT
           (SELECT COALESCE(SUM(l.quantity),0) FROM "WarehouseDocument" d JOIN "WarehouseDocumentLine" l ON l."documentId"=d.id WHERE d."tioOrderNumber"=co."orderNumber" AND d."docType"='BL') del,
           (SELECT COALESCE(SUM(l.quantity),0) FROM "WarehouseDocument" d JOIN "WarehouseDocumentLine" l ON l."documentId"=d.id WHERE d."tioOrderNumber"=co."orderNumber" AND d."docType"='FAC') inv
-        FROM "ClientOrder" co WHERE co."seasonId"=$1
+        FROM "ClientOrder" co WHERE co."seasonId"=$1 AND co."source"=$2
       )
       SELECT
         COUNT(*) FILTER (WHERE inv >= del AND del > 0)::bigint facturee,
         COUNT(*) FILTER (WHERE inv > 0 AND inv < del)::bigint partielle,
         COUNT(*) FILTER (WHERE del > 0 AND inv = 0)::bigint non_facturee
       FROM o`,
-      seasonId
+      seasonId,
+      src
     );
     const inv = invRows[0];
     const invoiceStatus = [

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { handleApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { orderStatus, remaining, invoiceStatus } from "@/lib/reconciliation";
+import { resolveOrderSourceBySeasonName } from "@/lib/order-source";
 
 // GET — Commandes client (TIO) avec réconciliation commandé vs livré
 // (via les BL/FAC liés par n° TIO). Statut à la volée : NON_LIVREE /
@@ -30,6 +31,24 @@ export async function GET(request: NextRequest) {
       params.push(`%${search}%`);
       i++;
     }
+
+    // Source B2B active PAR SAISON (Texas prioritaire, repli TIO) — on ne liste
+    // qu'UNE source par saison pour éviter le double comptage TIO+TEXAS. Comme la
+    // requête peut couvrir plusieurs saisons (filtre saison optionnel), on filtre
+    // chaque saison par sa source résolue (clause OR par nom de saison).
+    const seasonRows = await prisma.$queryRawUnsafe<{ name: string }[]>(
+      `SELECT DISTINCT se.name FROM "Season" se
+       WHERE EXISTS (SELECT 1 FROM "ClientOrder" co WHERE co."seasonId" = se.id)`
+    );
+    const srcBySeason = await resolveOrderSourceBySeasonName(seasonRows.map((r) => r.name));
+    const srcConds: string[] = [];
+    for (const [name, src] of srcBySeason) {
+      srcConds.push(`(se.name = $${i} AND co."source" = $${i + 1})`);
+      params.push(name, src);
+      i += 2;
+    }
+    if (srcConds.length) conditions.push(`(${srcConds.join(" OR ")})`);
+
     const where = conditions.length ? "WHERE " + conditions.join(" AND ") : "";
 
     const rows = await prisma.$queryRawUnsafe<

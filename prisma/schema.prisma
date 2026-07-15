@@ -240,6 +240,7 @@ model ClientOrder {
   clientId        String
   catalogId       String?
   orderDate       DateTime?
+  source          String    @default("TIO") // TIO (prise de commande, archive) | TEXAS (ERP, vérité)
   orderType       String    @default("COMMANDE") // COMMANDE or VSS
   status          String    @default("EN_COURS") // EN_COURS, VALIDEE, SOLDEE, ANNULEE
   deliveryWindow  String?   // ex: "S22-S26", fenêtre de livraison
@@ -263,6 +264,7 @@ model ClientOrder {
   @@index([catalogId])
   @@index([status])
   @@index([importLogId])
+  @@index([seasonId, source])
 }
 
 model ClientOrderLine {

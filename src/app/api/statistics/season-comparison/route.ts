@@ -30,7 +30,17 @@ export async function GET(request: NextRequest) {
           : `JOIN "Season" dim ON dim.id = co."seasonId"`;
       // PLV (publicité sur lieu de vente / présentoirs) = pas du produit vendu → exclu
       // des comparaisons saison/catalogue. IS DISTINCT FROM gère le cas catégorie NULL.
-      const conds = ["dim.name = $1", "p.category IS DISTINCT FROM 'PLV'"];
+      //
+      // NOTE source B2B : on ne lit qu'UNE source par saison (Texas prioritaire, repli
+      // TIO) pour éviter le double comptage TIO+TEXAS. La dimension peut être « catalog »
+      // (dim.name = nom de catalogue, pas de saison) → on ne peut pas mapper par nom de
+      // saison ; on filtre donc chaque commande par la source active de SA saison via un
+      // sous-select corrélé (même logique que resolveOrderSource). Aucun paramètre requis.
+      const conds = [
+        "dim.name = $1",
+        "p.category IS DISTINCT FROM 'PLV'",
+        `co."source" = (CASE WHEN EXISTS (SELECT 1 FROM "ClientOrder" c2 WHERE c2."seasonId" = co."seasonId" AND c2."source" = 'TEXAS') THEN 'TEXAS' ELSE 'TIO' END)`,
+      ];
       if (end) {
         params.push(end);
         conds.push(`co."orderDate" IS NOT NULL AND co."orderDate" <= $${params.length}::timestamp`);

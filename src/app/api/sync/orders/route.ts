@@ -203,6 +203,7 @@ export async function POST(request: NextRequest) {
             tioOrderNumber: String(orderNumber),
             orderDate: parsedOrderDate,
             totalAmount: orderAmount,
+            source: "TIO",
           },
         });
 

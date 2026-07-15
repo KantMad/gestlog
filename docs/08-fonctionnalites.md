@@ -154,6 +154,25 @@ tout réimporter.
   nettoyés le 30/06/2026, backups `pe27-*-misplaced-*.json`. Même principe pour les commandes
   **clients**.
 
+### Double-source commandes clients : TIO (archive) vs Texas (ERP, vérité)
+
+Les commandes B2B ont un champ **`ClientOrder.source`** (`TIO` par défaut | `TEXAS`).
+- **TIO** : prise de commande (synchro n8n `/api/sync/orders` + import StatGen manuel) → tagués
+  `TIO`. Deviennent l'**archive**.
+- **TEXAS** : import ERP (`/api/import/texas-orders`, onglet « Commandes Texas ») → tagués
+  `TEXAS`. **Source de vérité**. Parseur `parseTexasClientOrders` : StatGen client avec colonne
+  Saison, client par **code** (« Code client(Commande client) », nom existant non écrasé),
+  décodage `Q.N` **absolu par gamme**, montant net réparti au prorata des quantités.
+- **Lecture** : `resolveOrderSource(seasonId)` (`src/lib/order-source.ts`) → **TEXAS si la saison a
+  des commandes Texas, sinon TIO** (repli). Appliqué à TOUS les écrans B2B agrégés (répartition,
+  `statistics/*`, comparaisons saison/client, recap, deliveries, reassort). Les comparaisons
+  2-saisons filtrent **par commande** via une sous-requête corrélée (correct aussi en dimension
+  catalogue). Les endpoints par n° de commande (shipments, orders/[id], reassort/lines|cancel) ne
+  sont pas filtrés (Texas a des n° différents → pas de collision avec les BL/FAC dépôt).
+- **Transition douce** : tant qu'une saison n'a pas de Texas, elle affiche TIO. Dès l'import Texas,
+  elle bascule. Suppression possible via « Imports récents » (type `CLIENT_ORDER_TEXAS`).
+- **Clé unique** `(orderNumber, seasonId)` conservée (Texas utilise des n° différents de TIO).
+
 ### Écran Exports (`/export`)
 
 Hub regroupant les exports GestLog **hors BtoC** (gardé par l'écran `/export`, mapping
