@@ -129,5 +129,8 @@ export async function computeComparison(
         : 0;
   }
 
-  return Array.from(summaryBySupplier.values());
+  // Fournisseurs toujours triés par ordre alphabétique (nom), insensible à la casse/accents.
+  return Array.from(summaryBySupplier.values()).sort((a, b) =>
+    a.supplierName.localeCompare(b.supplierName, "fr", { sensitivity: "base" })
+  );
 }
