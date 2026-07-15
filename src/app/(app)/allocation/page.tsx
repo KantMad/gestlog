@@ -35,6 +35,7 @@ import {
   ChevronDown,
   ChevronRight,
   Download,
+  Barcode,
   History,
   Pencil,
   X,
@@ -50,9 +51,11 @@ interface SimulationLine {
   clientId: string;
   clientOrderId: string;
   clientName: string;
+  clientCode: string;
   productId: string;
   productReference: string;
   productColor: string;
+  productColorLabel: string;
   sizeScale: string[];
   original: SizeQuantities;
   allocated: SizeQuantities;
@@ -371,11 +374,13 @@ function ProductGroup({
   reference,
   color,
   lines,
+  received,
   onLineChange,
 }: {
   reference: string;
   color: string;
   lines: SimulationLine[];
+  received?: SizeQuantities;
   onLineChange: (lineKey: string, size: string, value: number) => void;
 }) {
   const [expanded, setExpanded] = useState(
@@ -384,6 +389,9 @@ function ProductGroup({
 
   const totalOriginal = lines.reduce((s, l) => s + sumQuantities(l.original), 0);
   const totalAllocated = lines.reduce((s, l) => s + sumQuantities(l.allocated), 0);
+  // Total reçu (réception fournisseur) pour ce produit et écart avec la demande client.
+  const totalReceived = received ? sumQuantities(received) : 0;
+  const demandGap = totalOriginal - totalReceived; // > 0 = commandé plus que reçu (manque)
   const hasReduction = totalOriginal > totalAllocated;
   const reductionPct = totalOriginal > 0
     ? Math.round(((totalOriginal - totalAllocated) / totalOriginal) * 100)
@@ -413,8 +421,33 @@ function ProductGroup({
         </div>
         <div className="flex items-center gap-4 text-sm">
           <div className="text-right">
-            <span className="text-xs text-muted-foreground">Commandé</span>
+            <span className="text-xs text-muted-foreground">Cmd. clients</span>
             <span className="block font-medium">{formatNumber(totalOriginal)}</span>
+          </div>
+          <div className="text-right">
+            <span className="text-xs text-muted-foreground">Reçu fourn.</span>
+            <span
+              className={cn(
+                "block font-medium",
+                demandGap > 0 ? "text-red-600" : "text-foreground"
+              )}
+              title="Total reçu (réceptions fournisseur) pour ce produit"
+            >
+              {formatNumber(totalReceived)}
+            </span>
+          </div>
+          <div className="text-right">
+            <span className="text-xs text-muted-foreground">Écart</span>
+            <span
+              className={cn(
+                "block font-medium tabular-nums",
+                demandGap > 0 ? "text-red-600" : demandGap < 0 ? "text-emerald-600" : "text-muted-foreground"
+              )}
+              title="Commandes clients − réceptions fournisseur (positif = réception insuffisante)"
+            >
+              {demandGap > 0 ? "+" : ""}
+              {formatNumber(demandGap)}
+            </span>
           </div>
           <div className="text-right">
             <span className="text-xs text-muted-foreground">Alloué</span>
@@ -767,6 +800,9 @@ export default function AllocationPage() {
   const [warnings, setWarnings] = useState<string[]>([]);
   const [clientImpacts, setClientImpacts] = useState<ClientImpact[]>([]);
   const [summary, setSummary] = useState<SimulationSummary | null>(null);
+  // Reçu (réception fournisseur) et EAN par produit → écart demande/réception + export EAN.
+  const [receivedByProduct, setReceivedByProduct] = useState<Record<string, SizeQuantities>>({});
+  const [eansByProduct, setEansByProduct] = useState<Record<string, Record<string, string>>>({});
   const [sessions, setSessions] = useState<SessionEntry[]>([]);
   const [catalogs, setCatalogs] = useState<CatalogEntry[]>([]);
   const [clients, setClients] = useState<ClientEntry[]>([]);
@@ -882,6 +918,8 @@ export default function AllocationPage() {
       setWarnings(data.warnings || []);
       setClientImpacts(data.clientImpacts || []);
       setSummary(data.summary || null);
+      setReceivedByProduct(data.receivedByProduct || {});
+      setEansByProduct(data.eansByProduct || {});
       toast.success("Simulation terminée", {
         description: `${data.lines?.length || 0} lignes calculées`,
       });
@@ -986,6 +1024,49 @@ export default function AllocationPage() {
     XLSX.writeFile(wb, `repartition_${activeSeason?.name || ""}.xlsx`);
   };
 
+  // Export « EAN / quantité » : une ligne par (boutique × produit/couleur × taille) allouée,
+  // avec l'EAN et la quantité répartie. Format destiné à la réception boutique / caisse.
+  const exportEanFile = () => {
+    const rows: Record<string, string | number>[] = [];
+    let missing = 0;
+    for (const l of lines) {
+      if (l.status === "ANNULE") continue;
+      const eans = eansByProduct[l.productId] || {};
+      for (const [size, qty] of Object.entries(l.allocated)) {
+        if (!qty || qty <= 0) continue;
+        const ean = eans[size];
+        if (!ean) missing++;
+        rows.push({
+          Boutique: l.clientName,
+          "Code boutique": l.clientCode,
+          Référence: l.productReference,
+          Couleur: l.productColor,
+          "Libellé couleur": l.productColorLabel || "",
+          Taille: size,
+          EAN: ean || `MANQUANT_${l.productReference}_${l.productColor}_${size}`,
+          Quantité: qty,
+        });
+      }
+    }
+    if (rows.length === 0) {
+      toast.error("Aucune quantité allouée à exporter");
+      return;
+    }
+    rows.sort(
+      (a, b) =>
+        String(a.Boutique).localeCompare(String(b.Boutique), "fr") ||
+        String(a.Référence).localeCompare(String(b.Référence), "fr") ||
+        String(a.Couleur).localeCompare(String(b.Couleur), "fr")
+    );
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "EAN");
+    XLSX.writeFile(wb, `repartition_EAN_${activeSeason?.name || ""}.xlsx`);
+    if (missing > 0) {
+      toast.warning(`${missing} ligne(s) sans EAN au référentiel (marquées « MANQUANT_… »)`);
+    }
+  };
+
   // Group lines by client
   const clientGroups = new Map<
     string,
@@ -1085,6 +1166,16 @@ export default function AllocationPage() {
                   >
                     <Download className="h-4 w-4" />
                     Exporter
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={exportEanFile}
+                    className="gap-2"
+                    title="Fichier EAN / quantité : boutique, produit, couleur, taille, EAN, quantité"
+                  >
+                    <Barcode className="h-4 w-4" />
+                    Export EAN
                   </Button>
                   <Button
                     size="sm"
@@ -1394,6 +1485,7 @@ export default function AllocationPage() {
                           reference={group.reference}
                           color={group.color}
                           lines={group.lines}
+                          received={receivedByProduct[productId]}
                           onLineChange={handleLineChange}
                         />
                       ))

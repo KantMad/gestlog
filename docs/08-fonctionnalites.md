@@ -39,6 +39,19 @@ sont gérés par écran (cf. [`05-authentification.md`](05-authentification.md))
   + `ReceptionLine` ; il faut donc que la **commande fournisseur (et/ou la réception) soit
   importée dans la même saison** que les commandes clients. Sinon : 0 produit pour ce
   fournisseur. (`src/app/api/allocation/simulate/route.ts`, `supplierProductFilter`.)
+- **Répartition — recalcul après correction d'une réception** : la simulation lit les
+  réceptions **en direct** (`receivedByProduct` construit depuis `SupplierReception.lines`).
+  Corriger une réception (cf. éditeur) puis **Relancer** la simulation recompute la
+  répartition à partir des nouvelles quantités reçues. ⚠️ Une session déjà **validée** est un
+  instantané : il faut re-simuler puis re-valider pour la mettre à jour.
+- **Répartition — vue « par produit »** : l'en-tête de chaque produit affiche **Cmd. clients**
+  (demande), **Reçu fourn.** (réceptions), **Écart** (demande − reçu, rouge si réception
+  insuffisante) et **Alloué**. `receivedByProduct` vient de la réponse `simulate`.
+- **Répartition — export « EAN / quantité »** : bouton *Export EAN* → xlsx avec colonnes
+  Boutique, Code boutique, Référence, Couleur, Libellé couleur, Taille, **EAN**, Quantité (une
+  ligne par boutique × produit/couleur × taille allouée, quantités hand-éditées incluses).
+  Les EAN viennent de `ProductSizeEan` (`eansByProduct` dans la réponse `simulate`) ; une taille
+  sans EAN sort en `MANQUANT_…` avec un avertissement. L'export xlsx classique reste dispo.
 - **Saison Réassort (sentinelle)** : les commandes de réassort sont routées vers une saison
   dédiée par `/api/sync/orders` (cf. [`04`](04-sources-et-n8n.md)).
 - **Lien BL/FAC ↔ commande TIO** : via le **nom de fichier** (`IS-xxx`) →

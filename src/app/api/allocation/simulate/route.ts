@@ -134,14 +134,20 @@ export async function POST(request: NextRequest) {
       clientNames.set(cs.clientId, cs.client.name);
     }
 
-    const productMap = new Map<string, { reference: string; color: string; sizeScale: string }>();
+    const productMap = new Map<
+      string,
+      { reference: string; color: string; colorLabel: string | null; sizeScale: string }
+    >();
     const productNames = new Map<string, string>();
+    const clientCodes = new Map<string, string>();
     for (const order of clientOrders) {
+      clientCodes.set(order.clientId, order.client.code);
       for (const line of order.lines) {
         if (!productMap.has(line.productId)) {
           productMap.set(line.productId, {
             reference: line.product.reference,
             color: line.product.color,
+            colorLabel: line.product.colorLabel,
             sizeScale: line.product.sizeScale,
           });
           productNames.set(
@@ -151,6 +157,7 @@ export async function POST(request: NextRequest) {
         }
       }
     }
+    for (const cs of clientSeasons) if (!clientCodes.has(cs.clientId)) clientCodes.set(cs.clientId, cs.client.code);
 
     const input: AllocationInput = {
       seasonId,
@@ -166,8 +173,10 @@ export async function POST(request: NextRequest) {
     const enrichedLines = result.lines.map((line) => ({
       ...line,
       clientName: clientNames.get(line.clientId) || line.clientId,
+      clientCode: clientCodes.get(line.clientId) || "",
       productReference: productMap.get(line.productId)?.reference || "",
       productColor: productMap.get(line.productId)?.color || "",
+      productColorLabel: productMap.get(line.productId)?.colorLabel || "",
       sizeScale: parseSizeScale(
         productMap.get(line.productId)?.sizeScale || ""
       ),
@@ -223,10 +232,37 @@ export async function POST(request: NextRequest) {
       uniqueRefs.add(p.reference);
     }
 
+    // Reçu par produit (pour afficher l'écart demande client / réception fournisseur).
+    const receivedOut: Record<string, SizeQuantities> = {};
+    for (const [productId, qty] of receivedByProduct) receivedOut[productId] = qty;
+
+    // EAN par produit et par taille (pour l'export « EAN / quantité »).
+    const refs = [...uniqueRefs];
+    const eanRows = refs.length
+      ? await prisma.productSizeEan.findMany({
+          where: { reference: { in: refs } },
+          select: { reference: true, color: true, size: true, ean: true },
+        })
+      : [];
+    const eanByKey = new Map<string, string>();
+    for (const e of eanRows) eanByKey.set(`${e.reference}__${e.color}__${e.size}`, e.ean);
+    const eansByProduct: Record<string, Record<string, string>> = {};
+    for (const [productId, p] of productMap) {
+      const sizes = parseSizeScale(p.sizeScale);
+      const m: Record<string, string> = {};
+      for (const size of sizes) {
+        const ean = eanByKey.get(`${p.reference}__${p.color}__${size}`);
+        if (ean) m[size] = ean;
+      }
+      eansByProduct[productId] = m;
+    }
+
     return NextResponse.json({
       lines: enrichedLines,
       warnings: result.warnings,
       clientImpacts: Array.from(clientImpacts.values()),
+      receivedByProduct: receivedOut,
+      eansByProduct,
       summary: {
         totalDemands: demands.length,
         totalProducts: new Set(demands.map((d) => d.productId)).size,
