@@ -84,11 +84,13 @@ const IMPORT_HELP: Record<string, { format: ReactNode; how: ReactNode; links: Re
     ),
     how: (
       <>
-        Même principe que les commandes clients : couleur = code avant le tiret, quantités{" "}
-        <strong>Q.N</strong> décodées par la grille du produit, appariement au référentiel. Le{" "}
-        <strong>fournisseur</strong> est créé automatiquement. Le fichier peut{" "}
+        Couleur = code avant le tiret. Les quantités <strong>Q.N</strong> sont décodées en tailles
+        grâce à la <strong>légende de gammes</strong> du fichier (colonnes « Clé Langue+Gamme »,
+        « Taille début/fin ») — positions absolues, correctes même quand un coloris démarre à une
+        taille &gt; 1. Le <strong>fournisseur</strong> est créé automatiquement. Le fichier peut{" "}
         <strong>regrouper plusieurs commandes / fournisseurs</strong> → une commande est créée{" "}
-        <strong>par n° de commande</strong>.
+        <strong>par n° de commande</strong>. Un <strong>produit absent du référentiel est créé</strong>{" "}
+        depuis la commande (avec sa grille de tailles) ; il sera enrichi ensuite par la synchro TIO.
       </>
     ),
     links: (
@@ -270,6 +272,7 @@ function ImportTab({
   const [result, setResult] = useState<{
     imported: number;
     errors: string[];
+    created?: number;
   } | null>(null);
   // Format MCS auto-détecté (StatGen / Packing List) → import sans mapping manuel.
   const [mcsFormat, setMcsFormat] = useState<McsFormat | null>(null);
@@ -364,8 +367,9 @@ function ImportTab({
       }
 
       setResult(json.data);
+      const createdSuffix = json.data.created ? ` (${json.data.created} produit(s) créé(s))` : "";
       if (json.data.errors.length === 0) {
-        toast.success(`${json.data.imported} lignes importées`);
+        toast.success(`${json.data.imported} lignes importées${createdSuffix}`);
       } else {
         toast.warning(
           `${json.data.imported} lignes importées, ${json.data.errors.length} erreurs`
@@ -405,6 +409,13 @@ function ImportTab({
             <p className="font-semibold">
               {result.imported} ligne{result.imported > 1 ? "s" : ""} importée{result.imported > 1 ? "s" : ""}
             </p>
+            {!!result.created && result.created > 0 && (
+              <p className="text-sm text-emerald-700 mt-1">
+                dont {result.created} produit{result.created > 1 ? "s" : ""} créé
+                {result.created > 1 ? "s" : ""} depuis la commande (absent
+                {result.created > 1 ? "s" : ""} du référentiel)
+              </p>
+            )}
             {result.errors.length > 0 && (
               <p className="text-sm text-muted-foreground mt-1">
                 {result.errors.length} erreur{result.errors.length > 1 ? "s" : ""}

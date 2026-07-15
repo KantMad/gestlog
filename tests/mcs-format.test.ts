@@ -63,6 +63,31 @@ describe("parseMcsStatgen — nouvel export (« Code fournisseur », pas de « F
   });
 });
 
+describe("parseMcsStatgen — reconstruction de grille via la légende (gamme + Taille début/fin), positions ABSOLUES", () => {
+  // Légende : ligne « réf vide » où « Total Q » porte le code gamme et les Q.N portent
+  // les tailles. Ici VES = [44,46,48,50] sur Q.1..Q.4.
+  const grid = [
+    ["N° commande PF fournisseur", "Fiche produit fini", "Coloris produit fini", "Code fournisseur", "Total Q", "Q. 1", "Q. 2", "Q. 3", "Q. 4", "Clé Langue+Gamme(Produit fini)", "Taille début(Produit fini)", "Taille fin(Produit fini)"],
+    ["", "", "", "", "VES", "44", "46", "48", "50", "", "", ""], // légende gamme VES
+    // Coloris à départ DÉCALÉ (deb=3) : seules Q.3,Q.4 sont remplies → tailles 48,50.
+    ["100901", "THRBLAZ_902", "207-Camel", "TREZA", 10, 0, 0, 7, 3, "FRAVES", 3, 4],
+    // Coloris pleine plage (deb=1..4) → 44,46,48,50.
+    ["100901", "THRBLAZ_902", "700-Bleu", "TREZA", 20, 5, 6, 6, 3, "FRAVES", 1, 4],
+  ];
+
+  it("décode les Q.N par position absolue et déduit la sous-plage de tailles du coloris", () => {
+    expect(detectMcsFormat(buf(grid))).toBe("statgen");
+    const lines = parseMcsStatgen(buf(grid));
+    expect(lines).toHaveLength(2);
+    // Coloris décalé : la sous-plage démarre à la 3e taille, quantités bien alignées.
+    expect(lines[0]).toMatchObject({ reference: "THRBLAZ_902", colorCode: "207", sizeScale: "48,50" });
+    expect(lines[0].sizes).toEqual({ "48": 7, "50": 3 });
+    // Coloris pleine plage.
+    expect(lines[1]).toMatchObject({ colorCode: "700", sizeScale: "44,46,48,50" });
+    expect(lines[1].sizes).toEqual({ "44": 5, "46": 6, "48": 6, "50": 3 });
+  });
+});
+
 describe("parseMcsPackingList — format simple (tailles nommées), en-tête pas en ligne 0", () => {
   const grid = [
     ["FW26 COUNTRY CLUB — PACKING LIST LOT 1"], // titre au-dessus de l'en-tête

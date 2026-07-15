@@ -90,6 +90,11 @@ export interface McsSupplierLine {
   colorCode: string;
   colorName: string;
   quantities: number[]; // dans l'ordre des colonnes Q.1..Q.n (positions)
+  // Décodage par tailles reconstruit DEPUIS le fichier (légende « gamme » + Taille
+  // début/fin). Présents quand le fichier fournit ces infos → autorité sur les tailles
+  // (les Q.N sont des positions ABSOLUES dans la gamme, pas compactées par couleur).
+  sizes?: Record<string, number>; // { "M": 3, "L": 5, ... } (quantités > 0)
+  sizeScale?: string; // "M,L,XL,2XL" — sous-plage de la gamme propre à ce coloris
 }
 
 export function parseMcsStatgen(buffer: ArrayBuffer): McsSupplierLine[] {
@@ -118,6 +123,29 @@ export function parseMcsStatgen(buffer: ArrayBuffer): McsSupplierLine[] {
     header.forEach((hh, i) => {
       if (/^Q\.\s*\d+$/.test(hh)) qCols.push(i);
     });
+    // Colonnes servant à reconstruire la grille de tailles (pour créer les produits
+    // absents et décoder correctement les quantités) :
+    //  - « Total Q » : dans les lignes de LÉGENDE (réf vide) elle porte le code gamme.
+    //  - « Clé Langue+Gamme » : code gamme du produit (préfixé « FRA »).
+    //  - « Taille début » / « Taille fin » : sous-plage de positions du coloris.
+    const cLegendCode = header.indexOf("TOTAL Q");
+    const cGamme = header.findIndex((hh) => hh.includes("LANGUE+GAMME"));
+    const cDeb = header.findIndex((hh) => hh.includes("TAILLE DÉBUT") || hh.includes("TAILLE DEBUT"));
+    const cFin = header.findIndex((hh) => hh.includes("TAILLE FIN"));
+
+    // Légende : lignes en tête (réf vide) → code gamme (col « Total Q ») + tailles (cols Q.N).
+    const legend = new Map<string, string[]>();
+    if (cLegendCode >= 0) {
+      for (let r = h + 1; r < grid.length; r++) {
+        const row = grid[r] || [];
+        if (norm(row[cRef])) break; // 1re ligne produit → fin de la légende
+        const codeUp = up(row[cLegendCode]);
+        if (!codeUp) continue;
+        const sizes = qCols.map((ci) => norm(row[ci])).filter(Boolean);
+        if (sizes.length) legend.set(codeUp, sizes);
+      }
+    }
+    const canDecode = legend.size > 0 && cGamme >= 0 && cDeb >= 0 && cFin >= 0;
 
     const lines: McsSupplierLine[] = [];
     for (let r = h + 1; r < grid.length; r++) {
@@ -135,6 +163,25 @@ export function parseMcsStatgen(buffer: ArrayBuffer): McsSupplierLine[] {
         const n = typeof v === "number" ? v : parseInt(String(v || "0"), 10);
         return isNaN(n) ? 0 : n;
       });
+
+      // Reconstruction des tailles depuis la gamme (positions ABSOLUES).
+      let sizes: Record<string, number> | undefined;
+      let sizeScale: string | undefined;
+      if (canDecode) {
+        const gamme = up(row[cGamme]).replace(/^FRA/, "");
+        const full = legend.get(gamme);
+        const deb = parseInt(String(row[cDeb]), 10);
+        const fin = parseInt(String(row[cFin]), 10);
+        if (full && deb >= 1 && fin >= deb && fin <= full.length) {
+          sizeScale = full.slice(deb - 1, fin).join(",");
+          sizes = {};
+          for (let p = deb; p <= fin; p++) {
+            const q = quantities[p - 1] || 0; // Q.p = position absolue p dans la gamme
+            if (q > 0) sizes[full[p - 1]] = q;
+          }
+        }
+      }
+
       lines.push({
         orderNumber,
         supplierCode: norm(row[cSupplier]),
@@ -142,6 +189,8 @@ export function parseMcsStatgen(buffer: ArrayBuffer): McsSupplierLine[] {
         colorCode: code,
         colorName: name,
         quantities,
+        ...(sizes ? { sizes } : {}),
+        ...(sizeScale ? { sizeScale } : {}),
       });
     }
     if (lines.length) return lines;

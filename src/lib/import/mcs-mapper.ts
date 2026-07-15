@@ -5,6 +5,7 @@ import { parseMcsStatgen, parseMcsPackingList, parseMcsClientOrders } from "./mc
 export interface ImportResult {
   imported: number;
   errors: string[];
+  created?: number; // produits créés depuis le fichier (absents du référentiel)
 }
 
 // Recherche un produit du référentiel par (référence, code couleur), avec tolérance
@@ -35,6 +36,7 @@ export async function importMcsSupplierOrders(
   const lines = parseMcsStatgen(buffer);
   const errors: string[] = [];
   let imported = 0;
+  let createdProducts = 0;
   if (lines.length === 0) {
     return { imported, errors: ["Aucune ligne détectée (format commande fournisseur MCS)."] };
   }
@@ -90,21 +92,45 @@ export async function importMcsSupplierOrders(
 
     const keptProductIds: string[] = [];
     for (const row of rows) {
-      const product = await findProduct(row.reference, row.colorCode);
+      let product = await findProduct(row.reference, row.colorCode);
+      // Produit absent du référentiel → on le CRÉE depuis la commande fournisseur
+      // (le fichier fournit la grille de tailles via la légende « gamme »). La synchro
+      // TIO (ON CONFLICT reference,color) l'enrichira ensuite (catégorie, prix, EAN…).
       if (!product) {
-        errors.push(
-          `Cmd ${orderNumber} : produit introuvable ${row.reference} / ${row.colorCode}` +
-            (row.colorName ? ` (${row.colorName})` : "")
-        );
-        continue;
+        if (!row.sizeScale) {
+          errors.push(
+            `Cmd ${orderNumber} : produit introuvable et grille de tailles inconnue, non créé ${row.reference} / ${row.colorCode}` +
+              (row.colorName ? ` (${row.colorName})` : "")
+          );
+          continue;
+        }
+        product = await prisma.product.upsert({
+          where: { reference_color: { reference: row.reference, color: row.colorCode } },
+          update: {},
+          create: {
+            reference: row.reference,
+            color: row.colorCode,
+            colorCode: row.colorCode,
+            colorLabel: row.colorName || null,
+            sizeScale: row.sizeScale,
+          },
+        });
+        createdProducts++;
       }
-      // décodage des positions Q.N → tailles via la grille du produit
-      const scale = product.sizeScale
-        ? product.sizeScale.split(",").map((s) => s.trim()).filter(Boolean)
-        : [];
-      const quantities: Record<string, number> = {};
-      for (let i = 0; i < scale.length && i < row.quantities.length; i++) {
-        if (row.quantities[i] > 0) quantities[scale[i]] = row.quantities[i];
+      // Quantités par taille : privilégie le décodage DEPUIS le fichier (positions
+      // absolues de la gamme, correct même quand le coloris démarre à une taille > 1) ;
+      // repli sur la grille du produit (positions Q.N) si le fichier ne fournit rien.
+      let quantities: Record<string, number>;
+      if (row.sizes) {
+        quantities = row.sizes;
+      } else {
+        const scale = product.sizeScale
+          ? product.sizeScale.split(",").map((s) => s.trim()).filter(Boolean)
+          : [];
+        quantities = {};
+        for (let i = 0; i < scale.length && i < row.quantities.length; i++) {
+          if (row.quantities[i] > 0) quantities[scale[i]] = row.quantities[i];
+        }
       }
       if (Object.keys(quantities).length === 0) continue;
 
@@ -135,7 +161,7 @@ export async function importMcsSupplierOrders(
     }
   }
 
-  return { imported, errors };
+  return { imported, errors, created: createdProducts };
 }
 
 // ----------------------------------------------- Réception (Packing List)

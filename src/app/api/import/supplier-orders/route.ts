@@ -47,7 +47,12 @@ export async function POST(request: NextRequest) {
     });
 
     return NextResponse.json({
-      data: { imported: result.imported, errors: result.errors, fileName: file.name },
+      data: {
+        imported: result.imported,
+        errors: result.errors,
+        created: (result as { created?: number }).created ?? 0,
+        fileName: file.name,
+      },
     });
   } catch (e) {
     return handleApiError(e, "api/import/supplier-orders");

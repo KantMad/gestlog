@@ -84,11 +84,19 @@ Les fichiers réels MCS ne sont pas des tableaux plats → l'import les **auto-d
   indifférent) : n° de commande = colonne contenant `Commande` (`N° commande PF fournisseur`),
   **fournisseur** = `Fiche fournisseur` (ancien export) **ou** `Code fournisseur` (nouvel
   export — attention à ne pas confondre avec « N° commande PF **fournisseur** »).
-  Les colonnes `Q.N` sont des **positions** décodées en tailles **via la grille du produit**
-  (`Product.sizeScale`, car elle varie : 7 tailles `S..4XL` ou 2 tailles `L,3XL`). Couleur =
-  **code avant le `-`** (`208-Cognac` → `208`). **N° de commande et fournisseur sont
-  obligatoires** (lus dans le fichier). Un fichier peut regrouper **plusieurs commandes /
-  fournisseurs** → **une commande par n° de commande**.
+  Les colonnes `Q.N` sont des **positions ABSOLUES** dans la **gamme** (barème de tailles).
+  La grille est reconstruite depuis le fichier : la **légende** en tête (lignes réf. vide, code
+  gamme dans la colonne `Total Q`, tailles dans les `Q.N`) + `Clé Langue+Gamme` (code gamme,
+  préfixe `FRA`) + `Taille début`/`Taille fin` (sous-plage du coloris). `sizeScale =
+  légende[gamme][début-1 … fin]`, et chaque `Q.p` alimente la taille `légende[gamme][p-1]` —
+  **correct même quand un coloris démarre à une taille > 1** (ex. blazer VES commençant à la
+  position 3). Couleur = **code avant le `-`** (`208-Cognac` → `208`). **N° de commande et
+  fournisseur obligatoires** (lus dans le fichier). Un fichier peut regrouper **plusieurs
+  commandes / fournisseurs** → **une commande par n° de commande**.
+  **Produits absents créés** : si un couple (référence, code couleur) n'existe pas au
+  référentiel, le produit est **créé** depuis la commande (référence, couleur, `colorLabel`,
+  `sizeScale` déduit de la gamme). La synchro TIO (`ON CONFLICT (reference,color)`) l'enrichit
+  ensuite (catégorie, prix, EAN…). La réponse d'import remonte le nombre de produits créés.
 - **« Packing List » (réception)** : format **tolérant** — colonne référence reconnue par
   plusieurs libellés (`FULL MCS PRODUCT REF`, `REFERENCE`, `REF`, `CODE PRODUIT FINI`…),
   couleur par `COLOR CODE`/`COLOR`/`COULEUR`/`COLORIS`, **tailles repérées par leur nom**
