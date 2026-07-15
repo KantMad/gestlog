@@ -85,10 +85,12 @@ export async function importMcsSupplierOrders(
       update: {},
       create: { code: supplierCode, name: supplierCode },
     });
+    // Code saison porté par le fichier (colonne « Saison ») — pour l'export réceptions.
+    const tioSeason = rows.find((r) => r.season)?.season || null;
     const supplierOrder = await prisma.supplierOrder.upsert({
       where: { orderNumber_seasonId: { orderNumber, seasonId } },
-      update: { importLogId },
-      create: { orderNumber, seasonId, supplierId: supplier.id, importLogId },
+      update: { importLogId, ...(tioSeason ? { tioSeason } : {}) },
+      create: { orderNumber, seasonId, supplierId: supplier.id, importLogId, tioSeason },
     });
 
     const keptProductIds: string[] = [];

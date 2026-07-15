@@ -17,6 +17,7 @@ export const APP_SCREENS: { key: string; label: string }[] = [
   { key: "/season-comparison", label: "Comparaison saisons / catalogues" },
   { key: "/client-comparison", label: "Comparaison clients" },
   { key: "/repartition", label: "Répartition magasin" },
+  { key: "/export", label: "Exports" },
   { key: "/btoc", label: "BtoC" },
 ];
 
@@ -47,6 +48,7 @@ const API_SCREEN_MAP: [string, string][] = [
   ["/api/comparison", "/comparison"],
   ["/api/deliveries", "/deliveries"],
   ["/api/depot", "/depot"],
+  ["/api/export", "/export"],
   ["/api/import", "/import"],
   ["/api/product-info", "/product-info"],
   ["/api/reassort", "/reassort"],

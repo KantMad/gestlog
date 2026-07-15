@@ -55,11 +55,12 @@ describe("parseMcsStatgen — nouvel export (« Code fournisseur », pas de « F
     expect(lines[0]).toMatchObject({
       orderNumber: "100717",
       supplierCode: "ARETEX",
+      season: "W26", // code saison lu dans la colonne « Saison » (pour l'export réceptions)
       reference: "RMGILE_W001",
       colorCode: "206",
       quantities: [5, 10, 15],
     });
-    expect(lines[1]).toMatchObject({ orderNumber: "100718", supplierCode: "WENLOS" });
+    expect(lines[1]).toMatchObject({ orderNumber: "100718", supplierCode: "WENLOS", season: "W26" });
   });
 });
 

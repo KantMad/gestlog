@@ -1,0 +1,263 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import Link from "next/link";
+import { useSeason, formatSeasonLabel } from "@/lib/season-context";
+import { Topbar } from "@/components/layout/topbar";
+import { PageHeader } from "@/components/layout/page-header";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import {
+  Calendar,
+  Download,
+  PackageCheck,
+  GitCompareArrows,
+  Calculator,
+  ArrowLeftRight,
+  Store,
+  Truck,
+  ExternalLink,
+  Loader2,
+} from "lucide-react";
+import { toast } from "sonner";
+import * as XLSX from "xlsx";
+
+export default function ExportPage() {
+  const { seasons, activeSeason } = useSeason();
+  const [seasonId, setSeasonId] = useState("");
+  const [busy, setBusy] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!seasonId && activeSeason) setSeasonId(activeSeason.id);
+  }, [activeSeason, seasonId]);
+
+  const season = seasons.find((s) => s.id === seasonId) || null;
+
+  // Réceptions → CSV EAN/quantité (format concaténé). Téléchargement via blob pour lire
+  // les diagnostics (lignes écartées) renvoyés en en-têtes.
+  const exportReceptions = async () => {
+    if (!seasonId) return;
+    setBusy("receptions");
+    try {
+      const res = await fetch(`/api/export/receptions?seasonId=${seasonId}`);
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        toast.error(j.error || "Export impossible");
+        return;
+      }
+      const rows = Number(res.headers.get("X-Rows") || 0);
+      const noSeason = Number(res.headers.get("X-Skipped-No-Season") || 0);
+      const noEan = Number(res.headers.get("X-Skipped-No-Ean") || 0);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `receptions_${season?.name || seasonId}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      if (rows === 0) {
+        toast.warning("Aucune ligne exportée (réceptions/EAN/saison manquants ?)");
+      } else {
+        toast.success(`${rows} ligne(s) exportée(s)`);
+      }
+      if (noSeason > 0)
+        toast.warning(`${noSeason} ligne(s) sans code saison (réimporte la commande fournisseur)`);
+      if (noEan > 0) toast.warning(`${noEan} ligne(s) sans EAN au référentiel`);
+    } catch {
+      toast.error("Erreur réseau");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  // Comparaison commande/réception → xlsx (même contenu que l'écran Comparaison).
+  const exportComparison = async () => {
+    if (!seasonId) return;
+    setBusy("comparison");
+    try {
+      const res = await fetch(`/api/comparison?seasonId=${seasonId}`);
+      const data = await res.json();
+      const summaries = data.data || [];
+      const rows = summaries.flatMap(
+        (s: {
+          supplierName: string;
+          rows: {
+            reference: string;
+            color: string;
+            totalOrdered: number;
+            totalReceived: number;
+            totalGap: number;
+            gapPercent: number;
+            status: string;
+          }[];
+        }) =>
+          s.rows.map((r) => ({
+            Fournisseur: s.supplierName,
+            Référence: r.reference,
+            Couleur: r.color,
+            Commandé: r.totalOrdered,
+            Reçu: r.totalReceived,
+            Écart: r.totalGap,
+            "Écart %": r.gapPercent,
+            Statut:
+              r.status === "conforme" ? "Conforme" : r.status === "ecart_mineur" ? "Écart mineur" : "Écart majeur",
+          }))
+      );
+      if (rows.length === 0) {
+        toast.warning("Aucune donnée de comparaison pour cette saison");
+        return;
+      }
+      const ws = XLSX.utils.json_to_sheet(rows);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Comparaison");
+      XLSX.writeFile(wb, `comparaison_${season?.name || ""}.xlsx`);
+      toast.success(`${rows.length} ligne(s) exportée(s)`);
+    } catch {
+      toast.error("Export impossible");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  // Exports contextuels (nécessitent une action sur leur écran) → liens.
+  const linkExports = [
+    {
+      icon: Calculator,
+      title: "Répartition (simulation)",
+      desc: "Export xlsx + fichier EAN de la répartition — à générer depuis une simulation.",
+      href: "/allocation",
+    },
+    {
+      icon: ArrowLeftRight,
+      title: "Comparaison saisons / catalogues",
+      desc: "Export xlsx du détail par catégorie, selon les deux saisons/catalogues choisis.",
+      href: "/season-comparison",
+    },
+    {
+      icon: Store,
+      title: "Répartition magasin",
+      desc: "Split d'une commande TIO en 1 onglet xlsx par fournisseur (dépôt du fichier requis).",
+      href: "/repartition",
+    },
+    {
+      icon: Truck,
+      title: "Livraisons — fichier EAN",
+      desc: "Fichier EAN/quantité par livraison, généré à l'expédition.",
+      href: "/deliveries",
+    },
+  ];
+
+  return (
+    <div>
+      <Topbar title="Exports" />
+      <div className="p-4 sm:p-6 lg:p-8 space-y-8">
+        <PageHeader
+          title="Exports"
+          description="Tous les exports GestLog regroupés (hors BtoC)."
+        />
+
+        {/* Saison cible */}
+        <div className="rounded-lg border-2 border-primary/30 bg-primary/5 p-3 space-y-1.5 max-w-md">
+          <label htmlFor="export-season" className="text-sm font-semibold flex items-center gap-2">
+            <Calendar className="h-4 w-4" />
+            Saison
+          </label>
+          <select
+            id="export-season"
+            value={seasonId}
+            onChange={(e) => setSeasonId(e.target.value)}
+            className="w-full rounded-lg border-2 border-input bg-background px-3 py-2 text-sm font-medium outline-none focus:border-primary"
+          >
+            {seasons.map((s) => (
+              <option key={s.id} value={s.id}>
+                {formatSeasonLabel(s)}
+                {activeSeason && s.id === activeSeason.id ? " — active" : ""}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Exports directs (téléchargement immédiat) */}
+        <div>
+          <h2 className="mb-3 text-sm font-semibold text-muted-foreground">Téléchargement direct</h2>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <PackageCheck className="h-4 w-4 text-emerald-600" />
+                  Réceptions — CSV EAN / quantité
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  À partir des réceptions fournisseur : une valeur par ligne, concaténée sans espace —{" "}
+                  <span className="font-mono text-xs">
+                    [saison 3c][n° commande 11c][EAN 13c][quantité]
+                  </span>
+                  . Code saison lu dans le fichier commande fournisseur ; quantités à 0 exclues.
+                </p>
+                <Button onClick={exportReceptions} disabled={!seasonId || busy !== null} className="gap-2">
+                  {busy === "receptions" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                  Exporter les réceptions
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <GitCompareArrows className="h-4 w-4 text-blue-600" />
+                  Comparaison commande / réception
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  Écarts commandé / reçu par fournisseur et référence (xlsx), pour la saison choisie.
+                </p>
+                <Button
+                  onClick={exportComparison}
+                  disabled={!seasonId || busy !== null}
+                  variant="outline"
+                  className="gap-2"
+                >
+                  {busy === "comparison" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                  Exporter la comparaison
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+
+        {/* Exports contextuels (sur leur écran) */}
+        <div>
+          <h2 className="mb-3 text-sm font-semibold text-muted-foreground">
+            Depuis leur écran (contexte requis)
+          </h2>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {linkExports.map((e) => (
+              <Card key={e.href}>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <e.icon className="h-4 w-4 text-muted-foreground" />
+                    {e.title}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <p className="text-sm text-muted-foreground">{e.desc}</p>
+                  <Link href={e.href}>
+                    <Button variant="outline" size="sm" className="gap-2">
+                      <ExternalLink className="h-4 w-4" />
+                      Ouvrir l&apos;écran
+                    </Button>
+                  </Link>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

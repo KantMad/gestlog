@@ -86,6 +86,7 @@ export function detectMcsFormat(buffer: ArrayBuffer): McsFormat | null {
 export interface McsSupplierLine {
   orderNumber: string;
   supplierCode: string;
+  season: string; // code saison lu dans le fichier (colonne « Saison » : W26, S27…)
   reference: string;
   colorCode: string;
   colorName: string;
@@ -119,6 +120,9 @@ export function parseMcsStatgen(buffer: ArrayBuffer): McsSupplierLine[] {
       cSupplier = header.findIndex((hh) => hh.includes("FOURNISSEUR") && !hh.includes("COMMANDE"));
     const cRef = header.indexOf("FICHE PRODUIT FINI");
     const cColor = header.findIndex((hh) => hh.includes("COLORIS"));
+    // Code saison porté par le fichier (« Saison » = W26/S27…). Distinct de la saison GestLog.
+    let cSeason = header.indexOf("SAISON");
+    if (cSeason < 0) cSeason = header.findIndex((hh) => hh.includes("SAISON") && !hh.includes("CODE"));
     const qCols: number[] = [];
     header.forEach((hh, i) => {
       if (/^Q\.\s*\d+$/.test(hh)) qCols.push(i);
@@ -185,6 +189,7 @@ export function parseMcsStatgen(buffer: ArrayBuffer): McsSupplierLine[] {
       lines.push({
         orderNumber,
         supplierCode: norm(row[cSupplier]),
+        season: cSeason >= 0 ? up(row[cSeason]) : "",
         reference,
         colorCode: code,
         colorName: name,

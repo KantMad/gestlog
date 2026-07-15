@@ -154,6 +154,26 @@ tout réimporter.
   nettoyés le 30/06/2026, backups `pe27-*-misplaced-*.json`. Même principe pour les commandes
   **clients**.
 
+### Écran Exports (`/export`)
+
+Hub regroupant les exports GestLog **hors BtoC** (gardé par l'écran `/export`, mapping
+`/api/export → /export`) :
+- **Téléchargement direct** (saison choisie) : **Réceptions CSV** (ci-dessous) et **Comparaison
+  commande/réception** xlsx.
+- **Liens** vers les exports contextuels : Répartition (simulation), Comparaison
+  saisons/catalogues, Répartition magasin, Livraisons (EAN).
+
+**Export Réceptions — CSV EAN/quantité** (`/api/export/receptions?seasonId=`) : une valeur par
+ligne, **concaténée sans espace** :
+`[saison 3c][n° commande 11c padded-0][EAN 13c][quantité]` — ex. `W2600000110023<ean13>12`.
+- **Saison** = `SupplierOrder.tioSeason` = code **lu dans le fichier commande fournisseur**
+  (colonne « Saison » : W26/S27…), **capté au parse** (`parseMcsStatgen`, champ `season`) et
+  stocké à l'import. **≠ saison GestLog** (qui ne fait que cadrer la sélection). ⚠️ Les commandes
+  importées **avant** cet ajout ont `tioSeason` nul → **réimporter la commande fournisseur** pour
+  le peupler (upsert). Lignes sans saison/EAN écartées (comptées en en-têtes `X-Skipped-*`).
+- Quantités **agrégées par (commande, EAN)**, sommées sur toutes les réceptions ; **toute
+  quantité 0 est retirée**. N° commande padé à 11 (0 à gauche), EAN sur 13.
+
 ### Formats d'import MCS (auto-détectés)
 
 Les fichiers réels MCS ne sont pas des tableaux plats → l'import les **auto-détecte**
