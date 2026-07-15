@@ -259,6 +259,22 @@ export default function ReceptionEditorPage() {
                         </tr>
                       )}
                     </tbody>
+                    {lines.length > 0 && (
+                      <tfoot className="border-t-2 bg-muted/40 font-semibold">
+                        <tr>
+                          <td className="px-3 py-2.5" colSpan={2}>
+                            Total réception ({lines.length} ligne{lines.length > 1 ? "s" : ""})
+                          </td>
+                          <td className="px-3 py-2.5 text-xs font-normal text-muted-foreground">
+                            se met à jour selon les modifications
+                          </td>
+                          <td className="px-3 py-2.5 text-right tabular-nums">
+                            {lines.reduce((s, l) => s + lineTotal(l), 0)}
+                          </td>
+                          <td />
+                        </tr>
+                      </tfoot>
+                    )}
                   </table>
                 </div>
               </CardContent>
