@@ -111,10 +111,14 @@ tout réimporter.
   restent), puis enregistrer. La comparaison et le stock disponible se recalculent (lecture live
   des `ReceptionLine`).
 
-### Comparaison commande / réception — tri fournisseurs
+### Comparaison commande / réception — tri, recherche, filtre réception
 
-Les fournisseurs sont **toujours triés par ordre alphabétique** (nom, insensible casse/accents),
-tri fait dans `computeComparison` → s'applique à l'écran ET à l'export Excel.
+- Fournisseurs **toujours triés par ordre alphabétique** (nom, insensible casse/accents), tri
+  fait dans `computeComparison` → s'applique à l'écran ET à l'export Excel.
+- **Recherche fournisseur** (nom ou code) + **filtre réception** à 3 états : *Tout* /
+  *Réceptionné* (lignes `totalReceived > 0`) / *Non réceptionné* (`totalReceived === 0`).
+  Filtrage **client-side** sur les lignes ; les compteurs (fournisseurs, références, anomalies)
+  et badges par fournisseur sont recalculés sur les lignes affichées.
 
 ### Cloisonnement par saison (commandes & réceptions fournisseur)
 

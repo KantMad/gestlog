@@ -15,6 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   GitCompareArrows,
@@ -25,6 +26,7 @@ import {
   ChevronDown,
   ChevronRight,
   Pencil,
+  Search,
 } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
@@ -173,10 +175,15 @@ function SupplierSection({ summary }: { summary: ComparisonSummary }) {
   );
 }
 
+type ReceptionFilter = "all" | "received" | "not_received";
+
 export default function ComparisonPage() {
   const { activeSeason } = useSeason();
   const [summaries, setSummaries] = useState<ComparisonSummary[]>([]);
   const [loading, setLoading] = useState(false);
+  // Recherche fournisseur + filtre réception (tout / réceptionné / non réceptionné).
+  const [supplierSearch, setSupplierSearch] = useState("");
+  const [receptionFilter, setReceptionFilter] = useState<ReceptionFilter>("all");
 
   useEffect(() => {
     if (!activeSeason) {
@@ -191,7 +198,33 @@ export default function ComparisonPage() {
       .finally(() => setLoading(false));
   }, [activeSeason]);
 
-  const totalAnomaly = summaries.reduce((s, a) => s + a.anomalyCount, 0);
+  // Filtrage : recherche par nom/code fournisseur + filtre réception au niveau des lignes.
+  // Les compteurs (réf./anomalies) sont recalculés sur les lignes réellement affichées.
+  const q = supplierSearch.trim().toLowerCase();
+  const filteredSummaries = summaries
+    .filter(
+      (s) =>
+        !q ||
+        s.supplierName.toLowerCase().includes(q) ||
+        s.supplierCode.toLowerCase().includes(q)
+    )
+    .map((s) => {
+      const rows =
+        receptionFilter === "all"
+          ? s.rows
+          : s.rows.filter((r) =>
+              receptionFilter === "received" ? r.totalReceived > 0 : r.totalReceived === 0
+            );
+      return {
+        ...s,
+        rows,
+        lineCount: rows.length,
+        anomalyCount: rows.filter((r) => r.status !== "conforme").length,
+      };
+    })
+    .filter((s) => s.rows.length > 0);
+
+  const totalAnomaly = filteredSummaries.reduce((s, a) => s + a.anomalyCount, 0);
 
   const exportToExcel = () => {
     const rows = summaries.flatMap((s) =>
@@ -267,14 +300,14 @@ export default function ComparisonPage() {
             <div className="grid gap-4 sm:grid-cols-3">
               <Card>
                 <CardContent className="pt-6">
-                  <div className="text-2xl font-bold">{summaries.length}</div>
+                  <div className="text-2xl font-bold">{filteredSummaries.length}</div>
                   <p className="text-sm text-muted-foreground">Fournisseurs</p>
                 </CardContent>
               </Card>
               <Card>
                 <CardContent className="pt-6">
                   <div className="text-2xl font-bold">
-                    {summaries.reduce((s, a) => s + a.lineCount, 0)}
+                    {filteredSummaries.reduce((s, a) => s + a.lineCount, 0)}
                   </div>
                   <p className="text-sm text-muted-foreground">Références</p>
                 </CardContent>
@@ -289,10 +322,56 @@ export default function ComparisonPage() {
               </Card>
             </div>
 
+            {/* Recherche fournisseur + filtre réception (tout / réceptionné / non). */}
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="relative w-full sm:max-w-xs">
+                <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Rechercher un fournisseur…"
+                  value={supplierSearch}
+                  onChange={(e) => setSupplierSearch(e.target.value)}
+                  className="h-9 pl-9 text-sm"
+                />
+              </div>
+              <div className="inline-flex rounded-lg border bg-muted/50 p-0.5 text-sm">
+                {(
+                  [
+                    ["all", "Tout"],
+                    ["received", "Réceptionné"],
+                    ["not_received", "Non réceptionné"],
+                  ] as [ReceptionFilter, string][]
+                ).map(([val, label]) => (
+                  <button
+                    key={val}
+                    type="button"
+                    onClick={() => setReceptionFilter(val)}
+                    className={cn(
+                      "rounded-md px-3 py-1.5 font-medium transition-colors",
+                      receptionFilter === val
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="space-y-4">
-              {summaries.map((summary) => (
-                <SupplierSection key={summary.supplierId} summary={summary} />
-              ))}
+              {filteredSummaries.length === 0 ? (
+                <Card className="border-dashed">
+                  <CardContent className="flex items-center justify-center py-12">
+                    <p className="text-sm text-muted-foreground">
+                      Aucun résultat pour ce filtre.
+                    </p>
+                  </CardContent>
+                </Card>
+              ) : (
+                filteredSummaries.map((summary) => (
+                  <SupplierSection key={summary.supplierId} summary={summary} />
+                ))
+              )}
             </div>
           </>
         )}
