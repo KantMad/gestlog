@@ -12,8 +12,6 @@ export async function POST(request: NextRequest) {
     const file = formData.get("file") as File | null;
     const seasonId = formData.get("seasonId") as string | null;
     const mappingJson = formData.get("mapping") as string | null;
-    // N° de commande/lot saisi à l'import (pour les fichiers sans colonne « N° commande »).
-    const orderNumber = (formData.get("orderNumber") as string | null) || "";
 
     if (!file || !seasonId) {
       return NextResponse.json({ error: "Fichier et saison requis" }, { status: 400 });
@@ -24,7 +22,7 @@ export async function POST(request: NextRequest) {
     let result;
     if (detectMcsFormat(buffer) === "statgen") {
       // Format MCS (StatGen) : parsing dédié, sans mapping de colonnes.
-      result = await importMcsSupplierOrders(buffer, seasonId, orderNumber);
+      result = await importMcsSupplierOrders(buffer, seasonId);
     } else {
       // Format générique : mapping de colonnes requis.
       if (!mappingJson) {

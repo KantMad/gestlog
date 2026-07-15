@@ -76,28 +76,27 @@ const IMPORT_HELP: Record<string, { format: ReactNode; how: ReactNode; links: Re
     format: (
       <>
         Export TIO <strong>StatGen « commande fournisseur »</strong>, reconnu automatiquement.
-        En-tête attendu : <strong>Fiche fournisseur</strong> + <strong>Fiche produit fini</strong>{" "}
-        (+ Coloris produit fini, Total Q et Q. 1 … Q. 16). Le <strong>n° de commande</strong> est
-        pris dans le fichier s&apos;il existe ; <strong>l&apos;ordre des colonnes n&apos;a pas
-        d&apos;importance</strong>.
+        En-tête attendu : un <strong>n° de commande</strong> (« N° commande PF fournisseur »), un{" "}
+        <strong>fournisseur</strong> (« Fiche fournisseur » ou « Code fournisseur »),{" "}
+        <strong>Fiche produit fini</strong>, Coloris produit fini, Total Q et Q. 1 … Q. 16.{" "}
+        <strong>L&apos;ordre des colonnes n&apos;a pas d&apos;importance.</strong>
       </>
     ),
     how: (
       <>
         Même principe que les commandes clients : couleur = code avant le tiret, quantités{" "}
         <strong>Q.N</strong> décodées par la grille du produit, appariement au référentiel. Le{" "}
-        <strong>fournisseur</strong> est créé automatiquement (via « Fiche fournisseur »). Si le
-        fichier <strong>regroupe plusieurs fournisseurs</strong>, une commande est créée{" "}
-        <strong>par fournisseur</strong>.
+        <strong>fournisseur</strong> est créé automatiquement. Le fichier peut{" "}
+        <strong>regrouper plusieurs commandes / fournisseurs</strong> → une commande est créée{" "}
+        <strong>par n° de commande</strong>.
       </>
     ),
     links: (
       <>
         Rattachée à la <strong>saison choisie en haut</strong>. Une commande = <strong>une
-        saison</strong> (doublon inter-saison refusé). Si le fichier n&apos;a pas de colonne « N°
-        commande », <strong>saisis un n° de lot</strong> à l&apos;import (chaque commande sera
-        « n° - fournisseur »). C&apos;est la commande à laquelle se rattacheront ensuite les{" "}
-        <strong>réceptions</strong>.
+        saison</strong> (doublon inter-saison refusé). Le <strong>n° de commande et le
+        fournisseur sont obligatoires</strong> et lus dans le fichier. C&apos;est la commande à
+        laquelle se rattacheront ensuite les <strong>réceptions</strong>.
       </>
     ),
   },
@@ -349,13 +348,9 @@ function ImportTab({
       formData.append("file", file);
       formData.append("seasonId", seasonId);
       if (useMcs) {
-        if (supplierOrderNumber.trim()) {
-          // Commande fournisseur → n° de lot (« orderNumber ») ; réception → « supplierOrderNumber ».
-          formData.append(
-            mcsFormat === "statgen" ? "orderNumber" : "supplierOrderNumber",
-            supplierOrderNumber.trim()
-          );
-        }
+        // Réception : n° de commande facultatif (auto-rattachement sinon).
+        if (mcsFormat === "packing-list" && supplierOrderNumber.trim())
+          formData.append("supplierOrderNumber", supplierOrderNumber.trim());
       } else {
         formData.append("mapping", JSON.stringify(mapping));
       }
@@ -478,29 +473,6 @@ function ImportTab({
               {mcsRowCount > 1 ? "s" : ""}. Pas de mapping de colonnes nécessaire.
             </span>
           </div>
-
-          {mcsFormat === "statgen" && tab.id === "supplier-orders" && (
-            <div className="space-y-1.5">
-              <label htmlFor="orderNumber" className="text-sm font-medium">
-                N° de commande / lot{" "}
-                <span className="font-normal text-muted-foreground">
-                  (requis si le fichier n&apos;a pas de colonne « N° commande »)
-                </span>
-              </label>
-              <Input
-                id="orderNumber"
-                value={supplierOrderNumber}
-                onChange={(e) => setSupplierOrderNumber(e.target.value)}
-                placeholder="ex. FW26 LOT 1"
-                disabled={importing}
-              />
-              <p className="text-xs text-muted-foreground">
-                Si le fichier regroupe <strong>plusieurs fournisseurs</strong>, une commande est
-                créée par fournisseur, numérotée « <em>n° saisi</em> - <em>fournisseur</em> ». Si le
-                fichier contient déjà un n° de commande, ce champ est ignoré.
-              </p>
-            </div>
-          )}
 
           {mcsFormat === "packing-list" && (
             <div className="space-y-1.5">

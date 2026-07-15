@@ -79,16 +79,16 @@ mauvaise saison (cf. incident PE27/AH26 du 24/06/2026).
 
 Les fichiers réels MCS ne sont pas des tableaux plats → l'import les **auto-détecte**
 (`src/lib/import/mcs-format.ts`) et les parse sans mapping manuel (`mcs-mapper.ts`) :
-- **« StatGen » (commande fournisseur)** : détecté par les en-têtes `Fiche fournisseur` +
-  `Fiche produit fini` (l'**ordre des colonnes** et le **libellé du n° de commande** varient
-  selon l'export — `Numéro de commande` OU `N° commande PF fournisseur` ; repérage par nom,
-  pas par position).
+- **« StatGen » (commande fournisseur)** : détecté par `Fiche produit fini` + une mention
+  **fournisseur**, et **pas** `Fiche client`. Repérage **par nom** (ordre des colonnes
+  indifférent) : n° de commande = colonne contenant `Commande` (`N° commande PF fournisseur`),
+  **fournisseur** = `Fiche fournisseur` (ancien export) **ou** `Code fournisseur` (nouvel
+  export — attention à ne pas confondre avec « N° commande PF **fournisseur** »).
   Les colonnes `Q.N` sont des **positions** décodées en tailles **via la grille du produit**
   (`Product.sizeScale`, car elle varie : 7 tailles `S..4XL` ou 2 tailles `L,3XL`). Couleur =
-  **code avant le `-`** (`208-Cognac` → `208`). **N° de commande** : pris dans le fichier
-  s'il existe, sinon **saisi à l'import** (`orderNumber`). Un fichier **multi-fournisseurs**
-  (sans colonne n° commande) → **une commande par fournisseur**, numérotée `<n° saisi> -
-  <fournisseur>` (le n° saisi sert de n° de lot).
+  **code avant le `-`** (`208-Cognac` → `208`). **N° de commande et fournisseur sont
+  obligatoires** (lus dans le fichier). Un fichier peut regrouper **plusieurs commandes /
+  fournisseurs** → **une commande par n° de commande**.
 - **« Packing List » (réception)** : format **tolérant** — colonne référence reconnue par
   plusieurs libellés (`FULL MCS PRODUCT REF`, `REFERENCE`, `REF`, `CODE PRODUIT FINI`…),
   couleur par `COLOR CODE`/`COLOR`/`COULEUR`/`COLORIS`, **tailles repérées par leur nom**

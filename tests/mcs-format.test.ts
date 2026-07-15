@@ -15,30 +15,51 @@ function buf(aoa: (string | number)[][]): ArrayBuffer {
   return out as ArrayBuffer;
 }
 
-describe("detectMcsFormat / parseMcsStatgen — commande fournisseur SANS colonne n° commande, colonnes désordonnées", () => {
-  // Ordre volontairement différent : coloris avant la référence, pas de « N° commande ».
+describe("detectMcsFormat / parseMcsStatgen — commande fournisseur, ancien format (« Fiche fournisseur »)", () => {
+  // Ordre volontairement différent (coloris avant la référence) pour vérifier le repérage par nom.
   const grid = [
-    ["Fiche fournisseur", "Coloris produit fini", "Fiche produit fini", "Total Q", "Q. 1", "Q. 2", "Q. 3"],
-    ["LIZAY", "751-Noir", "THQCHMC_901", 50, 0, 10, 25],
-    ["IMDER", "006-Blanc", "EPOMC_C001", 12, 2, 5, 5],
-    ["", "", "TOTAL", 62, 2, 15, 30], // ligne total → ignorée
+    ["Numéro de commande", "Fiche fournisseur", "Coloris produit fini", "Fiche produit fini", "Total Q", "Q. 1", "Q. 2", "Q. 3"],
+    ["100717", "LIZAY", "751-Noir", "THQCHMC_901", 50, 0, 10, 25],
+    ["100718", "IMDER", "006-Blanc", "EPOMC_C001", 12, 2, 5, 5],
+    ["", "", "", "TOTAL", 62, 2, 15, 30], // ligne total → ignorée
   ];
 
-  it("détecte le format statgen même sans colonne n° commande", () => {
+  it("détecte le format statgen et lit n° de commande + fournisseur", () => {
     expect(detectMcsFormat(buf(grid))).toBe("statgen");
-  });
-
-  it("parse toutes les lignes avec orderNumber vide (n° saisi à l'import)", () => {
     const lines = parseMcsStatgen(buf(grid));
     expect(lines).toHaveLength(2);
     expect(lines[0]).toMatchObject({
-      orderNumber: "",
+      orderNumber: "100717",
       supplierCode: "LIZAY",
       reference: "THQCHMC_901",
       colorCode: "751",
       quantities: [0, 10, 25],
     });
-    expect(lines[1]).toMatchObject({ supplierCode: "IMDER", reference: "EPOMC_C001", colorCode: "006" });
+    expect(lines[1]).toMatchObject({ orderNumber: "100718", supplierCode: "IMDER", reference: "EPOMC_C001" });
+  });
+});
+
+describe("parseMcsStatgen — nouvel export (« Code fournisseur », pas de « Fiche fournisseur »)", () => {
+  // Reproduit le vrai fichier « OK » : le mot « fournisseur » apparaît dans « N° commande PF
+  // fournisseur » ET « Code fournisseur » → le repérage doit prendre le CODE fournisseur.
+  const grid = [
+    ["N° commande PF fournisseur", "Fiche produit fini", "Coloris produit fini", "Saison", "Total Q", "Q. 1", "Q. 2", "Q. 3", "Code fournisseur(Commande PF fournisseur)"],
+    ["100717", "RMGILE_W001", "206-Beige foncé", "W26", 30, 5, 10, 15, "ARETEX"],
+    ["100718", "RMPULL_W002", "752-Bleu marine", "W26", 12, 2, 5, 5, "WENLOS"],
+  ];
+
+  it("détecte statgen et distingue n° de commande (col 0) du code fournisseur", () => {
+    expect(detectMcsFormat(buf(grid))).toBe("statgen");
+    const lines = parseMcsStatgen(buf(grid));
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toMatchObject({
+      orderNumber: "100717",
+      supplierCode: "ARETEX",
+      reference: "RMGILE_W001",
+      colorCode: "206",
+      quantities: [5, 10, 15],
+    });
+    expect(lines[1]).toMatchObject({ orderNumber: "100718", supplierCode: "WENLOS" });
   });
 });
 

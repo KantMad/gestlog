@@ -36,12 +36,15 @@ function splitColor(raw: Cell): { code: string; name: string } {
   return { code: s.slice(0, i).trim(), name: s.slice(i + 1).trim() };
 }
 
-// En-tête d'une commande fournisseur StatGen : présence du fournisseur ET de la
-// référence produit. L'ordre des colonnes et le libellé exact du n° de commande
-// varient selon l'export TIO (« Numéro de commande » OU « N° commande PF
-// fournisseur ») → on ne s'appuie PAS sur le libellé du n° de commande pour détecter.
+// En-tête d'une commande fournisseur StatGen : référence produit + une mention
+// « fournisseur », et PAS « Fiche client » (qui caractérise une commande client).
+// Le fournisseur peut être « Fiche fournisseur » (ancien export) OU « Code
+// fournisseur » (nouvel export) ; l'ordre des colonnes et le libellé du n° de
+// commande varient → on ne s'appuie sur aucune position ni libellé exact.
 const isStatgenHeader = (cells: string[]): boolean =>
-  cells.includes("FICHE FOURNISSEUR") && cells.includes("FICHE PRODUIT FINI");
+  cells.includes("FICHE PRODUIT FINI") &&
+  !cells.includes("FICHE CLIENT") &&
+  cells.some((c) => c.includes("FOURNISSEUR"));
 
 // En-tête d'une commande CLIENT StatGen : « Fiche client » + « Fiche produit fini »
 // (et PAS « Fiche fournisseur », qui caractérise une commande fournisseur).
@@ -103,7 +106,12 @@ export function parseMcsStatgen(buffer: ArrayBuffer): McsSupplierLine[] {
     const header = (grid[h] || []).map(up);
     // Repérage par NOM (robuste à l'ordre des colonnes et au libellé du n° de commande).
     const cOrder = header.findIndex((hh) => hh.includes("COMMANDE"));
-    const cSupplier = header.findIndex((hh) => hh.includes("FOURNISSEUR"));
+    // Fournisseur : « Fiche fournisseur » (ancien) ou « Code fournisseur » (nouvel export).
+    // On évite « N° commande PF fournisseur » qui contient aussi le mot « fournisseur ».
+    let cSupplier = header.indexOf("FICHE FOURNISSEUR");
+    if (cSupplier < 0) cSupplier = header.findIndex((hh) => hh.includes("CODE FOURNISSEUR"));
+    if (cSupplier < 0)
+      cSupplier = header.findIndex((hh) => hh.includes("FOURNISSEUR") && !hh.includes("COMMANDE"));
     const cRef = header.indexOf("FICHE PRODUIT FINI");
     const cColor = header.findIndex((hh) => hh.includes("COLORIS"));
     const qCols: number[] = [];

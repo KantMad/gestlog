@@ -25,14 +25,12 @@ async function findProduct(reference: string, colorCode: string) {
 }
 
 // ----------------------------------------------- Commande fournisseur (StatGen)
-// batchNumber : n° saisi à l'import, utilisé quand le fichier ne porte PAS de colonne
-// « N° commande » (cas des fichiers multi-fournisseurs). On crée alors UNE commande par
-// fournisseur, numérotée « <lot> - <fournisseur> ». Si le fichier porte déjà un n° de
-// commande par ligne (fichier mono-fournisseur classique), on le respecte tel quel.
+// Le fichier porte OBLIGATOIREMENT le n° de commande et le fournisseur (colonnes
+// « N° commande PF fournisseur » et « Fiche/Code fournisseur »). Un fichier peut
+// regrouper plusieurs commandes / fournisseurs → on crée UNE commande par n°.
 export async function importMcsSupplierOrders(
   buffer: ArrayBuffer,
-  seasonId: string,
-  batchNumber = ""
+  seasonId: string
 ): Promise<ImportResult> {
   const lines = parseMcsStatgen(buffer);
   const errors: string[] = [];
@@ -41,28 +39,26 @@ export async function importMcsSupplierOrders(
     return { imported, errors: ["Aucune ligne détectée (format commande fournisseur MCS)."] };
   }
 
-  const batch = batchNumber.trim();
-  const hasOrderCol = lines.some((l) => l.orderNumber);
-  if (!hasOrderCol && !batch) {
+  // Le n° de commande est requis : sans colonne « N° commande » exploitable, on refuse.
+  const withOrder = lines.filter((l) => l.orderNumber);
+  if (withOrder.length === 0) {
     return {
       imported,
       errors: [
-        "Ce fichier ne contient pas de colonne « N° commande » : saisissez un n° de commande à l'import.",
+        "N° de commande introuvable dans le fichier (colonne « N° commande PF fournisseur » attendue).",
       ],
     };
   }
-
-  // Clé de commande : n° porté par la ligne si présent, sinon « <lot> - <fournisseur> »
-  // (un fichier multi-fournisseurs = une commande par fournisseur).
-  const orderKey = (l: (typeof lines)[number]) =>
-    l.orderNumber || `${batch} - ${l.supplierCode || "INCONNU"}`;
+  const skippedNoOrder = lines.length - withOrder.length;
+  if (skippedNoOrder > 0) {
+    errors.push(`${skippedNoOrder} ligne(s) ignorée(s) : n° de commande vide.`);
+  }
 
   // groupe par numéro de commande (un fichier peut en contenir plusieurs)
   const byOrder = new Map<string, typeof lines>();
-  for (const l of lines) {
-    const k = orderKey(l);
-    if (!byOrder.has(k)) byOrder.set(k, []);
-    byOrder.get(k)!.push(l);
+  for (const l of withOrder) {
+    if (!byOrder.has(l.orderNumber)) byOrder.set(l.orderNumber, []);
+    byOrder.get(l.orderNumber)!.push(l);
   }
 
   for (const [orderNumber, rows] of byOrder) {
