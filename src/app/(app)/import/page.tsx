@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, type ReactNode } from "react";
 import { useSeason, formatSeasonLabel } from "@/lib/season-context";
 import { Topbar } from "@/components/layout/topbar";
 import { PageHeader } from "@/components/layout/page-header";
@@ -34,9 +34,154 @@ import {
   AlertTriangle,
   Loader2,
   Calendar,
+  Info,
+  ChevronDown,
 } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
+import { cn } from "@/lib/utils";
+
+// Aide par onglet : format attendu, fonctionnement, et comment les liens se font.
+const IMPORT_HELP: Record<string, { format: ReactNode; how: ReactNode; links: ReactNode }> = {
+  "client-orders": {
+    format: (
+      <>
+        Export TIO <strong>StatGen « commande client »</strong>, reconnu automatiquement (aucun
+        mapping à faire). En-tête attendu : <strong>Fiche client</strong>,{" "}
+        <strong>Fiche produit fini</strong>, <strong>Coloris produit fini</strong>,{" "}
+        <strong>N° commande client</strong>, <strong>Total Q</strong> et{" "}
+        <strong>Q. 1 … Q. 16</strong>.
+      </>
+    ),
+    how: (
+      <>
+        La référence vient de « Fiche produit fini », la <strong>couleur = le code</strong> avant
+        le tiret (« 208-Cognac » → 208), et les quantités <strong>Q.N</strong> sont replacées par
+        taille via la grille du produit. Chaque ligne est appariée à un{" "}
+        <strong>produit du référentiel</strong> (réf + code couleur) ; les produits inconnus
+        (ex. <span className="font-mono">ZZZ_LOGO</span>) sont listés en erreurs — c&apos;est normal.
+      </>
+    ),
+    links: (
+      <>
+        Le <strong>client</strong> est créé/mis à jour automatiquement (via « Fiche client ») et la
+        commande est rattachée à la <strong>saison choisie en haut</strong> et à son{" "}
+        <strong>n° de commande</strong> (du fichier). ⚠️ Une commande ne peut exister que sur{" "}
+        <strong>une seule saison</strong> : si le n° existe déjà dans une autre saison, l&apos;import
+        la refuse.
+      </>
+    ),
+  },
+  "supplier-orders": {
+    format: (
+      <>
+        Export TIO <strong>StatGen « commande fournisseur »</strong>, reconnu automatiquement.
+        En-tête attendu : <strong>Fiche fournisseur</strong> + <strong>Fiche produit fini</strong>{" "}
+        (+ Coloris produit fini, un <strong>n° de commande</strong> — « Numéro de commande » ou
+        « N° commande PF fournisseur » selon l&apos;export —, Total Q et Q. 1 … Q. 16).
+      </>
+    ),
+    how: (
+      <>
+        Même principe que les commandes clients : couleur = code avant le tiret, quantités{" "}
+        <strong>Q.N</strong> décodées par la grille du produit, appariement au référentiel. Le{" "}
+        <strong>fournisseur</strong> est créé automatiquement (via « Fiche fournisseur »).
+      </>
+    ),
+    links: (
+      <>
+        Rattachée à la <strong>saison choisie en haut</strong>. Une commande = <strong>une
+        saison</strong> (doublon inter-saison refusé). C&apos;est la commande à laquelle se
+        rattacheront ensuite les <strong>réceptions</strong>.
+      </>
+    ),
+  },
+  receptions: {
+    format: (
+      <>
+        <strong>Liste de colisage (Packing List) MCS</strong>, reconnue automatiquement grâce à la
+        colonne <strong>« FULL MCS PRODUCT REF »</strong>. La référence en tiret est convertie en
+        underscore (EPOMC-C001 → EPOMC_C001), la couleur = colonne <strong>« COLOR CODE »</strong>,
+        les tailles sont en <strong>lettres</strong>.
+      </>
+    ),
+    how: (
+      <>
+        Les quantités sont <strong>additionnées sur toutes les lignes de colis</strong> (hors
+        lignes TOTAL / récapitulatif), puis chaque ligne est appariée à un produit du référentiel
+        (réf + code couleur).
+      </>
+    ),
+    links: (
+      <>
+        ⚠️ Le fichier <strong>ne contient pas</strong> le n° de commande : tu dois{" "}
+        <strong>saisir le N° de commande fournisseur</strong> au moment de l&apos;import. La
+        réception se rattache à la <strong>commande fournisseur de la même saison</strong> →{" "}
+        <strong>importe d&apos;abord la commande fournisseur</strong> (même saison), sinon
+        « commande introuvable ».
+      </>
+    ),
+  },
+  stock: {
+    format: (
+      <>
+        Fichier Excel <strong>générique</strong> avec <strong>mapping manuel</strong> des colonnes.
+        Colonnes requises : <strong>Référence</strong> + <strong>Couleur</strong>, plus des{" "}
+        <strong>colonnes de tailles</strong> (ex. S, M, L, XL… ou 36, 38, 40…) contenant les
+        quantités.
+      </>
+    ),
+    how: (
+      <>
+        Tu associes chaque colonne du fichier au champ correspondant (aperçu + mapping affichés
+        après dépôt), puis les quantités par taille sont enregistrées comme état de stock.
+      </>
+    ),
+    links: (
+      <>
+        Rattaché à la <strong>saison choisie en haut</strong>. Produits appariés au référentiel
+        par (référence, couleur).
+      </>
+    ),
+  },
+};
+
+function ImportHelp({ tabId }: { tabId: string }) {
+  const [open, setOpen] = useState(true);
+  const h = IMPORT_HELP[tabId];
+  if (!h) return null;
+  return (
+    <div className="rounded-lg border bg-muted/30">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center justify-between gap-2 px-3 py-2 text-sm font-medium"
+      >
+        <span className="flex items-center gap-2">
+          <Info className="h-4 w-4 text-blue-600" />
+          Aide — format attendu &amp; fonctionnement
+        </span>
+        <ChevronDown className={cn("h-4 w-4 transition-transform", open && "rotate-180")} />
+      </button>
+      {open && (
+        <div className="space-y-2 border-t px-3 py-3 text-sm text-muted-foreground">
+          <p>
+            <span className="font-semibold text-foreground">Format : </span>
+            {h.format}
+          </p>
+          <p>
+            <span className="font-semibold text-foreground">Fonctionnement : </span>
+            {h.how}
+          </p>
+          <p>
+            <span className="font-semibold text-foreground">Liens : </span>
+            {h.links}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface ParsedData {
   headers: string[];
@@ -288,6 +433,7 @@ function ImportTab({
 
   return (
     <div className="space-y-6">
+      <ImportHelp tabId={tab.id} />
       <Dropzone onFileSelected={handleFileSelected} />
 
       {mcsMismatch && (
