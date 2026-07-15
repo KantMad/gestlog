@@ -18,20 +18,69 @@ import {
   Truck,
   ExternalLink,
   Loader2,
+  Search,
 } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
+
+interface ReceptionRow {
+  id: string;
+  receptionNumber: string;
+  createdAt: string;
+  orderNumber: string;
+  supplierName: string;
+  supplierCode: string;
+  lineCount: number;
+  totalQty: number;
+}
 
 export default function ExportPage() {
   const { seasons, activeSeason } = useSeason();
   const [seasonId, setSeasonId] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
+  // Sélection des réceptions à exporter (multi + recherche fournisseur).
+  const [receptions, setReceptions] = useState<ReceptionRow[]>([]);
+  const [selectedRec, setSelectedRec] = useState<Set<string>>(new Set());
+  const [recSearch, setRecSearch] = useState("");
 
   useEffect(() => {
     if (!seasonId && activeSeason) setSeasonId(activeSeason.id);
   }, [activeSeason, seasonId]);
 
+  // Charge les réceptions de la saison choisie (pour le sélecteur).
+  useEffect(() => {
+    if (!seasonId) {
+      setReceptions([]);
+      setSelectedRec(new Set());
+      return;
+    }
+    fetch(`/api/import/receptions?seasonId=${seasonId}`)
+      .then((r) => r.json())
+      .then((d) => {
+        setReceptions(d.data || []);
+        setSelectedRec(new Set()); // par défaut : aucune sélection = toutes exportées
+      })
+      .catch(() => setReceptions([]));
+  }, [seasonId]);
+
   const season = seasons.find((s) => s.id === seasonId) || null;
+
+  const filteredReceptions = receptions.filter((r) => {
+    const q = recSearch.trim().toLowerCase();
+    return (
+      !q ||
+      r.supplierName.toLowerCase().includes(q) ||
+      r.supplierCode.toLowerCase().includes(q) ||
+      r.orderNumber.toLowerCase().includes(q)
+    );
+  });
+  const toggleRec = (id: string) =>
+    setSelectedRec((prev) => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
 
   // Réceptions → CSV EAN/quantité (format concaténé). Téléchargement via blob pour lire
   // les diagnostics (lignes écartées) renvoyés en en-têtes.
@@ -39,7 +88,9 @@ export default function ExportPage() {
     if (!seasonId) return;
     setBusy("receptions");
     try {
-      const res = await fetch(`/api/export/receptions?seasonId=${seasonId}`);
+      const recParam =
+        selectedRec.size > 0 ? `&receptionIds=${[...selectedRec].join(",")}` : "";
+      const res = await fetch(`/api/export/receptions?seasonId=${seasonId}${recParam}`);
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
         toast.error(j.error || "Export impossible");
@@ -48,6 +99,18 @@ export default function ExportPage() {
       const rows = Number(res.headers.get("X-Rows") || 0);
       const noSeason = Number(res.headers.get("X-Skipped-No-Season") || 0);
       const noEan = Number(res.headers.get("X-Skipped-No-Ean") || 0);
+      // Rien à exporter → on n'ouvre pas de fichier vide, on explique pourquoi.
+      if (rows === 0) {
+        if (noSeason > 0)
+          toast.error(
+            `Fichier vide : ${noSeason} ligne(s) sans code saison. Réimporte le fichier COMMANDE FOURNISSEUR (le code saison en vient) puis réessaie.`,
+            { duration: 8000 }
+          );
+        else if (noEan > 0)
+          toast.error(`Fichier vide : ${noEan} ligne(s) sans EAN au référentiel.`, { duration: 8000 });
+        else toast.warning("Aucune réception à exporter pour cette sélection.");
+        return;
+      }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -57,14 +120,10 @@ export default function ExportPage() {
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
-      if (rows === 0) {
-        toast.warning("Aucune ligne exportée (réceptions/EAN/saison manquants ?)");
-      } else {
-        toast.success(`${rows} ligne(s) exportée(s)`);
-      }
+      toast.success(`${rows} ligne(s) exportée(s)`);
       if (noSeason > 0)
-        toast.warning(`${noSeason} ligne(s) sans code saison (réimporte la commande fournisseur)`);
-      if (noEan > 0) toast.warning(`${noEan} ligne(s) sans EAN au référentiel`);
+        toast.warning(`${noSeason} ligne(s) sans code saison ignorées (réimporte la commande fournisseur)`);
+      if (noEan > 0) toast.warning(`${noEan} ligne(s) sans EAN ignorées`);
     } catch {
       toast.error("Erreur réseau");
     } finally {
@@ -198,6 +257,68 @@ export default function ExportPage() {
                   </span>
                   . Code saison lu dans le fichier commande fournisseur ; quantités à 0 exclues.
                 </p>
+
+                {/* Sélecteur de réceptions (multi + recherche fournisseur). */}
+                <div className="rounded-md border">
+                  <div className="flex items-center gap-2 border-b p-2">
+                    <div className="relative flex-1">
+                      <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                      <input
+                        value={recSearch}
+                        onChange={(e) => setRecSearch(e.target.value)}
+                        placeholder="Rechercher un fournisseur / n° commande…"
+                        className="w-full rounded border-0 bg-transparent pl-7 text-sm outline-none"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      className="text-xs text-primary hover:underline"
+                      onClick={() => setSelectedRec(new Set(filteredReceptions.map((r) => r.id)))}
+                    >
+                      Tout
+                    </button>
+                    <button
+                      type="button"
+                      className="text-xs text-muted-foreground hover:underline"
+                      onClick={() => setSelectedRec(new Set())}
+                    >
+                      Aucun
+                    </button>
+                  </div>
+                  <div className="max-h-48 overflow-y-auto p-1">
+                    {filteredReceptions.length === 0 ? (
+                      <p className="px-2 py-3 text-center text-xs text-muted-foreground">
+                        {receptions.length === 0 ? "Aucune réception pour cette saison." : "Aucun résultat."}
+                      </p>
+                    ) : (
+                      filteredReceptions.map((r) => (
+                        <label
+                          key={r.id}
+                          className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted/50"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedRec.has(r.id)}
+                            onChange={() => toggleRec(r.id)}
+                            className="h-3.5 w-3.5"
+                          />
+                          <span className="min-w-0 flex-1 truncate">
+                            <span className="font-medium">{r.supplierName}</span>{" "}
+                            <span className="text-xs text-muted-foreground">
+                              · cmd {r.orderNumber} · {r.totalQty} pcs
+                            </span>
+                          </span>
+                        </label>
+                      ))
+                    )}
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {selectedRec.size > 0
+                    ? `${selectedRec.size} réception(s) sélectionnée(s).`
+                    : "Aucune sélection = toutes les réceptions de la saison."}
+                </p>
+
                 <Button onClick={exportReceptions} disabled={!seasonId || busy !== null} className="gap-2">
                   {busy === "receptions" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
                   Exporter les réceptions

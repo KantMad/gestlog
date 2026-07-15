@@ -14,22 +14,25 @@ export async function GET(request: NextRequest) {
   try {
     const seasonId = request.nextUrl.searchParams.get("seasonId");
     if (!seasonId) return NextResponse.json({ error: "seasonId requis" }, { status: 400 });
+    // Sélection facultative de réceptions précises (sinon toutes celles de la saison).
+    const receptionIds = (request.nextUrl.searchParams.get("receptionIds") || "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
 
     const season = await prisma.season.findUnique({ where: { id: seasonId }, select: { name: true } });
 
-    const orders = await prisma.supplierOrder.findMany({
-      where: { seasonId },
+    const receptions = await prisma.supplierReception.findMany({
+      where: {
+        supplierOrder: { seasonId },
+        ...(receptionIds.length > 0 ? { id: { in: receptionIds } } : {}),
+      },
       select: {
-        orderNumber: true,
-        tioSeason: true,
-        receptions: {
+        supplierOrder: { select: { orderNumber: true, tioSeason: true } },
+        lines: {
           select: {
-            lines: {
-              select: {
-                quantitiesBySize: true,
-                product: { select: { reference: true, color: true } },
-              },
-            },
+            quantitiesBySize: true,
+            product: { select: { reference: true, color: true } },
           },
         },
       },
@@ -38,25 +41,25 @@ export async function GET(request: NextRequest) {
     // Agrégation par (commande, référence, couleur, taille) → quantité reçue totale.
     type Agg = { orderNumber: string; tioSeason: string | null; reference: string; color: string; size: string; qty: number };
     const agg = new Map<string, Agg>();
-    for (const o of orders) {
-      for (const rec of o.receptions) {
-        for (const line of rec.lines) {
-          const q = parseSizeQuantities(line.quantitiesBySize);
-          for (const [size, qty] of Object.entries(q)) {
-            if (!qty || qty <= 0) continue;
-            const key = `${o.orderNumber}|${line.product.reference}|${line.product.color}|${size}`;
-            const cur = agg.get(key);
-            if (cur) cur.qty += qty;
-            else
-              agg.set(key, {
-                orderNumber: o.orderNumber,
-                tioSeason: o.tioSeason,
-                reference: line.product.reference,
-                color: line.product.color,
-                size,
-                qty,
-              });
-          }
+    for (const rec of receptions) {
+      const orderNumber = rec.supplierOrder.orderNumber;
+      const tioSeason = rec.supplierOrder.tioSeason;
+      for (const line of rec.lines) {
+        const q = parseSizeQuantities(line.quantitiesBySize);
+        for (const [size, qty] of Object.entries(q)) {
+          if (!qty || qty <= 0) continue;
+          const key = `${orderNumber}|${line.product.reference}|${line.product.color}|${size}`;
+          const cur = agg.get(key);
+          if (cur) cur.qty += qty;
+          else
+            agg.set(key, {
+              orderNumber,
+              tioSeason,
+              reference: line.product.reference,
+              color: line.product.color,
+              size,
+              qty,
+            });
         }
       }
     }
