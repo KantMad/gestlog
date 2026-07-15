@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect, type ReactNode } from "react";
+import Link from "next/link";
 import { useSeason, formatSeasonLabel } from "@/lib/season-context";
 import { Topbar } from "@/components/layout/topbar";
 import { PageHeader } from "@/components/layout/page-header";
@@ -283,14 +284,22 @@ function RecentImports({
           <History className="h-4 w-4 text-muted-foreground" />
           Imports récents (supprimables)
         </div>
-        <button
-          type="button"
-          onClick={load}
-          className="text-xs text-muted-foreground hover:text-foreground"
-          disabled={loading}
-        >
-          {loading ? "…" : "Rafraîchir"}
-        </button>
+        <div className="flex items-center gap-3">
+          <Link
+            href="/import/receptions"
+            className="text-xs font-medium text-primary hover:underline"
+          >
+            Corriger une réception →
+          </Link>
+          <button
+            type="button"
+            onClick={load}
+            className="text-xs text-muted-foreground hover:text-foreground"
+            disabled={loading}
+          >
+            {loading ? "…" : "Rafraîchir"}
+          </button>
+        </div>
       </div>
       {logs.length === 0 ? (
         <p className="px-4 py-6 text-center text-sm text-muted-foreground">

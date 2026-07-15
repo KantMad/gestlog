@@ -6,6 +6,49 @@ import { importReception } from "@/lib/import/reception-mapper";
 import { detectMcsFormat } from "@/lib/import/mcs-format";
 import { importMcsReceptions } from "@/lib/import/mcs-mapper";
 
+// GET — Liste des réceptions d'une saison (pour l'écran de correction). La réception
+// hérite de la saison via sa commande fournisseur.
+export async function GET(request: NextRequest) {
+  try {
+    const seasonId = request.nextUrl.searchParams.get("seasonId");
+    if (!seasonId) {
+      return NextResponse.json({ error: "seasonId requis" }, { status: 400 });
+    }
+    const receptions = await prisma.supplierReception.findMany({
+      where: { supplierOrder: { seasonId } },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        receptionNumber: true,
+        receptionDate: true,
+        createdAt: true,
+        lastEditedBy: true,
+        lastEditedAt: true,
+        supplierOrder: { select: { orderNumber: true } },
+        supplier: { select: { name: true, code: true } },
+        _count: { select: { lines: true } },
+        lines: { select: { totalQuantity: true } },
+      },
+    });
+    const data = receptions.map((r) => ({
+      id: r.id,
+      receptionNumber: r.receptionNumber,
+      receptionDate: r.receptionDate,
+      createdAt: r.createdAt,
+      lastEditedBy: r.lastEditedBy,
+      lastEditedAt: r.lastEditedAt,
+      orderNumber: r.supplierOrder.orderNumber,
+      supplierName: r.supplier.name,
+      supplierCode: r.supplier.code,
+      lineCount: r._count.lines,
+      totalQty: r.lines.reduce((s, l) => s + l.totalQuantity, 0),
+    }));
+    return NextResponse.json({ data });
+  } catch (e) {
+    return handleApiError(e, "api/import/receptions#GET");
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();

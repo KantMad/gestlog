@@ -81,6 +81,28 @@ entités), puis mettent à jour les compteurs. Sur upsert (ré-import), `importL
   (affichées « non supprimable »). Suppression manuelle ponctuelle en base si besoin (avec
   sauvegarde préalable dans `/var/backups/gestlog/`).
 
+### Correction d'une réception (éditeur)
+
+Une réception importée peut être **corrigée manuellement** (ex. 2 couleurs échangées) sans
+tout réimporter.
+- **Écran** : `/import/receptions` (liste des réceptions de la **saison active**) →
+  `/import/receptions/[id]` (éditeur). Accessible depuis **Comparaison** (bouton « Corriger une
+  réception ») et le bloc « Imports récents » de `/import`. **Droits = ceux de l'écran Import**
+  (routes sous `/import` et `/api/import`, gardées par le mapping `/api/import → /import`).
+- **API** : `GET /api/import/receptions?seasonId=` (liste), `GET /api/import/receptions/[id]`
+  (détail : lignes + `colorsByReference` pour permuter la couleur), `PATCH .../[id]` (remplace
+  les lignes : résout chaque `réf + code couleur` vers un produit, refuse les inconnus et les
+  **doublons de produit**, recalcule les totaux). Journalise `lastEditedBy`/`lastEditedAt`
+  (colonnes ajoutées sur `SupplierReception`) via la session (`uid → User.name`).
+- **Échanger 2 couleurs** : sur chaque ligne, changer la couleur via le menu (les quantités
+  restent), puis enregistrer. La comparaison et le stock disponible se recalculent (lecture live
+  des `ReceptionLine`).
+
+### Comparaison commande / réception — tri fournisseurs
+
+Les fournisseurs sont **toujours triés par ordre alphabétique** (nom, insensible casse/accents),
+tri fait dans `computeComparison` → s'applique à l'écran ET à l'export Excel.
+
 ### Cloisonnement par saison (commandes & réceptions fournisseur)
 
 **Invariant : une commande fournisseur et une réception appartiennent à UNE seule saison.**

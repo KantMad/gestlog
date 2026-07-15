@@ -24,7 +24,9 @@ import {
   Download,
   ChevronDown,
   ChevronRight,
+  Pencil,
 } from "lucide-react";
+import Link from "next/link";
 import { cn } from "@/lib/utils";
 import type { ComparisonSummary } from "@/lib/comparison/engine";
 import * as XLSX from "xlsx";
@@ -218,12 +220,20 @@ export default function ComparisonPage() {
           title="Comparaison commande / réception"
           description="Analysez les écarts entre commandes fournisseurs et réceptions réelles"
           action={
-            summaries.length > 0 ? (
-              <Button variant="outline" size="sm" onClick={exportToExcel} className="gap-2">
-                <Download className="h-4 w-4" />
-                Exporter Excel
-              </Button>
-            ) : undefined
+            <div className="flex items-center gap-2">
+              <Link href="/import/receptions">
+                <Button variant="outline" size="sm" className="gap-2">
+                  <Pencil className="h-4 w-4" />
+                  Corriger une réception
+                </Button>
+              </Link>
+              {summaries.length > 0 && (
+                <Button variant="outline" size="sm" onClick={exportToExcel} className="gap-2">
+                  <Download className="h-4 w-4" />
+                  Exporter Excel
+                </Button>
+              )}
+            </div>
           }
         />
 

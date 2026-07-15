@@ -193,6 +193,8 @@ model SupplierReception {
   supplierOrderId String
   supplierId      String
   importLogId     String?  // import ayant créé cette réception → suppression d'import
+  lastEditedBy    String?  // nom de l'utilisateur ayant corrigé la réception (audit)
+  lastEditedAt    DateTime? // date de la dernière correction manuelle
   receptionDate   DateTime @default(now())
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
