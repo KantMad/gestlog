@@ -48,6 +48,23 @@ const isStatgenHeader = (cells: string[]): boolean =>
 const isClientOrderHeader = (cells: string[]): boolean =>
   cells.includes("FICHE CLIENT") && cells.includes("FICHE PRODUIT FINI");
 
+// Libellés de tailles (réceptions) : lettres OU numériques OU groupées (39-42, S/M déjà lettre).
+const SIZE_LETTERS = new Set([
+  "TU", "XS", "S", "M", "L", "XL", "XXL", "XXXL", "2XL", "3XL", "4XL", "5XL", "6XL",
+]);
+const isSizeHeader = (h: string): boolean => {
+  const u = h.replace(/\s+/g, "").toUpperCase();
+  return SIZE_LETTERS.has(u) || /^\d{2}$/.test(u) || /^\d{2}[-/]\d{2}$/.test(u);
+};
+// Colonne « référence » d'une réception : plusieurs libellés possibles selon l'export.
+const isRefHeader = (h: string): boolean =>
+  h === "FULL MCS PRODUCT REF" ||
+  h === "REFERENCE" || h === "RÉFÉRENCE" || h === "REF" ||
+  h === "CODE PRODUIT FINI" || h.includes("PRODUCT REF");
+// En-tête d'une réception (liste de colisage) : une colonne référence + ≥ 2 colonnes de tailles.
+const isPackingListHeader = (cells: string[]): boolean =>
+  cells.some(isRefHeader) && cells.filter(isSizeHeader).length >= 2;
+
 // ---------------------------------------------------------------- détection
 export function detectMcsFormat(buffer: ArrayBuffer): McsFormat | null {
   for (const { grid } of eachSheet(buffer)) {
@@ -56,6 +73,7 @@ export function detectMcsFormat(buffer: ArrayBuffer): McsFormat | null {
       if (cells.includes("FULL MCS PRODUCT REF")) return "packing-list";
       if (isStatgenHeader(cells)) return "statgen";
       if (isClientOrderHeader(cells)) return "client-order";
+      if (isPackingListHeader(cells)) return "packing-list";
     }
   }
   return null;
@@ -96,10 +114,13 @@ export function parseMcsStatgen(buffer: ArrayBuffer): McsSupplierLine[] {
     const lines: McsSupplierLine[] = [];
     for (let r = h + 1; r < grid.length; r++) {
       const row = grid[r] || [];
-      const orderNumber = norm(row[cOrder]);
       const reference = norm(row[cRef]);
-      // saute la légende de tailles (n° commande vide), les vides et les totaux
-      if (!orderNumber || !reference || reference.toUpperCase() === "TOTAL") continue;
+      // saute les lignes de légende de tailles (référence vide), les vides et les totaux
+      if (!reference || reference.toUpperCase() === "TOTAL") continue;
+      // Si le fichier a une colonne n° de commande, elle doit être remplie ; sinon
+      // (export sans n° de commande) le n° sera fourni à l'import (importOrderNumber).
+      const orderNumber = cOrder >= 0 ? norm(row[cOrder]) : "";
+      if (cOrder >= 0 && !orderNumber) continue;
       const { code, name } = splitColor(row[cColor]);
       const quantities = qCols.map((ci) => {
         const v = row[ci];
@@ -180,22 +201,24 @@ export function parseMcsClientOrders(buffer: ArrayBuffer): McsClientLine[] {
 }
 
 // ---------------------------------------------------------------- Packing List
-const SIZE_LETTERS = new Set([
-  "TU", "XS", "S", "M", "L", "XL", "XXL", "XXXL", "2XL", "3XL", "4XL", "5XL",
-]);
-
 export interface McsReceptionLine {
   reference: string;
   colorCode: string;
   colorName: string;
-  sizes: Record<string, number>; // par taille (lettre), déjà sommé sur toutes les lignes de colis
+  sizes: Record<string, number>; // par taille, déjà sommé sur toutes les lignes de colis
 }
 
+// Parseur réception TOLÉRANT : trouve la ligne d'en-tête (contenant une colonne
+// « référence », quel que soit son libellé), repère les colonnes couleur et tailles
+// PAR NOM (l'ordre n'importe pas). Gère :
+//  - le format simple (REFERENCE | COLOR | S | M | L | … | Qty), en-tête pas forcément
+//    en ligne 0 (un titre peut être au-dessus) ;
+//  - l'ancien format MCS (FULL MCS PRODUCT REF, tailles en LETTRES sur la ligne au-dessus).
 export function parseMcsPackingList(buffer: ArrayBuffer): McsReceptionLine[] {
   for (const { grid } of eachSheet(buffer)) {
     let h = -1;
     for (let r = 0; r < grid.length; r++) {
-      if ((grid[r] || []).map(up).includes("FULL MCS PRODUCT REF")) {
+      if ((grid[r] || []).map(up).some(isRefHeader)) {
         h = r;
         break;
       }
@@ -203,27 +226,41 @@ export function parseMcsPackingList(buffer: ArrayBuffer): McsReceptionLine[] {
     if (h === -1) continue;
 
     const header = (grid[h] || []).map(up);
-    const cRef = header.indexOf("FULL MCS PRODUCT REF");
-    const cCode = header.findIndex((s) => s.includes("COLOR") && s.includes("CODE"));
+    const cRef = header.findIndex(isRefHeader);
+    // couleur : « COLOR CODE » en priorité, sinon COLOR / COULEUR / COLORIS (hors DESCR).
+    let cCode = header.findIndex((s) => s.includes("COLOR") && s.includes("CODE"));
+    if (cCode < 0)
+      cCode = header.findIndex(
+        (s) => (s.includes("COLOR") || s.includes("COULEUR") || s.includes("COLORIS")) && !s.includes("DESCR")
+      );
     const cName = header.findIndex((s) => s.includes("DESCR") && s.includes("COLOR"));
 
-    // Tailles : lettres situées sur la ligne juste au-dessus de l'en-tête.
-    const letterRow = (grid[h - 1] || []).map(up);
-    const sizeCols: { col: number; size: string }[] = [];
-    letterRow.forEach((lab, i) => {
-      const u = lab.replace(/\s+/g, "");
-      if (SIZE_LETTERS.has(u)) sizeCols.push({ col: i, size: u });
-    });
+    const colsFrom = (rowUp: string[]) => {
+      const out: { col: number; size: string }[] = [];
+      rowUp.forEach((lab, i) => {
+        if (isSizeHeader(lab)) out.push({ col: i, size: lab.replace(/\s+/g, "").toUpperCase() });
+      });
+      return out;
+    };
+    // Ancien format MCS : les tailles (lettres) sont sur la ligne AU-DESSUS de l'en-tête.
+    // Sinon : les tailles sont dans la ligne d'en-tête elle-même.
+    const isOldMcs = header[cRef] === "FULL MCS PRODUCT REF";
+    let sizeCols = isOldMcs
+      ? colsFrom((grid[h - 1] || []).map(up)).filter((x) => SIZE_LETTERS.has(x.size))
+      : colsFrom(header);
+    if (sizeCols.length === 0) continue;
 
     const agg = new Map<string, McsReceptionLine>();
     for (let r = h + 1; r < grid.length; r++) {
       const row = grid[r] || [];
-      // fin de la section détail : on tombe sur le 2e en-tête (= début du récapitulatif)
-      if (up(row[cRef]) === "FULL MCS PRODUCT REF") break;
+      // fin de la section détail : 2e en-tête (récapitulatif) ou ligne TOTAL
+      if (isRefHeader(up(row[cRef]))) break;
       const refCell = norm(row[cRef]);
       if (!refCell || refCell.toUpperCase() === "TOTAL") continue;
       const reference = refCell.replace(/-/g, "_"); // tiret → underscore (format référentiel)
-      const colorCode = norm(row[cCode]);
+      // couleur = code (on retire un éventuel « -Nom »)
+      const rawColor = norm(row[cCode]);
+      const colorCode = rawColor.includes("-") ? rawColor.slice(0, rawColor.indexOf("-")).trim() : rawColor;
       const key = `${reference}__${colorCode}`;
       let entry = agg.get(key);
       if (!entry) {

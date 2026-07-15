@@ -25,14 +25,9 @@ export async function POST(request: NextRequest) {
 
     let result;
     if (detectMcsFormat(buffer) === "packing-list") {
-      // Format MCS (liste de colisage) : parsing dédié + n° de commande saisi.
-      if (!supplierOrderNumber) {
-        return NextResponse.json(
-          { error: "N° de commande fournisseur requis pour ce fichier" },
-          { status: 400 }
-        );
-      }
-      result = await importMcsReceptions(buffer, seasonId, supplierOrderNumber, recNumber);
+      // Format MCS (liste de colisage) : parsing dédié. Le n° de commande est
+      // facultatif — sinon la réception est rattachée automatiquement via ses produits.
+      result = await importMcsReceptions(buffer, seasonId, supplierOrderNumber || "", recNumber);
     } else {
       // Format générique : mapping de colonnes requis.
       if (!mappingJson) {

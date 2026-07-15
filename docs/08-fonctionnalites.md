@@ -85,11 +85,20 @@ Les fichiers réels MCS ne sont pas des tableaux plats → l'import les **auto-d
   pas par position).
   Les colonnes `Q.N` sont des **positions** décodées en tailles **via la grille du produit**
   (`Product.sizeScale`, car elle varie : 7 tailles `S..4XL` ou 2 tailles `L,3XL`). Couleur =
-  **code avant le `-`** (`208-Cognac` → `208`). N° de commande présent dans le fichier.
-- **« Packing List » (réception)** : en-tête enfoui (~ligne 18), réf **tiret→underscore**
-  (`EPOMC-C001` → `EPOMC_C001`), couleur = colonne `COLOR CODE`, tailles en **lettres**,
-  **somme des lignes de colis** (hors `TOTAL`/récap). **N° de commande fournisseur saisi à
-  l'import** (absent du fichier) → la réception se rattache à la commande.
+  **code avant le `-`** (`208-Cognac` → `208`). **N° de commande** : pris dans le fichier
+  s'il existe, sinon **saisi à l'import** (`orderNumber`). Un fichier **multi-fournisseurs**
+  (sans colonne n° commande) → **une commande par fournisseur**, numérotée `<n° saisi> -
+  <fournisseur>` (le n° saisi sert de n° de lot).
+- **« Packing List » (réception)** : format **tolérant** — colonne référence reconnue par
+  plusieurs libellés (`FULL MCS PRODUCT REF`, `REFERENCE`, `REF`, `CODE PRODUIT FINI`…),
+  couleur par `COLOR CODE`/`COLOR`/`COULEUR`/`COLORIS`, **tailles repérées par leur nom**
+  (`S,M,L,XL,2XL…` OU numériques `36,38,40…`, **ordre indifférent**). En-tête pas forcément
+  en ligne 0 (un titre peut être au-dessus). Réf **tiret→underscore** (`EPOMC-C001` →
+  `EPOMC_C001`), **somme des lignes de colis** (hors `TOTAL`/récap). Ancien format MCS
+  (tailles en lettres sur la ligne **au-dessus** de l'en-tête) toujours supporté.
+  **N° de commande fournisseur facultatif** : laissé vide → **rattachement automatique** à
+  la commande fournisseur de la même saison qui contient le plus de produits reçus ; sinon
+  le n° saisi force une commande précise.
 - **« StatGen » (commande client)** : détecté par `Fiche client` + `Fiche produit fini` (et
   PAS `Fiche fournisseur`). `N° commande client` + nom client (`Raison sociale`), couleur par
   code, `Q.N` décodé par produit. **Optimisé gros volume** (8000+ lignes / 200+ commandes) :

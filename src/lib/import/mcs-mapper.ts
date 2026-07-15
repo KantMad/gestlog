@@ -25,9 +25,14 @@ async function findProduct(reference: string, colorCode: string) {
 }
 
 // ----------------------------------------------- Commande fournisseur (StatGen)
+// batchNumber : n° saisi à l'import, utilisé quand le fichier ne porte PAS de colonne
+// « N° commande » (cas des fichiers multi-fournisseurs). On crée alors UNE commande par
+// fournisseur, numérotée « <lot> - <fournisseur> ». Si le fichier porte déjà un n° de
+// commande par ligne (fichier mono-fournisseur classique), on le respecte tel quel.
 export async function importMcsSupplierOrders(
   buffer: ArrayBuffer,
-  seasonId: string
+  seasonId: string,
+  batchNumber = ""
 ): Promise<ImportResult> {
   const lines = parseMcsStatgen(buffer);
   const errors: string[] = [];
@@ -36,11 +41,28 @@ export async function importMcsSupplierOrders(
     return { imported, errors: ["Aucune ligne détectée (format commande fournisseur MCS)."] };
   }
 
+  const batch = batchNumber.trim();
+  const hasOrderCol = lines.some((l) => l.orderNumber);
+  if (!hasOrderCol && !batch) {
+    return {
+      imported,
+      errors: [
+        "Ce fichier ne contient pas de colonne « N° commande » : saisissez un n° de commande à l'import.",
+      ],
+    };
+  }
+
+  // Clé de commande : n° porté par la ligne si présent, sinon « <lot> - <fournisseur> »
+  // (un fichier multi-fournisseurs = une commande par fournisseur).
+  const orderKey = (l: (typeof lines)[number]) =>
+    l.orderNumber || `${batch} - ${l.supplierCode || "INCONNU"}`;
+
   // groupe par numéro de commande (un fichier peut en contenir plusieurs)
   const byOrder = new Map<string, typeof lines>();
   for (const l of lines) {
-    if (!byOrder.has(l.orderNumber)) byOrder.set(l.orderNumber, []);
-    byOrder.get(l.orderNumber)!.push(l);
+    const k = orderKey(l);
+    if (!byOrder.has(k)) byOrder.set(k, []);
+    byOrder.get(k)!.push(l);
   }
 
   for (const [orderNumber, rows] of byOrder) {
@@ -130,24 +152,65 @@ export async function importMcsReceptions(
   const errors: string[] = [];
   let imported = 0;
 
-  const orderNum = (supplierOrderNumber || "").trim();
-  if (!orderNum) return { imported, errors: ["N° de commande fournisseur requis pour la réception."] };
-
   const lines = parseMcsPackingList(buffer);
   if (lines.length === 0) {
     return { imported, errors: ["Aucune ligne détectée (format liste de colisage MCS)."] };
   }
 
-  const supplierOrder = await prisma.supplierOrder.findUnique({
-    where: { orderNumber_seasonId: { orderNumber: orderNum, seasonId } },
-  });
-  if (!supplierOrder) {
-    return {
-      imported,
-      errors: [
-        `Commande fournisseur ${orderNum} introuvable pour cette saison — importez-la d'abord.`,
-      ],
-    };
+  // Résolution des produits (une seule fois) — sert aussi à l'auto-rattachement.
+  const resolved: { productId: string; quantities: Record<string, number> }[] = [];
+  for (const line of lines) {
+    const product = await findProduct(line.reference, line.colorCode);
+    if (!product) {
+      errors.push(`Réception : produit introuvable ${line.reference} / ${line.colorCode}`);
+      continue;
+    }
+    const quantities: Record<string, number> = {};
+    for (const [size, q] of Object.entries(line.sizes)) if (q > 0) quantities[size] = q;
+    if (Object.keys(quantities).length === 0) continue;
+    resolved.push({ productId: product.id, quantities });
+  }
+  if (resolved.length === 0) {
+    return { imported, errors: errors.length ? errors : ["Aucun produit reconnu dans la réception."] };
+  }
+
+  // Détermination de la commande fournisseur à rattacher :
+  //  1. n° saisi à l'import (prioritaire) ;
+  //  2. sinon auto-rattachement : la commande de CETTE saison qui contient le plus de
+  //     produits reçus (les fichiers de colisage n'ont pas de n° de commande).
+  const orderNum = (supplierOrderNumber || "").trim();
+  let supplierOrder: { id: string; supplierId: string } | null = null;
+  if (orderNum) {
+    supplierOrder = await prisma.supplierOrder.findUnique({
+      where: { orderNumber_seasonId: { orderNumber: orderNum, seasonId } },
+    });
+    if (!supplierOrder) {
+      return {
+        imported,
+        errors: [`Commande fournisseur ${orderNum} introuvable pour cette saison — importez-la d'abord.`],
+      };
+    }
+  } else {
+    const productIds = resolved.map((r) => r.productId);
+    const solLines = await prisma.supplierOrderLine.findMany({
+      where: { productId: { in: productIds }, supplierOrder: { seasonId } },
+      select: { supplierOrderId: true },
+    });
+    if (solLines.length === 0) {
+      return {
+        imported,
+        errors: [
+          "Impossible de rattacher automatiquement la réception : aucune commande fournisseur de cette saison ne contient ces produits. Saisissez le n° de commande.",
+        ],
+      };
+    }
+    const counts = new Map<string, number>();
+    for (const s of solLines) counts.set(s.supplierOrderId, (counts.get(s.supplierOrderId) || 0) + 1);
+    const bestId = [...counts.entries()].sort((a, b) => b[1] - a[1])[0][0];
+    supplierOrder = await prisma.supplierOrder.findUnique({ where: { id: bestId } });
+    if (!supplierOrder) {
+      return { imported, errors: ["Commande fournisseur rattachée introuvable (incohérence)."] };
+    }
   }
 
   const reception = await prisma.supplierReception.create({
@@ -158,20 +221,11 @@ export async function importMcsReceptions(
     },
   });
 
-  for (const line of lines) {
-    const product = await findProduct(line.reference, line.colorCode);
-    if (!product) {
-      errors.push(`Réception : produit introuvable ${line.reference} / ${line.colorCode}`);
-      continue;
-    }
-    const quantities: Record<string, number> = {};
-    for (const [size, q] of Object.entries(line.sizes)) if (q > 0) quantities[size] = q;
-    if (Object.keys(quantities).length === 0) continue;
-
+  for (const { productId, quantities } of resolved) {
     await prisma.receptionLine.create({
       data: {
         supplierReceptionId: reception.id,
-        productId: product.id,
+        productId,
         quantitiesBySize: stringifySizeQuantities(quantities),
         totalQuantity: sumQuantities(quantities),
       },

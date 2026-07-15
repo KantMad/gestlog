@@ -77,48 +77,55 @@ const IMPORT_HELP: Record<string, { format: ReactNode; how: ReactNode; links: Re
       <>
         Export TIO <strong>StatGen « commande fournisseur »</strong>, reconnu automatiquement.
         En-tête attendu : <strong>Fiche fournisseur</strong> + <strong>Fiche produit fini</strong>{" "}
-        (+ Coloris produit fini, un <strong>n° de commande</strong> — « Numéro de commande » ou
-        « N° commande PF fournisseur » selon l&apos;export —, Total Q et Q. 1 … Q. 16).
+        (+ Coloris produit fini, Total Q et Q. 1 … Q. 16). Le <strong>n° de commande</strong> est
+        pris dans le fichier s&apos;il existe ; <strong>l&apos;ordre des colonnes n&apos;a pas
+        d&apos;importance</strong>.
       </>
     ),
     how: (
       <>
         Même principe que les commandes clients : couleur = code avant le tiret, quantités{" "}
         <strong>Q.N</strong> décodées par la grille du produit, appariement au référentiel. Le{" "}
-        <strong>fournisseur</strong> est créé automatiquement (via « Fiche fournisseur »).
+        <strong>fournisseur</strong> est créé automatiquement (via « Fiche fournisseur »). Si le
+        fichier <strong>regroupe plusieurs fournisseurs</strong>, une commande est créée{" "}
+        <strong>par fournisseur</strong>.
       </>
     ),
     links: (
       <>
         Rattachée à la <strong>saison choisie en haut</strong>. Une commande = <strong>une
-        saison</strong> (doublon inter-saison refusé). C&apos;est la commande à laquelle se
-        rattacheront ensuite les <strong>réceptions</strong>.
+        saison</strong> (doublon inter-saison refusé). Si le fichier n&apos;a pas de colonne « N°
+        commande », <strong>saisis un n° de lot</strong> à l&apos;import (chaque commande sera
+        « n° - fournisseur »). C&apos;est la commande à laquelle se rattacheront ensuite les{" "}
+        <strong>réceptions</strong>.
       </>
     ),
   },
   receptions: {
     format: (
       <>
-        <strong>Liste de colisage (Packing List) MCS</strong>, reconnue automatiquement grâce à la
-        colonne <strong>« FULL MCS PRODUCT REF »</strong>. La référence en tiret est convertie en
-        underscore (EPOMC-C001 → EPOMC_C001), la couleur = colonne <strong>« COLOR CODE »</strong>,
-        les tailles sont en <strong>lettres</strong>.
+        <strong>Liste de colisage (Packing List)</strong>, reconnue automatiquement. Il faut une
+        colonne <strong>référence</strong> (« FULL MCS PRODUCT REF », « REFERENCE »…), une colonne{" "}
+        <strong>couleur</strong> (« COLOR CODE », « COLOR »…) et des <strong>colonnes de tailles</strong>{" "}
+        (S, M, L, XL, 2XL… ou 36, 38, 40…). L&apos;<strong>ordre des colonnes n&apos;a pas
+        d&apos;importance</strong> et la référence en tiret est convertie en underscore (EPOMC-C001
+        → EPOMC_C001).
       </>
     ),
     how: (
       <>
-        Les quantités sont <strong>additionnées sur toutes les lignes de colis</strong> (hors
-        lignes TOTAL / récapitulatif), puis chaque ligne est appariée à un produit du référentiel
-        (réf + code couleur).
+        Les tailles sont repérées <strong>par leur nom</strong> (pas par leur position). Les
+        quantités sont <strong>additionnées sur toutes les lignes de colis</strong> (hors lignes
+        TOTAL / récapitulatif), puis chaque ligne est appariée à un produit du référentiel (réf +
+        code couleur).
       </>
     ),
     links: (
       <>
-        ⚠️ Le fichier <strong>ne contient pas</strong> le n° de commande : tu dois{" "}
-        <strong>saisir le N° de commande fournisseur</strong> au moment de l&apos;import. La
-        réception se rattache à la <strong>commande fournisseur de la même saison</strong> →{" "}
-        <strong>importe d&apos;abord la commande fournisseur</strong> (même saison), sinon
-        « commande introuvable ».
+        Le n° de commande fournisseur est <strong>facultatif</strong> : laissé vide, la réception
+        est <strong>rattachée automatiquement</strong> à la commande fournisseur de la même saison
+        qui contient ces produits (<strong>importe d&apos;abord la commande fournisseur</strong>).
+        Tu peux saisir un n° pour forcer une commande précise.
       </>
     ),
   },
@@ -325,10 +332,8 @@ function ImportTab({
     if (!file || !parsed) return;
 
     if (useMcs) {
-      if (mcsFormat === "packing-list" && !supplierOrderNumber.trim()) {
-        toast.error("Entrez le n° de commande fournisseur de la réception");
-        return;
-      }
+      // N° de commande : facultatif pour la réception (auto-rattachement via les produits),
+      // mais requis pour une commande fournisseur SANS colonne « N° commande ».
     } else {
       const requiredFields = tab.fields.filter((f) => f.required);
       const missing = requiredFields.filter((f) => !mapping[f.key]);
@@ -344,8 +349,13 @@ function ImportTab({
       formData.append("file", file);
       formData.append("seasonId", seasonId);
       if (useMcs) {
-        if (supplierOrderNumber.trim())
-          formData.append("supplierOrderNumber", supplierOrderNumber.trim());
+        if (supplierOrderNumber.trim()) {
+          // Commande fournisseur → n° de lot (« orderNumber ») ; réception → « supplierOrderNumber ».
+          formData.append(
+            mcsFormat === "statgen" ? "orderNumber" : "supplierOrderNumber",
+            supplierOrderNumber.trim()
+          );
+        }
       } else {
         formData.append("mapping", JSON.stringify(mapping));
       }
@@ -469,21 +479,46 @@ function ImportTab({
             </span>
           </div>
 
+          {mcsFormat === "statgen" && tab.id === "supplier-orders" && (
+            <div className="space-y-1.5">
+              <label htmlFor="orderNumber" className="text-sm font-medium">
+                N° de commande / lot{" "}
+                <span className="font-normal text-muted-foreground">
+                  (requis si le fichier n&apos;a pas de colonne « N° commande »)
+                </span>
+              </label>
+              <Input
+                id="orderNumber"
+                value={supplierOrderNumber}
+                onChange={(e) => setSupplierOrderNumber(e.target.value)}
+                placeholder="ex. FW26 LOT 1"
+                disabled={importing}
+              />
+              <p className="text-xs text-muted-foreground">
+                Si le fichier regroupe <strong>plusieurs fournisseurs</strong>, une commande est
+                créée par fournisseur, numérotée « <em>n° saisi</em> - <em>fournisseur</em> ». Si le
+                fichier contient déjà un n° de commande, ce champ est ignoré.
+              </p>
+            </div>
+          )}
+
           {mcsFormat === "packing-list" && (
             <div className="space-y-1.5">
               <label htmlFor="supplierOrderNumber" className="text-sm font-medium">
-                N° de commande fournisseur
+                N° de commande fournisseur{" "}
+                <span className="font-normal text-muted-foreground">(facultatif)</span>
               </label>
               <Input
                 id="supplierOrderNumber"
                 value={supplierOrderNumber}
                 onChange={(e) => setSupplierOrderNumber(e.target.value)}
-                placeholder="ex. 100739"
+                placeholder="laisser vide = rattachement automatique"
                 disabled={importing}
               />
               <p className="text-xs text-muted-foreground">
-                La réception sera rattachée à cette commande (importe d'abord la commande
-                fournisseur correspondante).
+                Laissé vide, la réception est <strong>rattachée automatiquement</strong> à la
+                commande fournisseur de la saison qui contient ces produits. Renseigne-le pour
+                forcer une commande précise.
               </p>
             </div>
           )}
