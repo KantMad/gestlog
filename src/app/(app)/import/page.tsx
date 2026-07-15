@@ -36,6 +36,8 @@ import {
   Calendar,
   Info,
   ChevronDown,
+  Trash2,
+  History,
 } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
@@ -196,6 +198,179 @@ interface ParsedData {
   rows: Record<string, string | number | null>[];
 }
 
+// Libellés + entité supprimée par type d'import (pour l'écran « imports récents »).
+const IMPORT_TYPE_LABEL: Record<string, { label: string; unit: string }> = {
+  CLIENT_ORDER: { label: "Commandes clients", unit: "commande(s)" },
+  SUPPLIER_ORDER: { label: "Commandes fournisseurs", unit: "commande(s)" },
+  RECEPTION: { label: "Réception", unit: "réception(s)" },
+  STOCK: { label: "Stock", unit: "entrée(s)" },
+  SIZE_TYPE: { label: "Types de taille", unit: "" },
+  SUPPLIER_REF: { label: "Réf. fournisseurs", unit: "" },
+  EAN: { label: "Codes EAN", unit: "" },
+};
+
+interface ImportLogRow {
+  id: string;
+  importType: string;
+  fileName: string;
+  rowCount: number;
+  errorCount: number;
+  importedAt: string;
+  liveCount: number;
+  deletable: boolean;
+}
+
+// Liste des imports récents de la saison, avec suppression (annule un import raté).
+function RecentImports({
+  seasonId,
+  refreshKey,
+  onChanged,
+}: {
+  seasonId: string;
+  refreshKey: number;
+  onChanged: () => void;
+}) {
+  const [logs, setLogs] = useState<ImportLogRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [pendingId, setPendingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    fetch(`/api/import/logs?seasonId=${seasonId}`)
+      .then((r) => r.json())
+      .then((d) => setLogs(d.data || []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [seasonId]);
+
+  useEffect(() => {
+    load();
+  }, [load, refreshKey]);
+
+  const doDelete = async (log: ImportLogRow) => {
+    setDeletingId(log.id);
+    try {
+      const res = await fetch(`/api/import/logs/${log.id}`, { method: "DELETE" });
+      const json = await res.json();
+      if (!res.ok) {
+        toast.error(json.error || "Suppression impossible");
+        return;
+      }
+      toast.success(json.data?.detail || "Import supprimé");
+      setPendingId(null);
+      load();
+      onChanged();
+    } catch {
+      toast.error("Erreur réseau");
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const fmtDate = (iso: string) =>
+    new Date(iso).toLocaleString("fr-FR", {
+      day: "2-digit",
+      month: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+  return (
+    <div className="mt-8 rounded-lg border">
+      <div className="flex items-center justify-between border-b bg-muted/30 px-4 py-3">
+        <div className="flex items-center gap-2 text-sm font-semibold">
+          <History className="h-4 w-4 text-muted-foreground" />
+          Imports récents (supprimables)
+        </div>
+        <button
+          type="button"
+          onClick={load}
+          className="text-xs text-muted-foreground hover:text-foreground"
+          disabled={loading}
+        >
+          {loading ? "…" : "Rafraîchir"}
+        </button>
+      </div>
+      {logs.length === 0 ? (
+        <p className="px-4 py-6 text-center text-sm text-muted-foreground">
+          {loading ? "Chargement…" : "Aucun import pour cette saison."}
+        </p>
+      ) : (
+        <ul className="divide-y">
+          {logs.map((log) => {
+            const t = IMPORT_TYPE_LABEL[log.importType] || { label: log.importType, unit: "" };
+            const canDelete = log.deletable && log.liveCount > 0;
+            return (
+              <li key={log.id} className="flex items-center gap-3 px-4 py-2.5 text-sm">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="rounded bg-secondary px-1.5 py-0.5 text-xs font-medium">
+                      {t.label}
+                    </span>
+                    <span className="truncate text-muted-foreground" title={log.fileName}>
+                      {log.fileName}
+                    </span>
+                  </div>
+                  <div className="mt-0.5 text-xs text-muted-foreground">
+                    {fmtDate(log.importedAt)} · {log.rowCount} ligne{log.rowCount > 1 ? "s" : ""}
+                    {log.errorCount > 0 ? ` · ${log.errorCount} err` : ""}
+                    {log.deletable
+                      ? ` · ${log.liveCount} ${t.unit} en base`
+                      : " · non supprimable"}
+                  </div>
+                </div>
+                {canDelete &&
+                  (pendingId === log.id ? (
+                    <div className="flex shrink-0 items-center gap-1">
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        className="h-7"
+                        disabled={deletingId === log.id}
+                        onClick={() => doDelete(log)}
+                      >
+                        {deletingId === log.id ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          "Confirmer"
+                        )}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7"
+                        onClick={() => setPendingId(null)}
+                        disabled={deletingId === log.id}
+                      >
+                        Annuler
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 shrink-0 text-destructive hover:bg-destructive/10"
+                      onClick={() => setPendingId(log.id)}
+                    >
+                      <Trash2 className="mr-1 h-3.5 w-3.5" />
+                      Supprimer
+                    </Button>
+                  ))}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      <p className="border-t px-4 py-2 text-xs text-muted-foreground">
+        Supprimer un import efface les données qu&apos;il a créées (commandes / réceptions /
+        stock). ⚠️ Supprimer une <strong>commande fournisseur</strong> supprime aussi ses{" "}
+        <strong>réceptions</strong>. Les imports antérieurs au suivi affichent « non supprimable ».
+      </p>
+    </div>
+  );
+}
+
 const IMPORT_TABS = [
   {
     id: "client-orders",
@@ -260,10 +435,12 @@ function ImportTab({
   tab,
   seasonId,
   seasonLabel,
+  onImported,
 }: {
   tab: (typeof IMPORT_TABS)[number];
   seasonId: string;
   seasonLabel: string;
+  onImported: () => void;
 }) {
   const [parsed, setParsed] = useState<ParsedData | null>(null);
   const [file, setFile] = useState<File | null>(null);
@@ -367,6 +544,7 @@ function ImportTab({
       }
 
       setResult(json.data);
+      onImported();
       const createdSuffix = json.data.created ? ` (${json.data.created} produit(s) créé(s))` : "";
       if (json.data.errors.length === 0) {
         toast.success(`${json.data.imported} lignes importées${createdSuffix}`);
@@ -545,6 +723,9 @@ export default function ImportPage() {
   // Saison CIBLE de l'import, choisie explicitement (≠ saison active globale).
   // Évite d'importer par erreur dans la saison active courante.
   const [importSeasonId, setImportSeasonId] = useState("");
+  // Incrémenté après chaque import/suppression → rafraîchit la liste « imports récents ».
+  const [refreshKey, setRefreshKey] = useState(0);
+  const bumpRefresh = useCallback(() => setRefreshKey((k) => k + 1), []);
 
   useEffect(() => {
     if (!importSeasonId && activeSeason) setImportSeasonId(activeSeason.id);
@@ -621,10 +802,18 @@ export default function ImportPage() {
                         tab={tab}
                         seasonId={importSeason.id}
                         seasonLabel={formatSeasonLabel(importSeason)}
+                        onImported={bumpRefresh}
                       />
                     </TabsContent>
                   ))}
                 </Tabs>
+              )}
+              {importSeason && (
+                <RecentImports
+                  seasonId={importSeason.id}
+                  refreshKey={refreshKey}
+                  onChanged={bumpRefresh}
+                />
               )}
             </CardContent>
           </Card>

@@ -14,7 +14,8 @@ export interface SupplierOrderMapping {
 export async function importSupplierOrders(
   sheet: ParsedSheet,
   mapping: SupplierOrderMapping,
-  seasonId: string
+  seasonId: string,
+  importLogId?: string
 ) {
   const sizeColumns = detectSizeColumns(sheet.headers);
   const errors: string[] = [];
@@ -59,11 +60,12 @@ export async function importSupplierOrders(
 
       const supplierOrder = await prisma.supplierOrder.upsert({
         where: { orderNumber_seasonId: { orderNumber, seasonId } },
-        update: {},
+        update: { importLogId },
         create: {
           orderNumber,
           seasonId,
           supplierId: supplier.id,
+          importLogId,
         },
       });
 

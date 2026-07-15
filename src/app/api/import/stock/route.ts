@@ -34,6 +34,11 @@ export async function POST(request: NextRequest) {
     const errors: string[] = [];
     let imported = 0;
 
+    // Log créé d'abord → son id tague les entrées de stock (permet de supprimer l'import).
+    const log = await prisma.importLog.create({
+      data: { seasonId, importType: "STOCK", fileName: file.name, rowCount: 0 },
+    });
+
     for (const row of sheet.rows) {
       const reference = String(row[mapping.reference] || "").trim();
       const color = String(row[mapping.color] || "").trim();
@@ -60,17 +65,16 @@ export async function POST(request: NextRequest) {
           productId: product.id,
           quantitiesBySize: stringifySizeQuantities(quantities),
           totalQuantity: sumQuantities(quantities),
+          importLogId: log.id,
         },
       });
 
       imported++;
     }
 
-    await prisma.importLog.create({
+    await prisma.importLog.update({
+      where: { id: log.id },
       data: {
-        seasonId,
-        importType: "STOCK",
-        fileName: file.name,
         rowCount: imported,
         errorCount: errors.length,
         errors: errors.length > 0 ? JSON.stringify(errors) : null,

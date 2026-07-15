@@ -22,14 +22,11 @@ export async function POST(request: NextRequest) {
 
     const buffer = await file.arrayBuffer();
     const recNumber = receptionNumber || `REC-${Date.now()}`;
+    const isMcs = detectMcsFormat(buffer) === "packing-list";
 
-    let result;
-    if (detectMcsFormat(buffer) === "packing-list") {
-      // Format MCS (liste de colisage) : parsing dédié. Le n° de commande est
-      // facultatif — sinon la réception est rattachée automatiquement via ses produits.
-      result = await importMcsReceptions(buffer, seasonId, supplierOrderNumber || "", recNumber);
-    } else {
-      // Format générique : mapping de colonnes requis.
+    // Validation AVANT la création du log (pas de log orphelin sur erreur 400).
+    let sheet;
+    if (!isMcs) {
       if (!mappingJson) {
         return NextResponse.json({ error: "Mapping des colonnes requis" }, { status: 400 });
       }
@@ -37,14 +34,27 @@ export async function POST(request: NextRequest) {
       if (sheets.length === 0 || sheets[0].rows.length === 0) {
         return NextResponse.json({ error: "Fichier vide ou format invalide" }, { status: 400 });
       }
-      result = await importReception(sheets[0], JSON.parse(mappingJson), seasonId, recNumber);
+      sheet = sheets[0];
     }
 
-    await prisma.importLog.create({
+    // Log créé d'abord → son id tague la réception créée (permet de supprimer l'import).
+    const log = await prisma.importLog.create({
+      data: { seasonId, importType: "RECEPTION", fileName: file.name, rowCount: 0 },
+    });
+
+    let result;
+    try {
+      result = isMcs
+        ? await importMcsReceptions(buffer, seasonId, supplierOrderNumber || "", recNumber, log.id)
+        : await importReception(sheet!, JSON.parse(mappingJson!), seasonId, recNumber, log.id);
+    } catch (e) {
+      await prisma.importLog.delete({ where: { id: log.id } }).catch(() => {});
+      throw e;
+    }
+
+    await prisma.importLog.update({
+      where: { id: log.id },
       data: {
-        seasonId,
-        importType: "RECEPTION",
-        fileName: file.name,
         rowCount: result.imported,
         errorCount: result.errors.length,
         errors: result.errors.length > 0 ? JSON.stringify(result.errors) : null,

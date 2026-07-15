@@ -13,7 +13,8 @@ export async function importReception(
   sheet: ParsedSheet,
   mapping: ReceptionMapping,
   seasonId: string,
-  receptionNumber: string
+  receptionNumber: string,
+  importLogId?: string
 ) {
   const sizeColumns = detectSizeColumns(sheet.headers);
   const errors: string[] = [];
@@ -41,6 +42,7 @@ export async function importReception(
         receptionNumber,
         supplierOrderId: supplierOrder.id,
         supplierId: supplierOrder.supplierId,
+        importLogId,
       },
     });
 

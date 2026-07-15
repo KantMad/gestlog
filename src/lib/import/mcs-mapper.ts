@@ -31,7 +31,8 @@ async function findProduct(reference: string, colorCode: string) {
 // regrouper plusieurs commandes / fournisseurs → on crée UNE commande par n°.
 export async function importMcsSupplierOrders(
   buffer: ArrayBuffer,
-  seasonId: string
+  seasonId: string,
+  importLogId?: string
 ): Promise<ImportResult> {
   const lines = parseMcsStatgen(buffer);
   const errors: string[] = [];
@@ -86,8 +87,8 @@ export async function importMcsSupplierOrders(
     });
     const supplierOrder = await prisma.supplierOrder.upsert({
       where: { orderNumber_seasonId: { orderNumber, seasonId } },
-      update: {},
-      create: { orderNumber, seasonId, supplierId: supplier.id },
+      update: { importLogId },
+      create: { orderNumber, seasonId, supplierId: supplier.id, importLogId },
     });
 
     const keptProductIds: string[] = [];
@@ -169,7 +170,8 @@ export async function importMcsReceptions(
   buffer: ArrayBuffer,
   seasonId: string,
   supplierOrderNumber: string,
-  receptionNumber: string
+  receptionNumber: string,
+  importLogId?: string
 ): Promise<ImportResult> {
   const errors: string[] = [];
   let imported = 0;
@@ -240,6 +242,7 @@ export async function importMcsReceptions(
       receptionNumber,
       supplierOrderId: supplierOrder.id,
       supplierId: supplierOrder.supplierId,
+      importLogId,
     },
   });
 
@@ -269,7 +272,8 @@ export async function importMcsReceptions(
 // createMany dans une transaction). Préserve les annulations (soldes) au ré-import.
 export async function importMcsClientOrders(
   buffer: ArrayBuffer,
-  seasonId: string
+  seasonId: string,
+  importLogId?: string
 ): Promise<ImportResult> {
   const lines = parseMcsClientOrders(buffer);
   const errors: string[] = [];
@@ -355,8 +359,8 @@ export async function importMcsClientOrders(
     }
     const clientOrder = await prisma.clientOrder.upsert({
       where: { orderNumber_seasonId: { orderNumber, seasonId } },
-      update: {},
-      create: { orderNumber, seasonId, clientId },
+      update: { importLogId },
+      create: { orderNumber, seasonId, clientId, importLogId },
     });
 
     // Agrège par produit (Q.N → tailles via la grille du produit ; somme si répété).

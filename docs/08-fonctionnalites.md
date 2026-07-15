@@ -60,6 +60,27 @@ d'import affiche la cible (« Importer N lignes dans **AH26** ») et changer de 
 réinitialise le formulaire (`key` sur la saison). But : éviter d'importer par erreur dans la
 mauvaise saison (cf. incident PE27/AH26 du 24/06/2026).
 
+### Suppression d'un import (annuler un import raté)
+
+Chaque import est **tagué** : les entités créées portent `importLogId` (colonne nullable sur
+`SupplierOrder`, `SupplierReception`, `ClientOrder`, `StockEntry`). Les routes `/api/import/*`
+**créent d'abord le `ImportLog`** (rowCount 0), passent son id aux mappers (qui taguent les
+entités), puis mettent à jour les compteurs. Sur upsert (ré-import), `importLogId` est
+**réécrit** → l'import le plus récent « possède » l'entité.
+
+- **Écran `/import`** : bloc « Imports récents (supprimables) » (liste `ImportLog` de la saison,
+  via `GET /api/import/logs?seasonId=`). Chaque ligne affiche le nombre d'entités encore en base
+  (`liveCount`) et un bouton **Supprimer** (confirmation en 2 temps).
+- **`DELETE /api/import/logs/[id]`** supprime les entités taguées puis le log :
+  - `RECEPTION` → supprime la/les réception(s) (cascade lignes) + **recalcule le statut** de la
+    commande fournisseur (`PARTIEL`/`EN_ATTENTE`).
+  - `SUPPLIER_ORDER` → supprime la/les commande(s) (cascade lignes **et réceptions** rattachées).
+  - `CLIENT_ORDER` → supprime la/les commande(s) client (cascade lignes).
+  - `STOCK` → supprime les entrées de stock de l'import.
+- **Limite** : les entités importées **avant** ce suivi ont `importLogId` nul → non retrouvées
+  (affichées « non supprimable »). Suppression manuelle ponctuelle en base si besoin (avec
+  sauvegarde préalable dans `/var/backups/gestlog/`).
+
 ### Cloisonnement par saison (commandes & réceptions fournisseur)
 
 **Invariant : une commande fournisseur et une réception appartiennent à UNE seule saison.**

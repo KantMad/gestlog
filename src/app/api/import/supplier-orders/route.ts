@@ -18,13 +18,11 @@ export async function POST(request: NextRequest) {
     }
 
     const buffer = await file.arrayBuffer();
+    const isMcs = detectMcsFormat(buffer) === "statgen";
 
-    let result;
-    if (detectMcsFormat(buffer) === "statgen") {
-      // Format MCS (StatGen) : parsing dédié, sans mapping de colonnes.
-      result = await importMcsSupplierOrders(buffer, seasonId);
-    } else {
-      // Format générique : mapping de colonnes requis.
+    // Validation AVANT la création du log (pas de log orphelin sur erreur 400).
+    let sheet;
+    if (!isMcs) {
       if (!mappingJson) {
         return NextResponse.json({ error: "Mapping des colonnes requis" }, { status: 400 });
       }
@@ -32,14 +30,27 @@ export async function POST(request: NextRequest) {
       if (sheets.length === 0 || sheets[0].rows.length === 0) {
         return NextResponse.json({ error: "Fichier vide ou format invalide" }, { status: 400 });
       }
-      result = await importSupplierOrders(sheets[0], JSON.parse(mappingJson), seasonId);
+      sheet = sheets[0];
     }
 
-    await prisma.importLog.create({
+    // Log créé d'abord → son id tague les commandes créées (permet de supprimer l'import).
+    const log = await prisma.importLog.create({
+      data: { seasonId, importType: "SUPPLIER_ORDER", fileName: file.name, rowCount: 0 },
+    });
+
+    let result;
+    try {
+      result = isMcs
+        ? await importMcsSupplierOrders(buffer, seasonId, log.id)
+        : await importSupplierOrders(sheet!, JSON.parse(mappingJson!), seasonId, log.id);
+    } catch (e) {
+      await prisma.importLog.delete({ where: { id: log.id } }).catch(() => {});
+      throw e;
+    }
+
+    await prisma.importLog.update({
+      where: { id: log.id },
       data: {
-        seasonId,
-        importType: "SUPPLIER_ORDER",
-        fileName: file.name,
         rowCount: result.imported,
         errorCount: result.errors.length,
         errors: result.errors.length > 0 ? JSON.stringify(result.errors) : null,

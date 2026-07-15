@@ -20,7 +20,8 @@ export interface ColumnMapping {
 export async function importClientOrders(
   sheet: ParsedSheet,
   mapping: ColumnMapping,
-  seasonId: string
+  seasonId: string,
+  importLogId?: string
 ) {
   const sizeColumns = detectSizeColumns(sheet.headers);
   const errors: string[] = [];
@@ -123,6 +124,7 @@ export async function importClientOrders(
           status: validStatus,
           deliveryWindow,
           catalogId: catalogId || undefined,
+          importLogId,
         },
         create: {
           orderNumber,
@@ -132,6 +134,7 @@ export async function importClientOrders(
           status: validStatus,
           deliveryWindow,
           catalogId: catalogId || undefined,
+          importLogId,
         },
       });
 
