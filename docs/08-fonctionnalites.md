@@ -50,8 +50,15 @@ sont gérés par écran (cf. [`05-authentification.md`](05-authentification.md))
   répartition à partir des nouvelles quantités reçues. ⚠️ Une session déjà **validée** est un
   instantané : il faut re-simuler puis re-valider pour la mettre à jour.
 - **Répartition — vue « par produit »** : l'en-tête de chaque produit affiche **Cmd. clients**
-  (demande), **Reçu fourn.** (réceptions), **Écart** (demande − reçu, rouge si réception
-  insuffisante) et **Alloué**. `receivedByProduct` vient de la réponse `simulate`.
+  (demande), **Reçu fourn.** (réceptions), **Écart** (= **Reçu − Commande** : négatif = manque,
+  positif = surplus) et **Alloué**. Les lignes boutique affichent l'écart **avec %**.
+  `receivedByProduct` vient de la réponse `simulate`.
+- **Répartition — bouton « Répartir surplus »** : par carte produit (référence + couleur), visible
+  quand `reçu > alloué` sur des tailles commandées. Répartit les pièces livrées **en plus** entre
+  les boutiques **au prorata de leur commande** (taille par taille), le **ranking** départageant
+  les arrondis (`rankingByClient` dans la réponse `simulate`). Alloue **au-delà** de la commande
+  sans jamais dépasser le reçu. Action **client-side** sur les lignes (marquées ajustées),
+  incluse à la validation.
 - **Répartition — export « EAN / quantité »** : bouton *Export EAN* → xlsx avec colonnes
   Boutique, Code boutique, Référence, Couleur, Libellé couleur, Taille, **EAN**, Quantité (une
   ligne par boutique × produit/couleur × taille allouée, quantités hand-éditées incluses).

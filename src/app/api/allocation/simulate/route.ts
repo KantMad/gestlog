@@ -236,6 +236,10 @@ export async function POST(request: NextRequest) {
     const receivedOut: Record<string, SizeQuantities> = {};
     for (const [productId, qty] of receivedByProduct) receivedOut[productId] = qty;
 
+    // Ranking par client (pour départager les arrondis lors de la répartition du surplus).
+    const rankingByClient: Record<string, number> = {};
+    for (const [id, c] of clientConfigs) rankingByClient[id] = c.ranking;
+
     // EAN par produit et par taille (pour l'export « EAN / quantité »).
     const refs = [...uniqueRefs];
     const eanRows = refs.length
@@ -262,6 +266,7 @@ export async function POST(request: NextRequest) {
       warnings: result.warnings,
       clientImpacts: Array.from(clientImpacts.values()),
       receivedByProduct: receivedOut,
+      rankingByClient,
       eansByProduct,
       summary: {
         totalDemands: demands.length,

@@ -380,12 +380,14 @@ function ProductGroup({
   lines,
   received,
   onLineChange,
+  onDistributeSurplus,
 }: {
   reference: string;
   color: string;
   lines: SimulationLine[];
   received?: SizeQuantities;
   onLineChange: (lineKey: string, size: string, value: number) => void;
+  onDistributeSurplus: () => void;
 }) {
   const [expanded, setExpanded] = useState(
     lines.some((l) => l.reductionReason !== "NONE")
@@ -398,6 +400,20 @@ function ProductGroup({
   // même convention de signe que la colonne Écart des lignes boutique.
   const totalReceived = received ? sumQuantities(received) : 0;
   const demandGap = totalReceived - totalOriginal;
+  // Surplus RÉPARTISSABLE = reçu − déjà alloué, uniquement sur les tailles commandées
+  // (une taille reçue que personne n'a commandée n'est pas auto-répartissable).
+  const allocBySize: Record<string, number> = {};
+  const orderedBySize: Record<string, number> = {};
+  for (const l of lines) {
+    for (const [s, q] of Object.entries(l.allocated)) allocBySize[s] = (allocBySize[s] || 0) + q;
+    for (const [s, q] of Object.entries(l.original)) orderedBySize[s] = (orderedBySize[s] || 0) + q;
+  }
+  const surplusTotal = received
+    ? Object.entries(received).reduce(
+        (s, [sz, r]) => s + ((orderedBySize[sz] || 0) > 0 ? Math.max(0, r - (allocBySize[sz] || 0)) : 0),
+        0
+      )
+    : 0;
   const hasReduction = totalOriginal > totalAllocated;
   const reductionPct = totalOriginal > 0
     ? Math.round(((totalOriginal - totalAllocated) / totalOriginal) * 100)
@@ -460,6 +476,21 @@ function ProductGroup({
               {formatNumber(totalAllocated)}
             </span>
           </div>
+          {surplusTotal > 0 && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 gap-1 border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDistributeSurplus();
+              }}
+              title="Répartir les pièces livrées en plus, au prorata des commandes (ranking pour les arrondis)"
+            >
+              <ArrowDown className="h-3.5 w-3.5 rotate-180" />
+              Répartir surplus (+{formatNumber(surplusTotal)})
+            </Button>
+          )}
           {hasReduction ? (
             <Badge
               className={cn(
@@ -812,6 +843,7 @@ export default function AllocationPage() {
   // Reçu (réception fournisseur) et EAN par produit → écart demande/réception + export EAN.
   const [receivedByProduct, setReceivedByProduct] = useState<Record<string, SizeQuantities>>({});
   const [eansByProduct, setEansByProduct] = useState<Record<string, Record<string, string>>>({});
+  const [rankingByClient, setRankingByClient] = useState<Record<string, number>>({});
   const [sessions, setSessions] = useState<SessionEntry[]>([]);
   const [catalogs, setCatalogs] = useState<CatalogEntry[]>([]);
   const [clients, setClients] = useState<ClientEntry[]>([]);
@@ -929,6 +961,7 @@ export default function AllocationPage() {
       setSummary(data.summary || null);
       setReceivedByProduct(data.receivedByProduct || {});
       setEansByProduct(data.eansByProduct || {});
+      setRankingByClient(data.rankingByClient || {});
       toast.success("Simulation terminée", {
         description: `${data.lines?.length || 0} lignes calculées`,
       });
@@ -965,6 +998,72 @@ export default function AllocationPage() {
       })
     );
     setManualEdits((e) => e + 1);
+  };
+
+  // Répartit le SURPLUS reçu (pièces livrées en plus) d'un produit entre les boutiques,
+  // AU PRORATA de leur commande, taille par taille (le ranking départage les arrondis).
+  // Alloue au-delà de la commande ; ne dépasse jamais le reçu.
+  const distributeSurplus = (productId: string) => {
+    const received = receivedByProduct[productId] || {};
+    const additions = new Map<string, SizeQuantities>(); // lineKey → { size: extra }
+    let addedTotal = 0;
+
+    const productLines = lines.filter((l) => l.productId === productId);
+    for (const size of Object.keys(received)) {
+      const recv = received[size] || 0;
+      const currentAlloc = productLines.reduce((s, l) => s + (l.allocated[size] || 0), 0);
+      const surplus = recv - currentAlloc;
+      if (surplus <= 0) continue;
+      const eligible = productLines.filter((l) => (l.original[size] || 0) > 0);
+      const totalOrder = eligible.reduce((s, l) => s + (l.original[size] || 0), 0);
+      if (totalOrder <= 0) continue;
+      const floors = eligible.map((l) => Math.floor(surplus * ((l.original[size] || 0) / totalOrder)));
+      let remainder = surplus - floors.reduce((s, n) => s + n, 0);
+      const addOne = (l: SimulationLine, n: number) => {
+        if (n <= 0) return;
+        const k = `${l.clientId}:${l.clientOrderId}:${l.productId}`;
+        const m = additions.get(k) || {};
+        m[size] = (m[size] || 0) + n;
+        additions.set(k, m);
+        addedTotal += n;
+      };
+      eligible.forEach((l, i) => addOne(l, floors[i]));
+      // Reliquat (arrondis) : 1 pièce chacun, aux mieux classés d'abord.
+      const byRank = [...eligible].sort(
+        (a, b) => (rankingByClient[a.clientId] ?? 9999) - (rankingByClient[b.clientId] ?? 9999)
+      );
+      for (let i = 0; i < byRank.length && remainder > 0; i++, remainder--) addOne(byRank[i], 1);
+    }
+
+    if (additions.size === 0) {
+      toast.info("Aucun surplus à répartir sur ce produit");
+      return;
+    }
+    setLines((prev) =>
+      prev.map((l) => {
+        const k = `${l.clientId}:${l.clientOrderId}:${l.productId}`;
+        const extra = additions.get(k);
+        if (!extra) return l;
+        const newAllocated = { ...l.allocated };
+        for (const [s, n] of Object.entries(extra)) newAllocated[s] = (newAllocated[s] || 0) + n;
+        const newTotal = sumQuantities(newAllocated);
+        const newReduced: SizeQuantities = {};
+        for (const [s, qty] of Object.entries(l.original)) {
+          const d = qty - (newAllocated[s] || 0);
+          if (d > 0) newReduced[s] = d;
+        }
+        return {
+          ...l,
+          allocated: newAllocated,
+          reduced: newReduced,
+          reductionReason: Object.keys(newReduced).length > 0 ? l.reductionReason : "NONE",
+          isManualAdjustment: true,
+          status: newTotal === 0 ? ("ANNULE" as const) : l.status === "ANNULE" ? ("LIVRABLE" as const) : l.status,
+        };
+      })
+    );
+    setManualEdits((e) => e + 1);
+    toast.success(`Surplus réparti : +${addedTotal} pièce(s) au prorata des commandes`);
   };
 
   const validateAllocation = async () => {
@@ -1496,6 +1595,7 @@ export default function AllocationPage() {
                           lines={group.lines}
                           received={receivedByProduct[productId]}
                           onLineChange={handleLineChange}
+                          onDistributeSurplus={() => distributeSurplus(productId)}
                         />
                       ))
                     )}
