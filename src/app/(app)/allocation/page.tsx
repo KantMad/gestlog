@@ -853,6 +853,8 @@ export default function AllocationPage() {
   const [showHistory, setShowHistory] = useState(false);
   const [manualEdits, setManualEdits] = useState(0);
   const [viewMode, setViewMode] = useState<"client" | "product">("client");
+  // Filtre réception des résultats : tout / produits réceptionnés / non réceptionnés.
+  const [receptionFilter, setReceptionFilter] = useState<"all" | "received" | "not_received">("all");
 
   // Filters
   const [selectedCatalog, setSelectedCatalog] = useState<string>("ALL");
@@ -861,6 +863,115 @@ export default function AllocationPage() {
   const [orderType, setOrderType] = useState<string>("COMMANDE");
   const [productSearch, setProductSearch] = useState<string>("");
   const [resultSearch, setResultSearch] = useState<string>("");
+
+  // ── Persistance de la simulation entre les pages (sessionStorage) ──────────────
+  // Conserve résultats + filtres pour ne pas devoir relancer la simulation à chaque
+  // navigation. Restauré une fois au montage si même saison ; vidé au changement de saison.
+  const STORE_KEY = "gestlog:allocation:sim:v1";
+  const restoredRef = useRef(false);
+  const seasonIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (restoredRef.current || !activeSeason) return;
+    restoredRef.current = true;
+    seasonIdRef.current = activeSeason.id;
+    try {
+      const raw = sessionStorage.getItem(STORE_KEY);
+      if (!raw) return;
+      const s = JSON.parse(raw);
+      if (s.seasonId !== activeSeason.id || !Array.isArray(s.lines) || s.lines.length === 0) return;
+      setLines(s.lines);
+      setWarnings(s.warnings || []);
+      setClientImpacts(s.clientImpacts || []);
+      setSummary(s.summary || null);
+      setReceivedByProduct(s.receivedByProduct || {});
+      setEansByProduct(s.eansByProduct || {});
+      setRankingByClient(s.rankingByClient || {});
+      setManualEdits(s.manualEdits || 0);
+      const f = s.filters || {};
+      setSelectedCatalog(f.selectedCatalog ?? "ALL");
+      setSelectedClients(f.selectedClients ?? []);
+      setSelectedSuppliers(f.selectedSuppliers ?? []);
+      setOrderType(f.orderType ?? "COMMANDE");
+      setProductSearch(f.productSearch ?? "");
+      setViewMode(f.viewMode ?? "client");
+      setReceptionFilter(f.receptionFilter ?? "all");
+    } catch {
+      /* stockage indisponible/corrompu → on ignore */
+    }
+  }, [activeSeason]);
+
+  // Changement de saison → réinitialise la simulation (données d'une autre saison).
+  useEffect(() => {
+    if (!activeSeason || seasonIdRef.current === null || seasonIdRef.current === activeSeason.id) return;
+    seasonIdRef.current = activeSeason.id;
+    setLines([]);
+    setWarnings([]);
+    setClientImpacts([]);
+    setSummary(null);
+    setReceivedByProduct({});
+    setEansByProduct({});
+    setRankingByClient({});
+    setManualEdits(0);
+    try {
+      sessionStorage.removeItem(STORE_KEY);
+    } catch {
+      /* noop */
+    }
+  }, [activeSeason]);
+
+  // Sauvegarde à chaque changement (résultats + filtres), après la restauration initiale.
+  useEffect(() => {
+    if (!restoredRef.current || !activeSeason) return;
+    try {
+      if (lines.length === 0) {
+        sessionStorage.removeItem(STORE_KEY);
+        return;
+      }
+      sessionStorage.setItem(
+        STORE_KEY,
+        JSON.stringify({
+          seasonId: activeSeason.id,
+          lines,
+          warnings,
+          clientImpacts,
+          summary,
+          receivedByProduct,
+          eansByProduct,
+          rankingByClient,
+          manualEdits,
+          filters: {
+            selectedCatalog,
+            selectedClients,
+            selectedSuppliers,
+            orderType,
+            productSearch,
+            viewMode,
+            receptionFilter,
+          },
+        })
+      );
+    } catch {
+      /* quota dépassé/indisponible → on n'échoue pas l'UI */
+    }
+  }, [
+    activeSeason,
+    lines,
+    warnings,
+    clientImpacts,
+    summary,
+    receivedByProduct,
+    eansByProduct,
+    rankingByClient,
+    manualEdits,
+    selectedCatalog,
+    selectedClients,
+    selectedSuppliers,
+    orderType,
+    productSearch,
+    viewMode,
+    receptionFilter,
+  ]);
 
   const loadSessions = useCallback(async () => {
     if (!activeSeason) return;
@@ -1175,12 +1286,22 @@ export default function AllocationPage() {
     }
   };
 
+  // Filtre réception : un produit est « réceptionné » si son total reçu > 0.
+  const isReceived = (productId: string) =>
+    sumQuantities(receivedByProduct[productId] || {}) > 0;
+  const visibleLines =
+    receptionFilter === "all"
+      ? lines
+      : lines.filter((l) =>
+          receptionFilter === "received" ? isReceived(l.productId) : !isReceived(l.productId)
+        );
+
   // Group lines by client
   const clientGroups = new Map<
     string,
     { clientName: string; lines: SimulationLine[] }
   >();
-  for (const line of lines) {
+  for (const line of visibleLines) {
     if (!clientGroups.has(line.clientId)) {
       clientGroups.set(line.clientId, { clientName: line.clientName, lines: [] });
     }
@@ -1192,7 +1313,7 @@ export default function AllocationPage() {
     string,
     { reference: string; color: string; lines: SimulationLine[] }
   >();
-  for (const line of lines) {
+  for (const line of visibleLines) {
     if (!productGroups.has(line.productId)) {
       productGroups.set(line.productId, {
         reference: line.productReference,
@@ -1528,6 +1649,30 @@ export default function AllocationPage() {
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
+                    {/* Filtre réception (comme dans Comparaison) */}
+                    <div className="inline-flex rounded-lg border bg-muted/50 p-0.5 text-sm">
+                      {(
+                        [
+                          ["all", "Tout"],
+                          ["received", "Réceptionné"],
+                          ["not_received", "Non réceptionné"],
+                        ] as ["all" | "received" | "not_received", string][]
+                      ).map(([val, label]) => (
+                        <button
+                          key={val}
+                          type="button"
+                          onClick={() => setReceptionFilter(val)}
+                          className={cn(
+                            "rounded-md px-2.5 py-1.5 font-medium transition-colors",
+                            receptionFilter === val
+                              ? "bg-background text-foreground shadow-sm"
+                              : "text-muted-foreground hover:text-foreground"
+                          )}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
                     <div className="relative">
                       <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                       <Input

@@ -53,6 +53,13 @@ sont gérés par écran (cf. [`05-authentification.md`](05-authentification.md))
   (demande), **Reçu fourn.** (réceptions), **Écart** (= **Reçu − Commande** : négatif = manque,
   positif = surplus) et **Alloué**. Les lignes boutique affichent l'écart **avec %**.
   `receivedByProduct` vient de la réponse `simulate`.
+- **Répartition — persistance de la simulation** : les résultats + filtres sont conservés en
+  `sessionStorage` (`gestlog:allocation:sim:v1`) → en changeant de page puis en revenant, la
+  simulation (y compris ajustements manuels) est **restaurée** sans relancer. Vidée à la
+  validation et au **changement de saison** (données d'une autre saison).
+- **Répartition — filtre réception** : bouton 3 états *Tout / Réceptionné / Non réceptionné*
+  (comme Comparaison) filtrant les produits selon `reçu > 0`, dans les deux vues (par produit /
+  par boutique).
 - **Répartition — bouton « Répartir surplus »** : par carte produit (référence + couleur), visible
   quand `reçu > alloué` sur des tailles commandées. Répartit les pièces livrées **en plus** entre
   les boutiques **au prorata de leur commande** (taille par taille), le **ranking** départageant
