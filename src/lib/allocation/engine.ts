@@ -125,6 +125,16 @@ export function runAllocation(input: AllocationInput): AllocationResult {
       }
     }
 
+    // Disponible RESTANT par taille (après la répartition pro-rata + arrondis). La
+    // restauration des caps ne peut puiser QUE dans ce reliquat → on n'alloue jamais
+    // plus que ce qui a été reçu (si 0 reçu, rien à restaurer).
+    const remainingBySize: SizeQuantities = {};
+    for (const size of allSizes) {
+      let used = 0;
+      for (const alloc of allocations.values()) used += alloc[size] || 0;
+      remainingBySize[size] = Math.max(0, (avail[size] || 0) - used);
+    }
+
     // Step 2: Apply Rule 3 (max reduction per order) and Rule 4 (max reduction per line)
     for (const d of sorted) {
       const key = `${d.clientId}:${d.clientOrderId}`;
@@ -136,7 +146,8 @@ export function runAllocation(input: AllocationInput): AllocationResult {
       const lineAllocated = sumQuantities(alloc);
       const lineReduced = lineOriginal - lineAllocated;
 
-      // Rule 4: cap line reduction
+      // Rule 4: cap line reduction — borné par le disponible restant (jamais de pièce
+      // « fantôme » : on ne restaure que du stock réellement reçu et encore libre).
       const maxLineReduction = capLineReduction(
         lineOriginal,
         0,
@@ -149,15 +160,20 @@ export function runAllocation(input: AllocationInput): AllocationResult {
           if (restored >= needToRestore) break;
           const requested = d.requested[size] || 0;
           const current = alloc[size] || 0;
-          const canRestore = Math.min(needToRestore - restored, requested - current);
+          const canRestore = Math.min(
+            needToRestore - restored,
+            requested - current,
+            remainingBySize[size] || 0
+          );
           if (canRestore > 0) {
             alloc[size] = current + canRestore;
+            remainingBySize[size] = (remainingBySize[size] || 0) - canRestore;
             restored += canRestore;
           }
         }
         if (restored < needToRestore) {
           warnings.push(
-            `Client ${cName(d.clientId)}: impossible de respecter le cap ligne ${config.maxReductionLine}% pour le produit ${pName(productId)}`
+            `Client ${cName(d.clientId)}: cap ligne ${config.maxReductionLine}% non tenu (stock reçu insuffisant) pour ${pName(productId)}`
           );
         }
       }

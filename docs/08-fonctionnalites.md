@@ -39,6 +39,11 @@ sont gérés par écran (cf. [`05-authentification.md`](05-authentification.md))
   + `ReceptionLine` ; il faut donc que la **commande fournisseur (et/ou la réception) soit
   importée dans la même saison** que les commandes clients. Sinon : 0 produit pour ce
   fournisseur. (`src/app/api/allocation/simulate/route.ts`, `supplierProductFilter`.)
+- **Répartition — invariant « alloué ≤ reçu »** : sous pénurie, les **caps de réduction**
+  (`maxReductionLine`) ne peuvent restaurer des pièces que dans le **disponible restant** de la
+  taille (`remainingBySize` dans `engine.ts`). Sinon le moteur allouait des pièces *fantômes*
+  pour tenir le plafond même sans réception (ex. 0 reçu → 50 % alloué). Corrigé + testé
+  (`src/lib/allocation/engine.test.ts`).
 - **Répartition — recalcul après correction d'une réception** : la simulation lit les
   réceptions **en direct** (`receivedByProduct` construit depuis `SupplierReception.lines`).
   Corriger une réception (cf. éditeur) puis **Relancer** la simulation recompute la
