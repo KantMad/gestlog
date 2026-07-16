@@ -69,8 +69,10 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
   produit absent du référentiel (avec sa grille). Supprimer une commande fournisseur supprime
   aussi ses **réceptions** (cascade).
 - **Pièges** : couleur = code avant le tiret (`208-Cognac`→208) ; réf réception tiret→underscore ;
-  réceptions : importer la commande fournisseur **d'abord** (auto-rattachement) ; produits
-  inconnus (`ZZZ_LOGO`) listés en erreurs = normal.
+  réceptions : importer la commande fournisseur **d'abord** (auto-rattachement). ⚠️ Un
+  **« produit introuvable »** signifie que la ligne est **écartée** — à traiter, pas à ignorer :
+  soit un **code couleur divergent** (→ **équivalence couleur**), soit un **produit non encore
+  synchronisé** depuis TIO.
 
 ## Correction de réception (`/import/receptions`)
 - **Rôle** : corriger une réception importée sans tout réimporter (ex. 2 couleurs échangées).

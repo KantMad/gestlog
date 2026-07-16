@@ -422,7 +422,9 @@ export async function importMcsClientOrders(
     imported += data.length;
   }
 
-  // Erreurs = produits introuvables, dédupliqués (ex. ZZZ_LOGO), avec compte.
+  // Erreurs = produits introuvables au référentiel (réf + code couleur), dédupliqués avec
+  // compte. Causes usuelles : code couleur divergent fichier/référentiel (→ créer une
+  // équivalence couleur) ou produit pas encore synchronisé depuis TIO. Ces lignes sont IGNORÉES.
   const miss = [...missing.entries()].sort((a, b) => b[1] - a[1]);
   for (const [k, c] of miss.slice(0, 50)) errors.push(`Produit introuvable : ${k} (${c} ligne${c > 1 ? "s" : ""})`);
   if (miss.length > 50) errors.push(`… et ${miss.length - 50} autres produits introuvables`);

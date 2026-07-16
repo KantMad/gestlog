@@ -258,7 +258,10 @@ Les fichiers réels MCS ne sont pas des tableaux plats → l'import les **auto-d
   code, `Q.N` décodé par produit. **Optimisé gros volume** (8000+ lignes / 200+ commandes) :
   produits préchargés en 1 requête, clients dédupliqués, écriture par commande
   (`deleteMany`+`createMany` en transaction), **annulations/soldes préservées au ré-import**.
-  Erreurs « introuvable » **dédupliquées** (ex. `ZZZ_LOGO` = produit fictif, normal).
+  Erreurs « introuvable » **dédupliquées** (réf + code couleur absents du référentiel). ⚠️ Ce
+  ne sont **pas** des lignes à ignorer : la ligne est **écartée de l'import**. Causes usuelles :
+  **code couleur divergent** entre le fichier et le référentiel (→ créer une **équivalence
+  couleur**, cf. section dédiée) ou **produit pas encore synchronisé** depuis TIO.
 - Matching sur le **référentiel existant** (par réf + **code** couleur, tolérance zéro
   initial) — **pas de création de produit** (évite les doublons). Les lignes sans produit
   correspondant sont remontées en erreurs.

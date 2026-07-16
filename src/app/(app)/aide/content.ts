@@ -148,7 +148,7 @@ export const HELP_THEMES: HelpTheme[] = [
               "Choisis la **saison cible** en haut, va sur l'onglet **Commandes clients (Texas)**, dépose le fichier, vérifie le nombre de lignes, puis **Importer**.",
               "Le résultat indique les lignes importées et les éventuelles erreurs.",
             ],
-            tip: "Des produits « introuvables » comme **ZZZ_LOGO** dans les erreurs ? C'est **normal** : ce sont des lignes techniques sans vrai produit.",
+            tip: "Un **« produit introuvable »** n'est jamais anodin : la ligne est **ignorée**. Le plus souvent c'est un **code couleur différent** entre le fichier et le référentiel (→ crée une **équivalence couleur**), ou un **produit pas encore synchronisé** depuis TIO. Voir la fiche « Équivalences de code couleur ».",
           },
         ],
       },
