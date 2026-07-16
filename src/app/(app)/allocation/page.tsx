@@ -1550,6 +1550,14 @@ export default function AllocationPage() {
     }
     clientGroups.get(line.clientId)!.lines.push(line);
   }
+  // Dans la vue par boutique, les lignes SONT des produits → même tri alphabétique.
+  for (const g of clientGroups.values()) {
+    g.lines.sort(
+      (a, b) =>
+        a.productReference.localeCompare(b.productReference, "fr", { sensitivity: "base", numeric: true }) ||
+        a.productColor.localeCompare(b.productColor, "fr", { sensitivity: "base", numeric: true })
+    );
+  }
 
   // Group lines by product
   const productGroups = new Map<
@@ -1592,7 +1600,9 @@ export default function AllocationPage() {
   );
 
   // Filter + sort product groups
-  const filteredProductGroups = sortByImpact(
+  // Produits triés par ORDRE ALPHABÉTIQUE (référence puis couleur) — et non plus par
+  // impact : on retrouve ainsi un produit précis là où on l'attend dans la liste.
+  const filteredProductGroups = (
     (resultSearch && viewMode === "product"
       ? Array.from(productGroups.entries()).filter(([, g]) =>
           g.reference.toLowerCase().includes(resultSearch.toLowerCase()) ||
@@ -1600,6 +1610,10 @@ export default function AllocationPage() {
         )
       : Array.from(productGroups.entries())
     ) as [string, { reference: string; color: string; lines: SimulationLine[] }][]
+  ).sort(
+    (a, b) =>
+      a[1].reference.localeCompare(b[1].reference, "fr", { sensitivity: "base", numeric: true }) ||
+      a[1].color.localeCompare(b[1].color, "fr", { sensitivity: "base", numeric: true })
   );
 
   return (
