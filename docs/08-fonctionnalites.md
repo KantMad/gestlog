@@ -77,10 +77,19 @@ sont gérés par écran (cf. [`05-authentification.md`](05-authentification.md))
   quand `reçu > alloué` sur des tailles commandées. Répartition en **2 phases** :
   1. **Combler les écarts** : les pièces vont d'abord aux boutiques **coupées**, la plus coupée
      en relatif d'abord (rang pour départager), jusqu'à ramener chacune à sa commande ;
-  2. **Au-delà des commandes** : le reliquat est réparti **au prorata** des commandes.
+  2. **Au-delà des commandes** (prorata) — **UNIQUEMENT si plus aucune boutique n'a d'écart**
+     sur ce produit+couleur. Règle « **minimiser les écarts** » : servir une commande déjà
+     complète ne réduit l'écart de personne. Sinon le reliquat **reste en stock** et le toast
+     l'annonce (l'utilisateur peut le placer à la main).
+     *Cas réel* : XL/3XL sur-livrés (+3/+1) alors que le manque est sur M/L → toutes les
+     boutiques ont déjà leur XL complet, donc **rien à combler** → les 4 pièces restaient
+     distribuées au-delà chez des boutiques complètes pendant que d'autres étaient à -11 %.
   Contraintes : **jamais une taille non commandée**, jamais plus que le reçu de la taille. Action
-  **client-side** (lignes marquées ajustées), incluse à la validation. Le toast détaille combien
-  de pièces ont comblé des écarts vs distribuées au-delà.
+  **client-side** (lignes marquées ajustées), incluse à la validation.
+- **Répartition — ajout manuel du surplus** : la saisie d'une cellule n'est plus plafonnée à la
+  commande mais à **quantité actuelle + reliquat reçu non alloué** sur cette taille
+  (`remainingByProduct`, recalculé à chaque changement des lignes). On peut donc **ajouter** du
+  surplus à la main comme on retire — sans jamais allouer plus que le reçu.
 - **Répartition — lecture des écarts (vue par produit)** : pied de tableau avec, **par taille**,
   `Cmd. clients` / `Reçu fourn.` / `Écart` (rouge = manque, vert = sur-livré) → identifie
   immédiatement la taille en cause. Les **ajouts** (alloué > commandé) s'affichent en **vert avec

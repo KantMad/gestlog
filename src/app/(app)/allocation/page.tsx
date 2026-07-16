@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { useSeason } from "@/lib/season-context";
 import { Topbar } from "@/components/layout/topbar";
 import { PageHeader } from "@/components/layout/page-header";
@@ -115,12 +115,18 @@ interface SupplierEntry {
 function EditableCell({
   value,
   original,
+  max,
   onChange,
 }: {
   value: number;
   original: number;
+  /** Plafond de saisie. Permet d'AJOUTER du surplus à la main au-delà de la commande :
+   *  = quantité actuelle + reliquat reçu non alloué sur cette taille. Par défaut, la
+   *  commande (aucun surplus disponible → on ne peut que retirer). */
+  max?: number;
   onChange: (v: number) => void;
 }) {
+  const ceiling = Math.max(max ?? original, 0);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(String(value));
   const inputRef = useRef<HTMLInputElement>(null);
@@ -134,7 +140,8 @@ function EditableCell({
 
   const commit = () => {
     const n = parseInt(draft, 10);
-    if (!isNaN(n) && n >= 0 && n <= original) {
+    // Borné par le reçu (on ne peut pas allouer plus que ce qui existe physiquement).
+    if (!isNaN(n) && n >= 0 && n <= ceiling) {
       onChange(n);
     }
     setEditing(false);
@@ -146,7 +153,7 @@ function EditableCell({
         ref={inputRef}
         type="number"
         min={0}
-        max={original}
+        max={ceiling}
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={commit}
@@ -197,11 +204,14 @@ function ClientGroup({
   clientId,
   clientName,
   lines,
+  remainingByProduct,
   onLineChange,
 }: {
   clientId: string;
   clientName: string;
   lines: SimulationLine[];
+  /** Reliquat reçu non alloué par produit/taille → plafond de saisie manuelle. */
+  remainingByProduct: Record<string, Record<string, number>>;
   onLineChange: (lineKey: string, size: string, value: number) => void;
 }) {
   const [expanded, setExpanded] = useState(
@@ -322,6 +332,9 @@ function ClientGroup({
                             <EditableCell
                               value={alloc}
                               original={orig}
+                              // Ajout MANUEL du surplus : plafond = quantité actuelle +
+                              // reliquat reçu non encore alloué sur cette taille.
+                              max={alloc + (remainingByProduct[line.productId]?.[size] ?? 0)}
                               onChange={(v) => onLineChange(lineKey, size, v)}
                             />
                           </TableCell>
@@ -388,6 +401,7 @@ function ProductGroup({
   color,
   lines,
   received,
+  remainingByProduct,
   onLineChange,
   onDistributeSurplus,
 }: {
@@ -395,6 +409,8 @@ function ProductGroup({
   color: string;
   lines: SimulationLine[];
   received?: SizeQuantities;
+  /** Reliquat reçu non alloué par produit/taille → plafond de saisie manuelle. */
+  remainingByProduct: Record<string, Record<string, number>>;
   onLineChange: (lineKey: string, size: string, value: number) => void;
   onDistributeSurplus: () => void;
 }) {
@@ -568,6 +584,9 @@ function ProductGroup({
                             <EditableCell
                               value={alloc}
                               original={orig}
+                              // Ajout MANUEL du surplus : plafond = quantité actuelle +
+                              // reliquat reçu non encore alloué sur cette taille.
+                              max={alloc + (remainingByProduct[line.productId]?.[size] ?? 0)}
                               onChange={(v) => onLineChange(lineKey, size, v)}
                             />
                           </TableCell>
@@ -1242,7 +1261,60 @@ export default function AllocationPage() {
       filledGaps += 1;
     }
 
+    // Applique le résultat du travail aux lignes de la simulation.
+    const applySurplus = () => {
+      const allocByKey = new Map(work.map((w) => [w.key, w.alloc]));
+      setLines((prev) =>
+        prev.map((l) => {
+          const k = `${l.clientId}:${l.clientOrderId}:${l.productId}`;
+          const newAllocated = allocByKey.get(k);
+          if (!newAllocated) return l;
+          const newTotal = sumQuantities(newAllocated);
+          const newReduced: SizeQuantities = {};
+          for (const [s, qty] of Object.entries(l.original)) {
+            const d = qty - (newAllocated[s] || 0);
+            if (d > 0) newReduced[s] = d;
+          }
+          return {
+            ...l,
+            allocated: newAllocated,
+            reduced: newReduced,
+            reductionReason: Object.keys(newReduced).length > 0 ? l.reductionReason : "NONE",
+            isManualAdjustment: true,
+            status:
+              newTotal === 0 ? ("ANNULE" as const) : l.status === "ANNULE" ? ("LIVRABLE" as const) : l.status,
+          };
+        })
+      );
+      setManualEdits((e) => e + 1);
+    };
+
     // ── Phase 2 : le reste, AU-DELÀ des commandes, au prorata (tailles commandées) ───
+    // RÈGLE « minimiser les écarts » : on ne sert au-delà des commandes QUE si plus aucune
+    // boutique n'a d'écart sur ce produit+couleur. Sinon on laisse le reliquat en stock :
+    // ajouter des pièces à une commande déjà complète ne réduit l'écart de personne (cas
+    // réel : XL/3XL sur-livrés alors que le manque est sur M/L → +1 chez des boutiques
+    // complètes pendant que d'autres restaient à -11 %). L'utilisateur peut toujours
+    // placer ces pièces à la main.
+    const stillShort = work.some((w) => w.allocTotal < w.origTotal);
+    if (stillShort) {
+      const leftover = Object.values(remaining).reduce((s, n) => s + Math.max(0, n), 0);
+      if (addedTotal === 0) {
+        toast.info("Aucun surplus répartissable", {
+          description: `${leftover} pièce(s) disponibles, mais uniquement sur des tailles déjà complètes chez toutes les boutiques. Ajoute-les à la main si besoin.`,
+        });
+        return;
+      }
+      applySurplus();
+      toast.success(`Surplus réparti : +${addedTotal} pièce(s) pour combler les écarts`, {
+        description:
+          leftover > 0
+            ? `${leftover} pièce(s) laissées en stock : des boutiques ont encore un écart, les servir au-delà n'y changerait rien.`
+            : undefined,
+      });
+      return;
+    }
+
     for (const size of Object.keys(remaining)) {
       const surplus = remaining[size];
       if (surplus <= 0) continue;
@@ -1270,34 +1342,12 @@ export default function AllocationPage() {
       return;
     }
 
-    const allocByKey = new Map(work.map((w) => [w.key, w.alloc]));
-    setLines((prev) =>
-      prev.map((l) => {
-        const k = `${l.clientId}:${l.clientOrderId}:${l.productId}`;
-        const newAllocated = allocByKey.get(k);
-        if (!newAllocated) return l;
-        const newTotal = sumQuantities(newAllocated);
-        const newReduced: SizeQuantities = {};
-        for (const [s, qty] of Object.entries(l.original)) {
-          const d = qty - (newAllocated[s] || 0);
-          if (d > 0) newReduced[s] = d;
-        }
-        return {
-          ...l,
-          allocated: newAllocated,
-          reduced: newReduced,
-          reductionReason: Object.keys(newReduced).length > 0 ? l.reductionReason : "NONE",
-          isManualAdjustment: true,
-          status: newTotal === 0 ? ("ANNULE" as const) : l.status === "ANNULE" ? ("LIVRABLE" as const) : l.status,
-        };
-      })
-    );
-    setManualEdits((e) => e + 1);
+    applySurplus();
     const beyond = addedTotal - filledGaps;
     toast.success(`Surplus réparti : +${addedTotal} pièce(s)`, {
       description:
         `${filledGaps} pièce(s) pour combler les écarts` +
-        (beyond > 0 ? ` · ${beyond} au-delà des commandes (prorata)` : ""),
+        (beyond > 0 ? ` · ${beyond} au-delà des commandes (prorata, aucun écart restant)` : ""),
     });
   };
 
@@ -1409,6 +1459,24 @@ export default function AllocationPage() {
       toast.warning(`${missing} ligne(s) sans EAN au référentiel (marquées « MANQUANT_… »)`);
     }
   };
+
+  // Reliquat reçu NON alloué, par produit et par taille. Sert de plafond à la saisie
+  // manuelle : on peut ajouter du surplus à la main, mais jamais au-delà du reçu.
+  // Recalculé à chaque changement des lignes → suit les ajustements manuels.
+  const remainingByProduct = useMemo(() => {
+    const used: Record<string, Record<string, number>> = {};
+    for (const l of lines) {
+      const u = (used[l.productId] ||= {});
+      for (const [s, q] of Object.entries(l.allocated)) u[s] = (u[s] || 0) + q;
+    }
+    const out: Record<string, Record<string, number>> = {};
+    for (const [pid, recv] of Object.entries(receivedByProduct)) {
+      const r: Record<string, number> = {};
+      for (const [s, n] of Object.entries(recv)) r[s] = Math.max(0, n - (used[pid]?.[s] || 0));
+      out[pid] = r;
+    }
+    return out;
+  }, [lines, receivedByProduct]);
 
   // Filtre réception : un produit est « réceptionné » si son total reçu > 0.
   const isReceived = (productId: string) =>
@@ -1834,6 +1902,7 @@ export default function AllocationPage() {
                       filteredClientGroups.map(([clientId, group]) => (
                         <ClientGroup
                           key={clientId}
+                          remainingByProduct={remainingByProduct}
                           clientId={clientId}
                           clientName={group.clientName}
                           lines={group.lines}
@@ -1859,6 +1928,7 @@ export default function AllocationPage() {
                       filteredProductGroups.map(([productId, group]) => (
                         <ProductGroup
                           key={productId}
+                          remainingByProduct={remainingByProduct}
                           reference={group.reference}
                           color={group.color}
                           lines={group.lines}
