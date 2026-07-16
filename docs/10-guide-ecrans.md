@@ -202,7 +202,13 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
 
 ## Infos produits (`/product-info`)
 - **Rôle** : gérer le **référentiel trans-saison** : Types de taille, Correspondances
-  Fournisseur→Réf, base **EAN**.
+  Fournisseur→Réf, base **EAN**, **Équivalences couleur**.
+- **Équivalences couleur** : fait correspondre un code couleur des **fichiers** (ex. `SSS` de
+  Texas, **celui qui sera affiché**) au code du **référentiel TIO** (ex. `000`, porteur des EAN
+  et de la grille). À l'import, le produit est retrouvé sous `000` puis **re-clé** en `SSS`
+  (produit + EAN) → affichage partout en `SSS`, données conservées. Bascule **paresseuse**,
+  référence par référence. La synchro TIO remappe `000→SSS` pour les réfs déjà basculées.
+  Détail : [`08-fonctionnalites.md`](08-fonctionnalites.md).
 - **Source** : `SizeType`/`SizeTypeMapping`, `Supplier`/`SupplierProductRef`, `ProductSizeEan`
   (jointe à `Product` pour l'ordre des tailles et à `StockEntry` pour le stock affiché).
   Alimentée par imports Excel/CSV.

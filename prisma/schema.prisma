@@ -101,6 +101,25 @@ model Product {
   @@index([externalId])
 }
 
+// Équivalence de code couleur entre les FICHIERS (commandes clients/fournisseurs,
+// réceptions — ex. Texas « SSS ») et le RÉFÉRENTIEL TIO (ex. « 000 »).
+// À l'import, un produit introuvable en `sourceCode` est recherché en `targetCode` ; s'il
+// existe, il est **re-clé** en `sourceCode` (Product + ProductSizeEan) → on affiche partout
+// le code des commandes tout en conservant EAN, grille de tailles et historique.
+// Portée volontairement PRUDENTE : seules les références réellement rencontrées en
+// `sourceCode` à l'import basculent.
+model ColorEquivalence {
+  id         String   @id @default(cuid())
+  sourceCode String   // code présent dans les fichiers = code AFFICHÉ (ex. "SSS")
+  targetCode String   // code du référentiel TIO à aller chercher (ex. "000")
+  label      String?  // libellé couleur à appliquer lors de la bascule (ex. "Sans")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([sourceCode, targetCode])
+  @@index([sourceCode])
+}
+
 model ProductSizeEan {
   id        String @id @default(cuid())
   reference String

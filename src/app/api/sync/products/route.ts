@@ -24,6 +24,30 @@ export async function POST(request: NextRequest) {
     const errors: string[] = [];
     let imported = 0;
 
+    // Équivalences de code couleur : si une référence a DÉJÀ été basculée vers le code des
+    // fichiers (ex. « SSS »), la synchro doit écrire sous CE code — sinon elle recréerait un
+    // « 000 » en doublon à côté du SSS. Cf. src/lib/import/color-equivalence.ts.
+    const equivRows = await prisma.colorEquivalence.findMany();
+    const converted = new Map<string, string>(); // `${reference}__${targetCode}` → sourceCode
+    if (equivRows.length > 0) {
+      const sources = [...new Set(equivRows.map((e) => e.sourceCode))];
+      const already = await prisma.product.findMany({
+        where: { color: { in: sources } },
+        select: { reference: true, color: true },
+      });
+      const refsBySource = new Map<string, Set<string>>();
+      for (const p of already) {
+        const s = refsBySource.get(p.color) || new Set<string>();
+        s.add(p.reference);
+        refsBySource.set(p.color, s);
+      }
+      for (const e of equivRows) {
+        for (const ref of refsBySource.get(e.sourceCode) || []) {
+          converted.set(`${ref}__${e.targetCode}`, e.sourceCode);
+        }
+      }
+    }
+
     for (const prod of products) {
       try {
         const {
@@ -47,7 +71,11 @@ export async function POST(request: NextRequest) {
           continue;
         }
 
-        const colorStr = color || "UNIQUE";
+        // Remap éventuel vers le code des fichiers si cette référence a déjà basculé.
+        const rawColor = color || "UNIQUE";
+        const mappedColor = converted.get(`${reference}__${rawColor}`);
+        const colorStr = mappedColor || rawColor;
+        const colorCodeStr = mappedColor || colorCode || null;
         const sizeScale = variations
           ? (variations as { size: string }[]).map((v) => v.size).join(",")
           : "";
@@ -73,7 +101,7 @@ export async function POST(request: NextRequest) {
           genId(),
           String(reference),
           colorStr,
-          colorCode || null,
+          colorCodeStr,
           sizeScale || null,
           extId,
           category || null,

@@ -6,6 +6,11 @@ import {
   parseMcsClientOrders,
   parseTexasClientOrders,
 } from "./mcs-format";
+import {
+  loadColorEquivalences,
+  resolveProductWithEquivalence,
+  type EquivIndex,
+} from "./color-equivalence";
 
 export interface ImportResult {
   imported: number;
@@ -14,20 +19,12 @@ export interface ImportResult {
 }
 
 // Recherche un produit du référentiel par (référence, code couleur), avec tolérance
-// sur le zéro initial du code (la PL lit "001" comme nombre 1 ; le référentiel garde "001").
-async function findProduct(reference: string, colorCode: string) {
-  const candidates = new Set<string>([colorCode]);
-  if (/^\d+$/.test(colorCode)) {
-    candidates.add(colorCode.padStart(3, "0"));
-    candidates.add(String(parseInt(colorCode, 10)));
-  }
-  for (const color of candidates) {
-    const p = await prisma.product.findUnique({
-      where: { reference_color: { reference, color } },
-    });
-    if (p) return p;
-  }
-  return null;
+// sur le zéro initial du code (la PL lit "001" comme nombre 1 ; le référentiel garde "001")
+// PUIS via les équivalences de code couleur (ex. « SSS » des fichiers → « 000 » du
+// référentiel, le produit étant alors re-clé en SSS). Cf. color-equivalence.ts.
+async function findProduct(reference: string, colorCode: string, equivs: EquivIndex) {
+  const { product } = await resolveProductWithEquivalence(reference, colorCode, equivs);
+  return product;
 }
 
 // ----------------------------------------------- Commande fournisseur (StatGen)
@@ -41,6 +38,7 @@ export async function importMcsSupplierOrders(
 ): Promise<ImportResult> {
   const lines = parseMcsStatgen(buffer);
   const errors: string[] = [];
+  const equivs = await loadColorEquivalences();
   let imported = 0;
   let createdProducts = 0;
   if (lines.length === 0) {
@@ -100,7 +98,7 @@ export async function importMcsSupplierOrders(
 
     const keptProductIds: string[] = [];
     for (const row of rows) {
-      let product = await findProduct(row.reference, row.colorCode);
+      let product = await findProduct(row.reference, row.colorCode, equivs);
       // Produit absent du référentiel → on le CRÉE depuis la commande fournisseur
       // (le fichier fournit la grille de tailles via la légende « gamme »). La synchro
       // TIO (ON CONFLICT reference,color) l'enrichira ensuite (catégorie, prix, EAN…).
@@ -187,11 +185,12 @@ export async function importMcsReceptions(
   if (lines.length === 0) {
     return { imported, errors: ["Aucune ligne détectée (format liste de colisage MCS)."] };
   }
+  const equivs = await loadColorEquivalences();
 
   // Résolution des produits (une seule fois) — sert aussi à l'auto-rattachement.
   const resolved: { productId: string; quantities: Record<string, number> }[] = [];
   for (const line of lines) {
-    const product = await findProduct(line.reference, line.colorCode);
+    const product = await findProduct(line.reference, line.colorCode, equivs);
     if (!product) {
       errors.push(`Réception : produit introuvable ${line.reference} / ${line.colorCode}`);
       continue;
@@ -465,6 +464,23 @@ export async function importTexasClientOrders(
     return null;
   };
 
+  // Repli par équivalence de code couleur (ex. SSS → 000, puis re-clé du produit en SSS).
+  // Uniquement sur les échecs du cache mémoire, avec mémorisation pour ne pas répéter.
+  const equivs = await loadColorEquivalences();
+  const missCache = new Map<string, string | null>();
+  const resolveId = async (ref: string, code: string): Promise<string | null> => {
+    const fast = lookup(ref, code);
+    if (fast) return fast;
+    const k = `${ref}|${code}`;
+    if (missCache.has(k)) return missCache.get(k) ?? null;
+    const { product } = await resolveProductWithEquivalence(ref, code, equivs);
+    const id = product?.id ?? null;
+    missCache.set(k, id);
+    // Après bascule, le produit vit sous le code du fichier → chemin rapide ensuite.
+    if (id) pmap.set(`${ref}__${code}`, id);
+    return id;
+  };
+
   // Clients distincts (upsert par code SANS écraser le nom existant) + ClientSeason.
   const clientIdByCode = new Map<string, string>();
   for (const code of new Set(lines.map((l) => l.clientCode).filter(Boolean))) {
@@ -530,7 +546,7 @@ export async function importTexasClientOrders(
     // Agrège les quantités par produit (via line.sizes décodées par gamme).
     const byProduct = new Map<string, Record<string, number>>();
     for (const row of rows) {
-      const productId = lookup(row.reference, row.colorCode);
+      const productId = await resolveId(row.reference, row.colorCode);
       if (!productId) {
         const k = `${row.reference} / ${row.colorCode}${row.colorName ? ` (${row.colorName})` : ""}`;
         missing.set(k, (missing.get(k) || 0) + 1);

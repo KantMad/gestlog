@@ -632,6 +632,37 @@ export const HELP_THEMES: HelpTheme[] = [
         ],
       },
       {
+        id: "equivalences-couleur",
+        icon: "🎨",
+        title: "Équivalences de code couleur (produit introuvable)",
+        keywords: "équivalence couleur code sss 000 produit introuvable import texas tio ean",
+        sections: [
+          {
+            h: "Le problème",
+            lines: [
+              "Un même coloris peut avoir **deux codes différents** : par exemple « sans couleur » est **SSS** dans Texas mais **000** dans TIO (le référentiel).",
+              "Résultat : à l'import, l'outil ne trouve pas le produit → **« Produit introuvable »**, et la ligne est ignorée.",
+            ],
+          },
+          {
+            h: "La solution",
+            lines: [
+              "Va dans **Infos produits → Équivalences couleur** et crée l'équivalence : code des fichiers = **SSS**, code du référentiel = **000** (libellé « Sans » en option).",
+              "À l'import suivant, l'outil cherchera le produit sous **000**, puis le **basculera** sous **SSS**.",
+            ],
+            tip: "Résultat : **SSS s'affiche partout** (le code de tes commandes), tout en gardant les **EAN** et la **grille de tailles** d'origine. Rien n'est perdu. ✨",
+          },
+          {
+            h: "Bon à savoir",
+            lines: [
+              "La bascule est **prudente** : seules les références réellement rencontrées en SSS changent. Les autres produits en 000 ne bougent pas.",
+              "Elle se fait **au moment de l'import** — il faut donc **réimporter** le fichier après avoir créé l'équivalence.",
+              "Supprimer une équivalence n'annule pas les bascules déjà faites.",
+            ],
+          },
+        ],
+      },
+      {
         id: "utilisateurs",
         icon: "👥",
         title: "Les utilisateurs & permissions",

@@ -53,6 +53,8 @@ import {
   X,
   Save,
   GripVertical,
+  Shuffle,
+  ArrowRight,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -1354,6 +1356,213 @@ function ImportResult({
   );
 }
 
+// ─── Équivalences de code couleur ───────────────────────────
+// Ex. « SSS » (code des fichiers Texas) ↔ « 000 » (code du référentiel TIO).
+// À l'import, un produit introuvable en SSS est cherché en 000 puis RE-CLÉ en SSS
+// (produit + EAN) : on affiche partout le code des commandes, avec les bons EAN/tailles.
+
+interface ColorEquivRow {
+  id: string;
+  sourceCode: string;
+  targetCode: string;
+  label: string | null;
+  createdAt: string;
+}
+
+function ColorEquivalencesTab() {
+  const [rows, setRows] = useState<ColorEquivRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [sourceCode, setSourceCode] = useState("");
+  const [targetCode, setTargetCode] = useState("");
+  const [label, setLabel] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [pendingId, setPendingId] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    fetch("/api/product-info/color-equivalences")
+      .then((r) => r.json())
+      .then((d) => setRows(d.data || []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const create = async () => {
+    if (!sourceCode.trim() || !targetCode.trim()) {
+      toast.error("Renseigne les deux codes couleur");
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch("/api/product-info/color-equivalences", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sourceCode, targetCode, label }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        toast.error(json.error || "Création impossible");
+        return;
+      }
+      toast.success(
+        `Équivalence ${json.data.sourceCode} → ${json.data.targetCode} créée`,
+        {
+          description: `${json.impacted} produit(s) au référentiel en « ${json.data.targetCode} ». Ils basculeront à l'import, référence par référence.`,
+        }
+      );
+      setSourceCode("");
+      setTargetCode("");
+      setLabel("");
+      load();
+    } catch {
+      toast.error("Erreur réseau");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const remove = async (id: string) => {
+    try {
+      const res = await fetch(`/api/product-info/color-equivalences/${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        toast.error(j.error || "Suppression impossible");
+        return;
+      }
+      toast.success("Équivalence supprimée");
+      setPendingId(null);
+      load();
+    } catch {
+      toast.error("Erreur réseau");
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Shuffle className="h-4 w-4" />
+            Créer une équivalence
+          </CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Quand un code couleur des <strong>fichiers</strong> (commandes clients, commandes
+            fournisseurs, réceptions) ne correspond pas au code du <strong>référentiel</strong>,
+            crée une équivalence. À l&apos;import, l&apos;outil ira chercher le produit sous le code
+            du référentiel, puis le <strong>bascule</strong> sous le code des fichiers : c&apos;est
+            ce code qui s&apos;affichera partout, en gardant les <strong>EAN</strong> et la{" "}
+            <strong>grille de tailles</strong> d&apos;origine.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Code dans les fichiers (affiché)</label>
+              <Input
+                value={sourceCode}
+                onChange={(e) => setSourceCode(e.target.value.toUpperCase())}
+                placeholder="ex. SSS"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Code du référentiel (EAN / tailles)</label>
+              <Input
+                value={targetCode}
+                onChange={(e) => setTargetCode(e.target.value)}
+                placeholder="ex. 000"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">
+                Libellé couleur <span className="font-normal text-muted-foreground">(optionnel)</span>
+              </label>
+              <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="ex. Sans" />
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <Button onClick={create} disabled={saving} className="gap-2">
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+              Créer l&apos;équivalence
+            </Button>
+            <p className="text-xs text-muted-foreground">
+              Exemple : <span className="font-mono">SSS → 000</span> — « SSS » dans Texas est le
+              « 000 » de TIO.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base">Équivalences actives</CardTitle>
+            <Badge variant="secondary">{rows.length}</Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          {loading ? (
+            <p className="py-10 text-center text-sm text-muted-foreground animate-pulse">
+              Chargement…
+            </p>
+          ) : rows.length === 0 ? (
+            <p className="py-10 text-center text-sm text-muted-foreground">
+              Aucune équivalence. Les codes couleur des fichiers doivent alors correspondre
+              exactement au référentiel.
+            </p>
+          ) : (
+            <ul className="divide-y">
+              {rows.map((r) => (
+                <li key={r.id} className="flex items-center gap-3 px-4 py-3 text-sm">
+                  <div className="flex flex-1 items-center gap-2">
+                    <span className="rounded bg-primary/10 px-2 py-0.5 font-mono font-semibold text-primary">
+                      {r.sourceCode}
+                    </span>
+                    <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className="rounded bg-secondary px-2 py-0.5 font-mono">{r.targetCode}</span>
+                    {r.label && (
+                      <span className="text-xs text-muted-foreground">« {r.label} »</span>
+                    )}
+                  </div>
+                  {pendingId === r.id ? (
+                    <div className="flex items-center gap-1">
+                      <Button size="sm" variant="destructive" className="h-7" onClick={() => remove(r.id)}>
+                        Confirmer
+                      </Button>
+                      <Button size="sm" variant="ghost" className="h-7" onClick={() => setPendingId(null)}>
+                        Annuler
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-destructive hover:bg-destructive/10"
+                      onClick={() => setPendingId(r.id)}
+                    >
+                      <Trash2 className="mr-1 h-3.5 w-3.5" />
+                      Supprimer
+                    </Button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="border-t px-4 py-2 text-xs text-muted-foreground">
+            La bascule se fait <strong>à l&apos;import</strong>, référence par référence : seules les
+            références réellement rencontrées sous le code des fichiers changent. Supprimer une
+            équivalence <strong>n&apos;annule pas</strong> les bascules déjà faites (créer
+            l&apos;équivalence inverse pour revenir en arrière).
+          </p>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 // ─── Main Page ──────────────────────────────────────────────
 
 export default function ProductInfoPage() {
@@ -1380,6 +1589,10 @@ export default function ProductInfoPage() {
               <Barcode className="h-4 w-4" />
               EAN
             </TabsTrigger>
+            <TabsTrigger value="color-equiv" className="gap-2">
+              <Shuffle className="h-4 w-4" />
+              Équivalences couleur
+            </TabsTrigger>
           </TabsList>
           <TabsContent value="size-types" className="mt-6">
             <SizeTypesTab />
@@ -1389,6 +1602,9 @@ export default function ProductInfoPage() {
           </TabsContent>
           <TabsContent value="eans" className="mt-6">
             <EansTab />
+          </TabsContent>
+          <TabsContent value="color-equiv" className="mt-6">
+            <ColorEquivalencesTab />
           </TabsContent>
         </Tabs>
       </div>

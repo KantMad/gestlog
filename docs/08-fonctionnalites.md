@@ -194,6 +194,33 @@ ligne, **concaténée sans espace** :
 - Quantités **agrégées par (commande, EAN)**, sommées sur toutes les réceptions ; **toute
   quantité 0 est retirée**. N° commande padé à 11 (0 à gauche), EAN sur 13.
 
+### Équivalences de code couleur (fichiers ↔ référentiel TIO)
+
+Certains codes couleur diffèrent entre les **fichiers** (Texas/commandes/réceptions) et le
+**référentiel TIO**. Ex. : le coloris « sans couleur » est **`SSS`** dans Texas et **`000`**
+dans TIO → produit « introuvable » à l'import.
+
+- **Modèle** `ColorEquivalence { sourceCode, targetCode, label }` — `sourceCode` = code des
+  fichiers (**celui qui sera affiché**, ex. `SSS`) ; `targetCode` = code du référentiel où
+  trouver EAN + grille (ex. `000`). Écran : **Infos produits → Équivalences couleur**
+  (`/api/product-info/color-equivalences`).
+- **Résolution à l'import** (`src/lib/import/color-equivalence.ts`,
+  `resolveProductWithEquivalence`) : 1) recherche directe (tolérance zéro initial) ; 2) sinon,
+  recherche sous `targetCode` ; si trouvé → le produit est **RE-CLÉ** vers `sourceCode`
+  (`Product.color`/`colorCode` + **`ProductSizeEan.color`**, `colorLabel` = `label` si fourni).
+  Les lignes pointent l'**id produit** → EAN, grille et **historique** sont conservés, et tout
+  s'affiche désormais sous le code des fichiers **sans toucher aux écrans**.
+- **Portée volontairement prudente** : la bascule est **paresseuse**, référence par référence,
+  déclenchée par un import réel. Les références jamais vues sous `sourceCode` ne bougent pas
+  (important : 84 références ont `000` **et** de vrais coloris).
+- **Appliqué à** : import **Texas** (`importTexasClientOrders`), **commandes fournisseurs** et
+  **réceptions** (via `findProduct`).
+- ⚠️ **Synchro TIO** (`/api/sync/products`) : elle renvoie toujours `000`. Elle **remappe** vers
+  `sourceCode` pour les références **déjà basculées** (préchargement `converted`), sinon elle
+  recréerait un `000` en doublon à côté du `SSS` (produit **et** EAN).
+- Supprimer une équivalence **n'annule pas** les bascules déjà faites (créer l'équivalence
+  inverse pour revenir en arrière).
+
 ### Formats d'import MCS (auto-détectés)
 
 Les fichiers réels MCS ne sont pas des tableaux plats → l'import les **auto-détecte**
