@@ -4,6 +4,7 @@ import {
   detectMcsFormat,
   parseMcsStatgen,
   parseMcsPackingList,
+  parseTexasClientOrders,
   pickReceptionSizes,
 } from "../src/lib/import/mcs-format";
 
@@ -87,6 +88,34 @@ describe("parseMcsStatgen — reconstruction de grille via la légende (gamme + 
     // Coloris pleine plage.
     expect(lines[1]).toMatchObject({ colorCode: "700", sizeScale: "44,46,48,50" });
     expect(lines[1].sizes).toEqual({ "44": 5, "46": 6, "48": 6, "50": 3 });
+  });
+});
+
+describe("parseTexasClientOrders — « Référence commande client » = n° de commande TIO", () => {
+  // Les n° de commande Texas et TIO sont DISJOINTS (vérifié : 0 recoupement sur 282
+  // commandes AH26). Le seul lien est cette colonne : PO-… pour une commande de catalogue,
+  // IS-… pour un réassort. C'est elle qui permet de retrouver le catalogue de vente TIO.
+  const grid = [
+    ["Saison", "Fiche produit fini", "Coloris produit fini", "N° commande client", "Code client(Commande client)", "Référence commande client(Commande client)", "Total Q", "Q. 1", "Q. 2", "Clé Langue+Gamme(Produit fini)", "Taille début(Produit fini)", "Taille fin(Produit fini)", "Montant commandé net total(Commande client)", "Soldé(Commande client)"],
+    ["", "", "", "", "", "", "MAI", "S", "M", "", "", "", "", ""], // légende gamme MAI
+    ["W26", "CCAH26_JE12", "000-Bleu", "110891", "RIVED02701", "PO-643911056017", 7, 3, 4, "FRAMAI", 1, 2, 210, "N"],
+    ["TDH", "THRPULL_906", "711-Canard", "110433", "GENT 07801", "IS-842577046121", 5, 2, 3, "FRAMAI", 1, 2, 150, "N"],
+  ];
+
+  it("lit la référence TIO sans la confondre avec le n° de commande Texas", () => {
+    const lines = parseTexasClientOrders(buf(grid));
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toMatchObject({ orderNumber: "110891", tioOrderNumber: "PO-643911056017" });
+    // Un réassort porte une référence IS-… : elle est lue telle quelle (aucune jumelle TIO
+    // ne sera trouvée à l'import → commande sans catalogue, ce qui est correct).
+    expect(lines[1]).toMatchObject({ orderNumber: "110433", tioOrderNumber: "IS-842577046121" });
+  });
+
+  it("tolère l'absence de la colonne référence (tioOrderNumber vide)", () => {
+    const sansRef = grid.map((r) => [...r.slice(0, 5), ...r.slice(6)]);
+    const lines = parseTexasClientOrders(buf(sansRef));
+    expect(lines[0].tioOrderNumber).toBe("");
+    expect(lines[0].orderNumber).toBe("110891"); // le n° Texas reste correctement lu
   });
 });
 

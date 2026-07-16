@@ -280,6 +280,10 @@ export function parseMcsClientOrders(buffer: ArrayBuffer): McsClientLine[] {
 // gamme (comme les commandes fournisseur). C'est la source de VÉRITÉ pour la répartition.
 export interface TexasClientLine {
   orderNumber: string;
+  // « Référence commande client » : le n° que la commande porte côté TIO (PO-… pour une
+  // commande de catalogue, IS-… pour un réassort). C'est le SEUL lien entre les deux
+  // sources — les n° de commande Texas et TIO sont totalement disjoints.
+  tioOrderNumber: string;
   clientCode: string;
   season: string; // code saison du fichier (W26…)
   reference: string;
@@ -314,6 +318,7 @@ export function parseTexasClientOrders(buffer: ArrayBuffer): TexasClientLine[] {
     const cColor = header.findIndex((hh) => hh.includes("COLORIS"));
     let cOrder = header.indexOf("N° COMMANDE CLIENT");
     if (cOrder < 0) cOrder = header.findIndex((hh) => hh.startsWith("N° COMMANDE") && !hh.includes("RÉFÉRENCE"));
+    const cTioRef = header.findIndex((hh) => hh.startsWith("RÉFÉRENCE COMMANDE CLIENT") || hh.startsWith("REFERENCE COMMANDE CLIENT"));
     const cClient = header.findIndex((hh) => hh.includes("CODE CLIENT") && hh.includes("COMMANDE"));
     const cSeason = header.indexOf("SAISON");
     const cGamme = header.findIndex((hh) => hh.includes("LANGUE+GAMME"));
@@ -375,6 +380,7 @@ export function parseTexasClientOrders(buffer: ArrayBuffer): TexasClientLine[] {
 
       lines.push({
         orderNumber,
+        tioOrderNumber: cTioRef >= 0 ? norm(row[cTioRef]) : "",
         clientCode: cClient >= 0 ? norm(row[cClient]) : "",
         season: cSeason >= 0 ? up(row[cSeason]) : "",
         reference,

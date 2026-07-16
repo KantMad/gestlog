@@ -214,6 +214,24 @@ Les commandes B2B ont un champ **`ClientOrder.source`** (`TIO` par défaut | `TE
 - **Transition douce** : tant qu'une saison n'a pas de Texas, elle affiche TIO. Dès l'import Texas,
   elle bascule. Suppression possible via « Imports récents » (type `CLIENT_ORDER_TEXAS`).
 - **Clé unique** `(orderNumber, seasonId)` conservée (Texas utilise des n° différents de TIO).
+- **Lien TIO ↔ Texas** : les n° de commande des deux sources sont **totalement disjoints**
+  (mesuré : **0 recoupement sur 282 commandes AH26**, y compris toutes saisons confondues et
+  après normalisation — les plages se ressemblent pourtant, 110387+ côté TIO et 110328→111140
+  côté Texas : piège classique). Le **seul** lien est la colonne Texas **« Référence commande
+  client(Commande client) »**, qui porte le **n° de commande TIO** : `PO-…` pour une commande de
+  catalogue, `IS-…` pour un réassort. Elle est stockée dans `ClientOrder.tioOrderNumber` à
+  l'import Texas.
+- **Catalogue de vente** : il n'existe **que côté TIO** (renseigné par le sync n8n ; l'export
+  Texas n'a **aucune** colonne catalogue — sa colonne `Saison` ne vaut que `W26`/`TDH`, trop
+  grossière : elle isole Territoire d'homme mais ne sépare pas *MCS Homme W26* de *MCS Country
+  classic W26*). À l'import Texas, le `catalogId` est donc **repris de la commande TIO jumelle**
+  (même saison, `orderNumber` = la référence lue). Résultat mesuré sur AH26 : **266/282 (94 %)**
+  rattachées — 175 *MCS Homme W26*, 78 *Territoire d'homme W26*, 13 *MCS Country classic W26* ;
+  les 15 restantes sont des **réassorts** (réf `IS-…`, sans jumelle TIO) et restent sans
+  catalogue, ce qui est correct. Le filtre catalogue de la répartition (et tout écran lisant
+  `catalogId`) fonctionne dès lors sur la source Texas, **sans code spécifique**.
+  Au **ré-import**, un catalogue déjà rattaché n'est **jamais effacé** si la jumelle TIO est
+  introuvable (synchro TIO en retard) — le champ n'est écrit que si la jumelle existe.
 
 ### Écran Exports (`/export`)
 

@@ -517,6 +517,20 @@ export async function importTexasClientOrders(
   });
   const conflictMap = new Map(conflicts.map((c) => [c.orderNumber, c.season.name]));
 
+  // Catalogue de vente : il n'existe QUE côté TIO (le sync n8n le renseigne ; l'export Texas
+  // n'a pas de colonne catalogue). On le récupère via la « Référence commande client », qui
+  // porte le n° de commande TIO — les n° Texas et TIO étant, eux, totalement disjoints.
+  // Seules les commandes de catalogue (réf PO-…) matchent ; les réassorts (IS-…) n'ont pas
+  // de jumelle TIO et restent sans catalogue, ce qui est correct.
+  const tioRefs = [...new Set(lines.map((l) => l.tioOrderNumber).filter(Boolean))];
+  const tioOrders = tioRefs.length
+    ? await prisma.clientOrder.findMany({
+        where: { source: "TIO", seasonId, orderNumber: { in: tioRefs } },
+        select: { orderNumber: true, catalogId: true },
+      })
+    : [];
+  const catalogByTioRef = new Map(tioOrders.map((o) => [o.orderNumber, o.catalogId]));
+
   const missing = new Map<string, number>();
 
   for (const [orderNumber, rows] of byOrder) {
@@ -535,9 +549,21 @@ export async function importTexasClientOrders(
     }
     const orderAmount = rows[0].amount || 0;
     const sold = rows.some((r) => r.sold);
+    const tioOrderNumber = rows[0].tioOrderNumber || null;
+    // undefined (et non null) si la jumelle TIO est introuvable : au ré-import, on ne veut
+    // pas effacer un catalogue déjà rattaché parce que la synchro TIO a du retard.
+    const catalogId = tioOrderNumber ? catalogByTioRef.get(tioOrderNumber) ?? undefined : undefined;
     const clientOrder = await prisma.clientOrder.upsert({
       where: { orderNumber_seasonId: { orderNumber, seasonId } },
-      update: { clientId, source: "TEXAS", status: sold ? "SOLDEE" : "EN_COURS", totalAmount: orderAmount, importLogId },
+      update: {
+        clientId,
+        source: "TEXAS",
+        status: sold ? "SOLDEE" : "EN_COURS",
+        totalAmount: orderAmount,
+        importLogId,
+        tioOrderNumber,
+        ...(catalogId ? { catalogId } : {}),
+      },
       create: {
         orderNumber,
         seasonId,
@@ -546,6 +572,8 @@ export async function importTexasClientOrders(
         status: sold ? "SOLDEE" : "EN_COURS",
         totalAmount: orderAmount,
         importLogId,
+        tioOrderNumber,
+        ...(catalogId ? { catalogId } : {}),
       },
     });
 

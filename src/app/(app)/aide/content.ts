@@ -291,6 +291,7 @@ export const HELP_THEMES: HelpTheme[] = [
           {
             lines: [
               "Choisis tes filtres (catalogue, boutiques, fournisseurs…) puis **Lancer la simulation**.",
+              "Le **filtre catalogue** te permet de ne répartir qu'un catalogue de vente, même quand la réception fournisseur couvre plusieurs catalogues. Les réassorts n'appartiennent à aucun catalogue : ils n'apparaissent donc pas quand tu en choisis un.",
               "Bascule entre la vue **par boutique** et **par produit**. En vue produit, l'en-tête montre **Commandé / Reçu / Écart / Alloué**.",
               "Tu peux **modifier une quantité à la main** en cliquant sur une cellule.",
               "Le **filtre réception** (Tout / Réceptionné / Non réceptionné) masque les produits selon leur réception.",
