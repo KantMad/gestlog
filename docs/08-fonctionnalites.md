@@ -78,6 +78,20 @@ sont gérés par écran (cf. [`05-authentification.md`](05-authentification.md))
   `sessionStorage` (`gestlog:allocation:sim:v1`) → en changeant de page puis en revenant, la
   simulation (y compris ajustements manuels) est **restaurée** sans relancer. Vidée à la
   validation et au **changement de saison** (données d'une autre saison).
+- **Répartition — périmètre de validation** (fournisseurs **et** catalogues, multi-sélection) :
+  la simulation est **toujours calculée sur toute la demande** (la restreindre fausserait les
+  coupes : le stock reçu serait réparti sur un sous-ensemble de boutiques), mais on ne **valide**
+  que les fournisseurs / catalogues choisis — utile quand une réception fournisseur couvre
+  plusieurs catalogues. Vide = tout.
+  - Données nécessaires renvoyées par `simulate` : `supplierIdsByProduct` (un produit peut venir
+    de **plusieurs** fournisseurs → tableau) et `catalogIdByOrder` (`null` hors catalogue).
+  - Filtre appliqué **côté écran** (`linesToValidate`) : `/api/allocation/validate` reçoit
+    simplement la liste de lignes à enregistrer — l'endpoint est inchangé.
+  - Une commande **sans catalogue** (réassort, ou jumelle TIO introuvable — cf. section
+    double-source) est **exclue dès qu'un catalogue est filtré**.
+  - **Validation partielle** : les lignes non validées **restent à l'écran** (et le périmètre est
+    réinitialisé) pour enchaîner sur un autre fournisseur / catalogue. Si tout a été validé,
+    la simulation est vidée comme avant.
 - **Répartition — filtre réception** : bouton 3 états *Tout / Réceptionné / Non réceptionné*
   (comme Comparaison) filtrant les produits selon `reçu > 0`, dans les deux vues (par produit /
   par boutique).

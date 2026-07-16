@@ -319,13 +319,23 @@ export const HELP_THEMES: HelpTheme[] = [
         id: "valider-repartition",
         icon: "✅",
         title: "Valider une répartition",
-        keywords: "valider session répartition figée livraison génération",
+        keywords: "valider session répartition figée livraison génération périmètre fournisseur catalogue partielle",
         sections: [
           {
             lines: [
               "**Valider** enregistre la répartition en **session**. C'est cette session validée qui sert ensuite à **générer les livraisons** (écran Préparation).",
             ],
             tip: "Une session validée est un **instantané figé**. Si tu corriges une réception après coup, il faut **re-simuler puis re-valider**.",
+          },
+          {
+            h: "Ne valider qu'une partie : le périmètre de validation",
+            lines: [
+              "Le bloc **Périmètre de validation**, en haut des résultats, te laisse choisir les **fournisseurs** et les **catalogues** à valider (plusieurs de chaque). Vide = tout.",
+              "La **simulation reste calculée sur toute la demande** : c'est indispensable, sinon le stock reçu serait réparti entre moins de boutiques et les coupes seraient fausses. Le périmètre n'agit qu'au moment d'enregistrer.",
+              "Pratique quand une **réception fournisseur couvre plusieurs catalogues** : tu valides le catalogue prêt, et tu gardes le reste sous la main.",
+              "Après une validation partielle, les lignes **non validées restent affichées** : tu peux enchaîner directement sur un autre fournisseur ou catalogue.",
+            ],
+            tip: "Quand tu filtres sur un catalogue, les **réassorts** (qui n'appartiennent à aucun catalogue) sont exclus. 📦",
           },
         ],
       },

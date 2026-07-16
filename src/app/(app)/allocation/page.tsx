@@ -979,6 +979,13 @@ export default function AllocationPage() {
   const [receivedByProduct, setReceivedByProduct] = useState<Record<string, SizeQuantities>>({});
   const [eansByProduct, setEansByProduct] = useState<Record<string, Record<string, string>>>({});
   const [rankingByClient, setRankingByClient] = useState<Record<string, number>>({});
+  // Périmètre de validation : on simule sur TOUTE la demande (sinon le stock reçu serait
+  // réparti sur un sous-ensemble et les coupes seraient fausses), mais on ne valide que les
+  // fournisseurs / catalogues choisis. Vide = tout.
+  const [supplierIdsByProduct, setSupplierIdsByProduct] = useState<Record<string, string[]>>({});
+  const [catalogIdByOrder, setCatalogIdByOrder] = useState<Record<string, string | null>>({});
+  const [validateSuppliers, setValidateSuppliers] = useState<string[]>([]);
+  const [validateCatalogs, setValidateCatalogs] = useState<string[]>([]);
   const [sessions, setSessions] = useState<SessionEntry[]>([]);
   const [catalogs, setCatalogs] = useState<CatalogEntry[]>([]);
   const [clients, setClients] = useState<ClientEntry[]>([]);
@@ -1022,6 +1029,8 @@ export default function AllocationPage() {
       setReceivedByProduct(s.receivedByProduct || {});
       setEansByProduct(s.eansByProduct || {});
       setRankingByClient(s.rankingByClient || {});
+      setSupplierIdsByProduct(s.supplierIdsByProduct || {});
+      setCatalogIdByOrder(s.catalogIdByOrder || {});
       setManualEdits(s.manualEdits || 0);
       const f = s.filters || {};
       setSelectedCatalog(f.selectedCatalog ?? "ALL");
@@ -1031,6 +1040,8 @@ export default function AllocationPage() {
       setProductSearch(f.productSearch ?? "");
       setViewMode(f.viewMode ?? "client");
       setReceptionFilter(f.receptionFilter ?? "all");
+      setValidateSuppliers(f.validateSuppliers ?? []);
+      setValidateCatalogs(f.validateCatalogs ?? []);
     } catch {
       /* stockage indisponible/corrompu → on ignore */
     }
@@ -1047,6 +1058,10 @@ export default function AllocationPage() {
     setReceivedByProduct({});
     setEansByProduct({});
     setRankingByClient({});
+    setSupplierIdsByProduct({});
+    setCatalogIdByOrder({});
+    setValidateSuppliers([]);
+    setValidateCatalogs([]);
     setManualEdits(0);
     try {
       sessionStorage.removeItem(STORE_KEY);
@@ -1074,6 +1089,8 @@ export default function AllocationPage() {
           receivedByProduct,
           eansByProduct,
           rankingByClient,
+          supplierIdsByProduct,
+          catalogIdByOrder,
           manualEdits,
           filters: {
             selectedCatalog,
@@ -1083,6 +1100,8 @@ export default function AllocationPage() {
             productSearch,
             viewMode,
             receptionFilter,
+            validateSuppliers,
+            validateCatalogs,
           },
         })
       );
@@ -1098,6 +1117,8 @@ export default function AllocationPage() {
     receivedByProduct,
     eansByProduct,
     rankingByClient,
+    supplierIdsByProduct,
+    catalogIdByOrder,
     manualEdits,
     selectedCatalog,
     selectedClients,
@@ -1106,6 +1127,8 @@ export default function AllocationPage() {
     productSearch,
     viewMode,
     receptionFilter,
+    validateSuppliers,
+    validateCatalogs,
   ]);
 
   const loadSessions = useCallback(async () => {
@@ -1207,6 +1230,8 @@ export default function AllocationPage() {
       setSummary(data.summary || null);
       setReceivedByProduct(data.receivedByProduct || {});
       setEansByProduct(data.eansByProduct || {});
+      setSupplierIdsByProduct(data.supplierIdsByProduct || {});
+      setCatalogIdByOrder(data.catalogIdByOrder || {});
       setRankingByClient(data.rankingByClient || {});
       toast.success("Simulation terminée", {
         description: `${data.lines?.length || 0} lignes calculées`,
@@ -1310,8 +1335,33 @@ export default function AllocationPage() {
     toast.success(`Surplus réparti : +${added} pièce(s)`, { description: bits.join(" · ") });
   };
 
+  // Lignes réellement validées : filtrées par fournisseur (produit fourni par l'un des
+  // fournisseurs choisis) et par catalogue (commande rattachée à l'un des catalogues
+  // choisis). Une liste vide = aucun filtre = tout.
+  const linesToValidate = useMemo(() => {
+    if (validateSuppliers.length === 0 && validateCatalogs.length === 0) return lines;
+    return lines.filter((l) => {
+      if (validateSuppliers.length > 0) {
+        const sups = supplierIdsByProduct[l.productId] || [];
+        if (!sups.some((s) => validateSuppliers.includes(s))) return false;
+      }
+      if (validateCatalogs.length > 0) {
+        const cat = catalogIdByOrder[l.clientOrderId] ?? null;
+        // Sans catalogue (réassort, ou jumelle TIO introuvable) → exclu dès qu'on filtre.
+        if (!cat || !validateCatalogs.includes(cat)) return false;
+      }
+      return true;
+    });
+  }, [lines, validateSuppliers, validateCatalogs, supplierIdsByProduct, catalogIdByOrder]);
+
   const validateAllocation = async () => {
     if (!activeSeason || lines.length === 0) return;
+    if (linesToValidate.length === 0) {
+      toast.error("Aucune ligne à valider", {
+        description: "Le périmètre choisi (fournisseurs / catalogues) ne contient aucune ligne.",
+      });
+      return;
+    }
     setValidating(true);
     try {
       const res = await fetch("/api/allocation/validate", {
@@ -1319,7 +1369,7 @@ export default function AllocationPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           seasonId: activeSeason.id,
-          lines: lines.map((l) => ({
+          lines: linesToValidate.map((l) => ({
             clientId: l.clientId,
             clientOrderId: l.clientOrderId,
             productId: l.productId,
@@ -1334,14 +1384,27 @@ export default function AllocationPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Erreur");
+      // Validation partielle (périmètre restreint) → on garde les lignes NON validées à
+      // l'écran pour pouvoir enchaîner sur un autre fournisseur / catalogue.
+      const validated = new Set(linesToValidate.map((l) => `${l.clientOrderId}__${l.productId}`));
+      const rest = lines.filter((l) => !validated.has(`${l.clientOrderId}__${l.productId}`));
       toast.success("Répartition validée", {
-        description: `Session créée avec ${data.lineCount} lignes`,
+        description:
+          rest.length > 0
+            ? `Session créée avec ${data.lineCount} lignes · ${rest.length} ligne(s) restent à valider`
+            : `Session créée avec ${data.lineCount} lignes`,
       });
-      setLines([]);
-      setWarnings([]);
-      setClientImpacts([]);
-      setSummary(null);
-      setManualEdits(0);
+      if (rest.length > 0) {
+        setLines(rest);
+        setValidateSuppliers([]);
+        setValidateCatalogs([]);
+      } else {
+        setLines([]);
+        setWarnings([]);
+        setClientImpacts([]);
+        setSummary(null);
+        setManualEdits(0);
+      }
       loadSessions();
     } catch (e) {
       toast.error("Erreur lors de la validation", {
@@ -1578,7 +1641,11 @@ export default function AllocationPage() {
                     className="gap-2"
                   >
                     <CheckCircle className="h-4 w-4" />
-                    {validating ? "Validation..." : "Valider la répartition"}
+                    {validating
+                      ? "Validation..."
+                      : linesToValidate.length < lines.length
+                        ? `Valider ${formatNumber(linesToValidate.length)} ligne(s)`
+                        : "Valider la répartition"}
                   </Button>
                 </>
               )}
@@ -1699,6 +1766,113 @@ export default function AllocationPage() {
 
             {lines.length > 0 && (
               <>
+                {/* Périmètre de validation : la simulation porte sur toute la demande, mais
+                    on ne valide que les fournisseurs / catalogues choisis. */}
+                <Card>
+                  <CardContent className="pt-6">
+                    <div className="flex items-center gap-2 mb-3">
+                      <CheckCircle className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm font-medium">Périmètre de validation</span>
+                      <span className="text-xs text-muted-foreground">
+                        — la simulation reste calculée sur toute la demande
+                      </span>
+                    </div>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div>
+                        <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
+                          Fournisseurs à valider ({validateSuppliers.length === 0 ? "tous" : validateSuppliers.length})
+                        </label>
+                        <Select
+                          value="__placeholder__"
+                          onValueChange={(v: string | null) => {
+                            if (v && v !== "__placeholder__" && !validateSuppliers.includes(v)) {
+                              setValidateSuppliers([...validateSuppliers, v]);
+                            }
+                          }}
+                        >
+                          <SelectTrigger className="text-sm">
+                            <span className="text-sm text-muted-foreground truncate">Ajouter un fournisseur...</span>
+                          </SelectTrigger>
+                          <SelectContent>
+                            {suppliers
+                              .filter((s) => !validateSuppliers.includes(s.id))
+                              .map((s) => (
+                                <SelectItem key={s.id} value={s.id}>
+                                  {s.name} ({s.code})
+                                </SelectItem>
+                              ))}
+                          </SelectContent>
+                        </Select>
+                        {validateSuppliers.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1.5">
+                            {validateSuppliers.map((id) => (
+                              <Badge
+                                key={id}
+                                variant="secondary"
+                                className="text-xs cursor-pointer gap-1"
+                                onClick={() => setValidateSuppliers(validateSuppliers.filter((x) => x !== id))}
+                              >
+                                {suppliers.find((s) => s.id === id)?.name || id}
+                                <X className="h-3 w-3" />
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
+                          Catalogues à valider ({validateCatalogs.length === 0 ? "tous" : validateCatalogs.length})
+                        </label>
+                        <Select
+                          value="__placeholder__"
+                          onValueChange={(v: string | null) => {
+                            if (v && v !== "__placeholder__" && !validateCatalogs.includes(v)) {
+                              setValidateCatalogs([...validateCatalogs, v]);
+                            }
+                          }}
+                        >
+                          <SelectTrigger className="text-sm">
+                            <span className="text-sm text-muted-foreground truncate">Ajouter un catalogue...</span>
+                          </SelectTrigger>
+                          <SelectContent>
+                            {catalogs
+                              .filter((c) => !validateCatalogs.includes(c.id))
+                              .map((c) => (
+                                <SelectItem key={c.id} value={c.id}>
+                                  {c.name}
+                                </SelectItem>
+                              ))}
+                          </SelectContent>
+                        </Select>
+                        {validateCatalogs.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1.5">
+                            {validateCatalogs.map((id) => (
+                              <Badge
+                                key={id}
+                                variant="secondary"
+                                className="text-xs cursor-pointer gap-1"
+                                onClick={() => setValidateCatalogs(validateCatalogs.filter((x) => x !== id))}
+                              >
+                                {catalogs.find((c) => c.id === id)?.name || id}
+                                <X className="h-3 w-3" />
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    {(validateSuppliers.length > 0 || validateCatalogs.length > 0) && (
+                      <p className="text-xs text-muted-foreground mt-3">
+                        <strong>{formatNumber(linesToValidate.length)}</strong> ligne(s) sur{" "}
+                        {formatNumber(lines.length)} seront validées.
+                        {validateCatalogs.length > 0 && (
+                          <> Les commandes sans catalogue (réassorts) sont exclues.</>
+                        )}
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+
                 {/* Summary cards */}
                 {summary && (
                   <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

@@ -81,12 +81,25 @@ export async function POST(request: NextRequest) {
     const supplierProductFilter =
       supplierIds && supplierIds.length > 0 ? new Set<string>() : null;
 
+    // Fournisseur(s) de chaque produit — sert au périmètre de VALIDATION côté écran : on
+    // simule sur toute la demande (sinon le stock serait mal réparti) mais on peut ne
+    // valider qu'une partie. Un produit peut venir de plusieurs fournisseurs → tableau.
+    const supplierIdsByProduct: Record<string, string[]> = {};
+    const noteSupplier = (productId: string, supplierId: string) => {
+      const l = (supplierIdsByProduct[productId] ||= []);
+      if (!l.includes(supplierId)) l.push(supplierId);
+    };
+
     const receivedByProduct = new Map<string, SizeQuantities>();
     for (const so of supplierOrders) {
-      for (const line of so.lines) supplierProductFilter?.add(line.productId);
+      for (const line of so.lines) {
+        supplierProductFilter?.add(line.productId);
+        noteSupplier(line.productId, so.supplierId);
+      }
       for (const reception of so.receptions) {
         for (const rl of reception.lines) {
           supplierProductFilter?.add(rl.productId);
+          noteSupplier(rl.productId, so.supplierId);
           const qty = parseSizeQuantities(rl.quantitiesBySize);
           const existing = receivedByProduct.get(rl.productId) || {};
           receivedByProduct.set(rl.productId, addQuantities(existing, qty));
@@ -144,7 +157,11 @@ export async function POST(request: NextRequest) {
     >();
     const productNames = new Map<string, string>();
     const clientCodes = new Map<string, string>();
+    // Catalogue de chaque commande — même usage : périmètre de validation. null pour les
+    // commandes hors catalogue (réassorts, ou jumelle TIO introuvable).
+    const catalogIdByOrder: Record<string, string | null> = {};
     for (const order of clientOrders) {
+      catalogIdByOrder[order.id] = order.catalogId;
       clientCodes.set(order.clientId, order.client.code);
       for (const line of order.lines) {
         if (!productMap.has(line.productId)) {
@@ -272,6 +289,8 @@ export async function POST(request: NextRequest) {
       receivedByProduct: receivedOut,
       rankingByClient,
       eansByProduct,
+      supplierIdsByProduct,
+      catalogIdByOrder,
       summary: {
         totalDemands: demands.length,
         totalProducts: new Set(demands.map((d) => d.productId)).size,
