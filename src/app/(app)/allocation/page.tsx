@@ -112,6 +112,22 @@ interface SupplierEntry {
 
 // ─── Editable cell for manual adjustments ────────────────────
 
+// Détail des écarts d'une ligne, taille par taille : combien de pièces ont été RETIRÉES et
+// combien AJOUTÉES. Le net seul (commandé − alloué) masque le cas mixte : perdre 3 pièces
+// sur M et en gagner 1 sur XL donne un net de -2, ce qui cache l'ajout.
+function sizeDelta(line: SimulationLine): { minusPieces: number; plusPieces: number } {
+  let minusPieces = 0;
+  let plusPieces = 0;
+  const sizes = new Set([...Object.keys(line.original), ...Object.keys(line.allocated)]);
+  for (const s of sizes) {
+    const o = line.original[s] || 0;
+    const a = line.allocated[s] || 0;
+    if (o > a) minusPieces += o - a;
+    else if (a > o) plusPieces += a - o;
+  }
+  return { minusPieces, plusPieces };
+}
+
 function EditableCell({
   value,
   original,
@@ -189,10 +205,11 @@ function EditableCell({
             : "Cliquer pour modifier"
       }
     >
-      {isAdded && "+"}
+      {/* La valeur affichée est le TOTAL alloué (pas un delta) → pas de « + ». */}
       {value > 0 ? value : "-"}
+      {/* Quantité commandée rappelée en dessous, SANS rature (illisible en petit). */}
       {(isReduced || isAdded) && (
-        <span className="block text-[10px] text-muted-foreground line-through">{original}</span>
+        <span className="block text-[10px] font-normal text-muted-foreground">{original}</span>
       )}
     </span>
   );
@@ -304,6 +321,9 @@ function ClientGroup({
                   const origTotal = sumQuantities(line.original);
                   const allocTotal = sumQuantities(line.allocated);
                   const diff = origTotal - allocTotal;
+                  // Détail : pièces retirées / ajoutées, taille par taille (une ligne peut
+                  // perdre sur une taille et gagner sur une autre → le net seul le masque).
+                  const { minusPieces, plusPieces } = sizeDelta(line);
                   const sizes = getAllSizes(lines);
                   return (
                     <TableRow
@@ -343,17 +363,31 @@ function ClientGroup({
                       <TableCell className="text-right font-medium text-sm">
                         {formatNumber(allocTotal)}
                       </TableCell>
-                      <TableCell
-                        className={cn(
-                          "text-right text-sm tabular-nums",
-                          diff > 0 ? "text-red-600 font-medium" : diff < 0 ? "text-emerald-600 font-medium" : ""
+                      <TableCell className="text-right text-sm tabular-nums">
+                        {/* Écart NET (avec %) + détail des pièces retirées / ajoutées :
+                            une même ligne peut perdre sur une taille et gagner sur une autre. */}
+                        <span
+                          className={cn(
+                            diff > 0
+                              ? "text-red-600 font-medium"
+                              : diff < 0
+                                ? "text-emerald-600 font-medium"
+                                : "text-muted-foreground"
+                          )}
+                        >
+                          {diff === 0
+                            ? "—"
+                            : diff > 0
+                              ? `-${diff} (-${origTotal > 0 ? Math.round((diff / origTotal) * 100) : 0}%)`
+                              : `+${-diff} (+${origTotal > 0 ? Math.round((-diff / origTotal) * 100) : 0}%)`}
+                        </span>
+                        {minusPieces > 0 && plusPieces > 0 && (
+                          <span className="block text-[10px] font-normal">
+                            <span className="text-red-600">-{minusPieces}</span>
+                            <span className="text-muted-foreground"> / </span>
+                            <span className="text-emerald-600">+{plusPieces}</span>
+                          </span>
                         )}
-                      >
-                        {diff === 0
-                          ? "—"
-                          : diff > 0
-                            ? `-${diff} (-${origTotal > 0 ? Math.round((diff / origTotal) * 100) : 0}%)`
-                            : `+${-diff} (+${origTotal > 0 ? Math.round((-diff / origTotal) * 100) : 0}%)`}
                       </TableCell>
                       <TableCell>
                         <Badge
@@ -558,6 +592,9 @@ function ProductGroup({
                   const origTotal = sumQuantities(line.original);
                   const allocTotal = sumQuantities(line.allocated);
                   const diff = origTotal - allocTotal;
+                  // Détail : pièces retirées / ajoutées, taille par taille (une ligne peut
+                  // perdre sur une taille et gagner sur une autre → le net seul le masque).
+                  const { minusPieces, plusPieces } = sizeDelta(line);
                   return (
                     <TableRow
                       key={lineKey}
@@ -595,17 +632,31 @@ function ProductGroup({
                       <TableCell className="text-right font-medium text-sm">
                         {formatNumber(allocTotal)}
                       </TableCell>
-                      <TableCell
-                        className={cn(
-                          "text-right text-sm tabular-nums",
-                          diff > 0 ? "text-red-600 font-medium" : diff < 0 ? "text-emerald-600 font-medium" : ""
+                      <TableCell className="text-right text-sm tabular-nums">
+                        {/* Écart NET (avec %) + détail des pièces retirées / ajoutées :
+                            une même ligne peut perdre sur une taille et gagner sur une autre. */}
+                        <span
+                          className={cn(
+                            diff > 0
+                              ? "text-red-600 font-medium"
+                              : diff < 0
+                                ? "text-emerald-600 font-medium"
+                                : "text-muted-foreground"
+                          )}
+                        >
+                          {diff === 0
+                            ? "—"
+                            : diff > 0
+                              ? `-${diff} (-${origTotal > 0 ? Math.round((diff / origTotal) * 100) : 0}%)`
+                              : `+${-diff} (+${origTotal > 0 ? Math.round((-diff / origTotal) * 100) : 0}%)`}
+                        </span>
+                        {minusPieces > 0 && plusPieces > 0 && (
+                          <span className="block text-[10px] font-normal">
+                            <span className="text-red-600">-{minusPieces}</span>
+                            <span className="text-muted-foreground"> / </span>
+                            <span className="text-emerald-600">+{plusPieces}</span>
+                          </span>
                         )}
-                      >
-                        {diff === 0
-                          ? "—"
-                          : diff > 0
-                            ? `-${diff} (-${origTotal > 0 ? Math.round((diff / origTotal) * 100) : 0}%)`
-                            : `+${-diff} (+${origTotal > 0 ? Math.round((-diff / origTotal) * 100) : 0}%)`}
                       </TableCell>
                       <TableCell>
                         <Badge
