@@ -85,7 +85,11 @@ export function runAllocation(input: AllocationInput): AllocationResult {
     // Rule 5+6: Sort by ranking then rotation
     const sorted = sortByRanking(productDemands, clientConfigs);
 
-    // Step 1: Pro-rata allocation per size
+    // Step 1: Pro-rata allocation per size.
+    // PLAFONNÉ À LA COMMANDE : une taille peut avoir été reçue en excès (ex. XL demandé 53 /
+    // reçu 56) alors que le produit est globalement en manque. Sans ce Math.min, le pro-rata
+    // servait les boutiques AU-DESSUS de leur commande. Le reliquat d'une taille excédentaire
+    // reste disponible et se répartit explicitement via « Répartir surplus ».
     const allocations = new Map<string, SizeQuantities>();
     for (const d of sorted) {
       const alloc: SizeQuantities = {};
@@ -95,7 +99,7 @@ export function runAllocation(input: AllocationInput): AllocationResult {
         if (sizeDemand === 0) {
           alloc[size] = 0;
         } else {
-          alloc[size] = Math.floor((requested / sizeDemand) * sizeAvail);
+          alloc[size] = Math.min(requested, Math.floor((requested / sizeDemand) * sizeAvail));
         }
       }
       allocations.set(`${d.clientId}:${d.clientOrderId}`, alloc);
