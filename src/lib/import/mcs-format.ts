@@ -398,6 +398,33 @@ export interface McsReceptionLine {
   colorCode: string;
   colorName: string;
   sizes: Record<string, number>; // par taille, déjà sommé sur toutes les lignes de colis
+  // Lecture ALTERNATIVE des mêmes cellules, présente uniquement quand le fichier porte
+  // DEUX lignes de libellés de tailles sur les MÊMES colonnes (lettres au-dessus de
+  // l'en-tête ET numériques dans l'en-tête — cf. template CITIME/RASEN, où la colonne 9
+  // vaut « L » pour une maille et « 31 » pour un jean). Le fichier seul ne permet pas de
+  // trancher : c'est le mapper qui choisit via la grille du produit au référentiel.
+  sizesAlt?: Record<string, number>;
+}
+
+type SizeCol = { col: number; size: string };
+
+/**
+ * Tranche entre les deux lectures d'une réception ambiguë (cf. `sizesAlt`) à l'aide de la
+ * grille de tailles du produit au référentiel : on garde la lecture dont les tailles
+ * appartiennent le plus à cette grille (un jean lit « 31 », une maille lit « L »).
+ * Sans ambiguïté, ou sans grille exploitable, la lecture principale est conservée.
+ */
+export function pickReceptionSizes(
+  line: McsReceptionLine,
+  sizeScale?: string | null
+): Record<string, number> {
+  if (!line.sizesAlt) return line.sizes;
+  const scale = new Set(
+    (sizeScale || "").split(",").map((s) => s.trim().toUpperCase()).filter(Boolean)
+  );
+  if (scale.size === 0) return line.sizes;
+  const score = (sizes: Record<string, number>) => Object.keys(sizes).filter((s) => scale.has(s)).length;
+  return score(line.sizesAlt) > score(line.sizes) ? line.sizesAlt : line.sizes;
 }
 
 // Parseur réception TOLÉRANT : trouve la ligne d'en-tête (contenant une colonne
@@ -405,7 +432,9 @@ export interface McsReceptionLine {
 // PAR NOM (l'ordre n'importe pas). Gère :
 //  - le format simple (REFERENCE | COLOR | S | M | L | … | Qty), en-tête pas forcément
 //    en ligne 0 (un titre peut être au-dessus) ;
-//  - l'ancien format MCS (FULL MCS PRODUCT REF, tailles en LETTRES sur la ligne au-dessus).
+//  - l'ancien format MCS (FULL MCS PRODUCT REF, tailles en LETTRES sur la ligne au-dessus) ;
+//  - les tailles portées par l'en-tête lui-même (template CITIME : une seule colonne « TU ») ;
+//  - la disposition LONGUE : une ligne par taille (colonnes « Taille » + « Quantité »).
 export function parseMcsPackingList(buffer: ArrayBuffer): McsReceptionLine[] {
   for (const { grid } of eachSheet(buffer)) {
     let h = -1;
@@ -427,58 +456,92 @@ export function parseMcsPackingList(buffer: ArrayBuffer): McsReceptionLine[] {
       );
     const cName = header.findIndex((s) => s.includes("DESCR") && s.includes("COLOR"));
 
+    // Lignes de détail : jusqu'au récapitulatif (2e en-tête) ; hors lignes TOTAL.
+    const rows: Cell[][] = [];
+    for (let r = h + 1; r < grid.length; r++) {
+      const row = grid[r] || [];
+      if (isRefHeader(up(row[cRef]))) break;
+      const refCell = norm(row[cRef]);
+      if (!refCell || refCell.toUpperCase() === "TOTAL") continue;
+      rows.push(row);
+    }
+    if (rows.length === 0) continue;
+
+    const aggregate = (read: (row: Cell[]) => [string, number][]): McsReceptionLine[] => {
+      const agg = new Map<string, McsReceptionLine>();
+      for (const row of rows) {
+        const reference = norm(row[cRef]).replace(/-/g, "_"); // tiret → underscore
+        // couleur = code (on retire un éventuel « -Nom »)
+        const rawColor = norm(row[cCode]);
+        const colorCode = rawColor.includes("-") ? rawColor.slice(0, rawColor.indexOf("-")).trim() : rawColor;
+        const key = `${reference}__${colorCode}`;
+        let entry = agg.get(key);
+        if (!entry) {
+          entry = { reference, colorCode, colorName: cName >= 0 ? norm(row[cName]) : "", sizes: {} };
+          agg.set(key, entry);
+        }
+        for (const [size, n] of read(row)) entry.sizes[size] = (entry.sizes[size] || 0) + n;
+      }
+      return [...agg.values()].filter((e) => Object.keys(e.sizes).length > 0);
+    };
+
     const colsFrom = (rowUp: string[]) => {
-      const out: { col: number; size: string }[] = [];
+      const out: SizeCol[] = [];
       rowUp.forEach((lab, i) => {
         if (isSizeHeader(lab)) out.push({ col: i, size: lab.replace(/\s+/g, "").toUpperCase() });
       });
       return out;
     };
-    // Ancien format MCS : les tailles (lettres) sont sur la ligne AU-DESSUS de l'en-tête.
-    // Sinon : les tailles sont dans la ligne d'en-tête elle-même.
-    const isOldMcs = header[cRef] === "FULL MCS PRODUCT REF";
-    const sizeCols = isOldMcs
-      ? colsFrom((grid[h - 1] || []).map(up)).filter((x) => SIZE_LETTERS.has(x.size))
-      : colsFrom(header);
-    // Disposition LONGUE : pas de colonne par taille, mais une ligne par taille.
-    const cSize = header.findIndex(isSizeColHeader);
-    const cQty = header.findIndex(isQtyColHeader);
-    const isLong = sizeCols.length === 0 && cSize >= 0 && cQty >= 0;
-    if (sizeCols.length === 0 && !isLong) continue;
+    // Deux lignes de libellés possibles : l'en-tête lui-même, et la ligne AU-DESSUS
+    // (ancien format MCS, toujours en lettres).
+    const inline = colsFrom(header);
+    const above = h > 0 ? colsFrom((grid[h - 1] || []).map(up)).filter((x) => SIZE_LETTERS.has(x.size)) : [];
 
-    const agg = new Map<string, McsReceptionLine>();
-    for (let r = h + 1; r < grid.length; r++) {
-      const row = grid[r] || [];
-      // fin de la section détail : 2e en-tête (récapitulatif) ou ligne TOTAL
-      if (isRefHeader(up(row[cRef]))) break;
-      const refCell = norm(row[cRef]);
-      if (!refCell || refCell.toUpperCase() === "TOTAL") continue;
-      const reference = refCell.replace(/-/g, "_"); // tiret → underscore (format référentiel)
-      // couleur = code (on retire un éventuel « -Nom »)
-      const rawColor = norm(row[cCode]);
-      const colorCode = rawColor.includes("-") ? rawColor.slice(0, rawColor.indexOf("-")).trim() : rawColor;
-      const key = `${reference}__${colorCode}`;
-      let entry = agg.get(key);
-      if (!entry) {
-        entry = { reference, colorCode, colorName: cName >= 0 ? norm(row[cName]) : "", sizes: {} };
-        agg.set(key, entry);
-      }
-      if (isLong) {
-        const size = up(row[cSize]).replace(/\s+/g, "");
-        if (!size) continue;
-        const v = row[cQty];
+    // Disposition LONGUE : aucune colonne de taille, mais des colonnes « Taille » + « Quantité ».
+    const cSizeCol = header.findIndex(isSizeColHeader);
+    const cQtyCol = header.findIndex(isQtyColHeader);
+    if (inline.length === 0 && above.length === 0) {
+      if (cSizeCol < 0 || cQtyCol < 0) continue;
+      const out = aggregate((row) => {
+        const size = up(row[cSizeCol]).replace(/\s+/g, "");
+        const v = row[cQtyCol];
         const n = typeof v === "number" ? v : parseInt(String(v || "0"), 10);
-        if (!isNaN(n) && n > 0) entry.sizes[size] = (entry.sizes[size] || 0) + n;
-        continue;
-      }
-      for (const { col, size } of sizeCols) {
+        return size && !isNaN(n) && n > 0 ? [[size, n]] : [];
+      });
+      if (out.length) return out;
+      continue;
+    }
+
+    const readWide = (cols: SizeCol[]) => (row: Cell[]): [string, number][] => {
+      const out: [string, number][] = [];
+      for (const { col, size } of cols) {
         const v = row[col];
         const n = typeof v === "number" ? v : parseInt(String(v || "0"), 10);
-        if (!isNaN(n) && n > 0) entry.sizes[size] = (entry.sizes[size] || 0) + n;
+        if (!isNaN(n) && n > 0) out.push([size, n]);
       }
-    }
-    const out = [...agg.values()].filter((e) => Object.keys(e.sizes).length > 0);
-    if (out.length) return out;
+      return out;
+    };
+    const pieces = (ls: McsReceptionLine[]) =>
+      ls.reduce((s, l) => s + Object.values(l.sizes).reduce((a, b) => a + b, 0), 0);
+
+    const vAbove = above.length ? aggregate(readWide(above)) : [];
+    const vInline = inline.length ? aggregate(readWide(inline)) : [];
+    // Lecture principale = celle qui capte le PLUS de pièces : une ligne de libellés qui ne
+    // couvre pas toutes les colonnes remplies en perd (RASEN : les lettres s'arrêtent à
+    // « 4XL » alors que le détail va jusqu'à la colonne « 46 »). À égalité, la ligne du
+    // dessus l'emporte (comportement historique de l'ancien format MCS).
+    const [primary, other] =
+      pieces(vInline) > pieces(vAbove) ? [vInline, vAbove] : [vAbove, vInline];
+    if (!primary.length) continue;
+    if (!other.length) return primary;
+
+    // Les deux lectures tiennent : mêmes cellules, libellés différents → on remonte les
+    // deux et le mapper tranchera avec la grille du produit.
+    const altByKey = new Map(other.map((l) => [`${l.reference}__${l.colorCode}`, l.sizes]));
+    return primary.map((l) => {
+      const alt = altByKey.get(`${l.reference}__${l.colorCode}`);
+      return alt ? { ...l, sizesAlt: alt } : l;
+    });
   }
   return [];
 }

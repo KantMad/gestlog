@@ -296,6 +296,15 @@ Les fichiers réels MCS ne sont pas des tableaux plats → l'import les **auto-d
   (`EPOMC-C001` → `EPOMC_C001`), **somme des lignes de colis** (hors `TOTAL`/récap), quantités
   ≤ 0 ignorées. Ancien format MCS
   (tailles en lettres sur la ligne **au-dessus** de l'en-tête) toujours supporté.
+  Les libellés de tailles sont cherchés **sur l'en-tête ET sur la ligne au-dessus** — le
+  template CITIME porte sa seule taille (`TU`) dans l'en-tête, l'ancien format MCS les porte
+  au-dessus.
+  **Fichiers à double grille (template RASEN)** : les **mêmes colonnes** sont libellées en
+  lettres (ligne du dessus) **et** en numérique (en-tête) — la colonne vaut `L` pour une
+  maille et `31` pour un jean. Le fichier seul ne tranche pas : le parseur remonte les **deux
+  lectures** (`sizes` + `sizesAlt`, la principale étant celle qui capte le plus de pièces) et
+  `pickReceptionSizes` **choisit via la grille du produit au référentiel** (`Product.sizeScale`),
+  produit par produit — un fichier mixant jeans et mailles est donc correctement lu.
   **N° de commande fournisseur facultatif** : laissé vide → **rattachement automatique** à
   la commande fournisseur de la même saison qui contient le plus de produits reçus ; sinon
   le n° saisi force une commande précise.

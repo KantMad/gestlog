@@ -4,6 +4,7 @@ import {
   detectMcsFormat,
   parseMcsStatgen,
   parseMcsPackingList,
+  pickReceptionSizes,
 } from "../src/lib/import/mcs-format";
 
 // Construit un buffer .xlsx à partir d'une grille (tableau de lignes).
@@ -139,6 +140,70 @@ describe("parseMcsPackingList — disposition LONGUE (une ligne par taille, colo
     expect(c711.sizes).toEqual({ S: 3, M: 10 });
     const c999 = lines.find((l) => l.colorCode === "999")!;
     expect(c999.sizes).toEqual({ L: 17 }); // le XL à 0 n'est pas retenu
+  });
+});
+
+describe("parseMcsPackingList — tailles portées par l'en-tête lui-même (template CITIME, une seule colonne)", () => {
+  // Cas réel « FW26 TDH CITIME PL.xlsx » : en-tête ancien format (FULL MCS PRODUCT REF)
+  // MAIS la taille (« TU ») est dans l'en-tête, pas sur la ligne au-dessus (qui est vide).
+  const grid = [
+    ["FW26 TDH CITIME PACKING LIST"],
+    ["Order nr", "", 100762],
+    [],
+    ["", "", "FULL MCS PRODUCT REF", "COLOR\r\nCODE", "DESCR COLOR", "TU", "TOTAL", "Box number"],
+    ["", "", "THRBOUT_901", "009", "NACRE", 8, 8, 1],
+    ["", "", "THRCRAV_901", 405, "ROUGE BORDEAUX", 6, 6, 2],
+    ["", "", "TOTAL", "", "", "", 14, ""],
+  ];
+
+  it("lit les tailles de l'en-tête quand la ligne au-dessus n'en porte pas", () => {
+    expect(detectMcsFormat(buf(grid))).toBe("packing-list");
+    const lines = parseMcsPackingList(buf(grid));
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toMatchObject({ reference: "THRBOUT_901", colorCode: "009", colorName: "NACRE" });
+    expect(lines[0].sizes).toEqual({ TU: 8 }); // la colonne « TOTAL » n'est pas une taille
+    expect(lines[1].sizes).toEqual({ TU: 6 });
+  });
+});
+
+describe("parseMcsPackingList — deux lignes de libellés de tailles (template RASEN : lettres + numériques)", () => {
+  // Cas réel « FW26 COUNTRY RASEN PL » : les MÊMES colonnes sont libellées en lettres
+  // (ligne au-dessus) ET en numérique (en-tête). La colonne 5 vaut « L » ou « 31 » selon
+  // que le produit est une maille ou un jean → le fichier seul ne peut pas trancher.
+  const grid = [
+    ["W26 COUNTRY RASEN PACKING LIST"],
+    ["", "", "", "", "", "TU", "XS", "S", "M", "L", "", ""], // lettres (s'arrêtent à la col 9)
+    ["Box number", "Client", "FULL MCS PRODUCT REF", "COLOR\r\nCODE", "DESCR COLOR", 27, 28, 29, 30, 31, 32, "Qty"],
+    [1, "", "CCAH26_JE12", "000", "BLEU JEAN", "", "", 5, 9, 12, "", 26],
+    [2, "", "CCAH26_JE12", "000", "BLEU JEAN", "", "", "", "", "", 15, 15], // col 10 : hors lettres
+    ["", "", "TOTAL", "", "", "", "", "", "", "", "", 41],
+  ];
+
+  it("retient la lecture qui capte toutes les pièces et remonte l'autre en alternative", () => {
+    const lines = parseMcsPackingList(buf(grid));
+    expect(lines).toHaveLength(1);
+    // Les lettres ne couvrent pas la colonne « 32 » → 15 pièces perdues → numérique gagne.
+    expect(lines[0].sizes).toEqual({ "29": 5, "30": 9, "31": 12, "32": 15 });
+    expect(lines[0].sizesAlt).toEqual({ S: 5, M: 9, L: 12 });
+  });
+
+  it("pickReceptionSizes tranche avec la grille du produit", () => {
+    const line = parseMcsPackingList(buf(grid))[0];
+    // Jean → grille numérique : on garde la lecture principale.
+    expect(pickReceptionSizes(line, "27,28,29,30,31,32,33")).toBe(line.sizes);
+    // Maille → grille en lettres : on bascule sur l'alternative.
+    expect(pickReceptionSizes(line, "XS,S,M,L,XL")).toBe(line.sizesAlt);
+    // Pas de grille exploitable → lecture principale.
+    expect(pickReceptionSizes(line, "")).toBe(line.sizes);
+    expect(pickReceptionSizes(line, null)).toBe(line.sizes);
+  });
+
+  it("ne renvoie pas d'alternative quand le fichier n'est pas ambigu", () => {
+    const simple = [
+      ["REFERENCE", "COLOR", "S", "M"],
+      ["CCAH26-CH07", "752", 1, 2],
+    ];
+    expect(parseMcsPackingList(buf(simple))[0].sizesAlt).toBeUndefined();
   });
 });
 

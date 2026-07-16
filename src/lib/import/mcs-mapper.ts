@@ -3,6 +3,7 @@ import { stringifySizeQuantities, sumQuantities } from "@/lib/utils";
 import {
   parseMcsStatgen,
   parseMcsPackingList,
+  pickReceptionSizes,
   parseMcsClientOrders,
   parseTexasClientOrders,
 } from "./mcs-format";
@@ -196,7 +197,10 @@ export async function importMcsReceptions(
       continue;
     }
     const quantities: Record<string, number> = {};
-    for (const [size, q] of Object.entries(line.sizes)) if (q > 0) quantities[size] = q;
+    // Fichier ambigu (deux lignes de libellés de tailles sur les mêmes colonnes) → la
+    // grille du produit tranche entre lettres et numériques.
+    for (const [size, q] of Object.entries(pickReceptionSizes(line, product.sizeScale)))
+      if (q > 0) quantities[size] = q;
     if (Object.keys(quantities).length === 0) continue;
     resolved.push({ productId: product.id, quantities });
   }
