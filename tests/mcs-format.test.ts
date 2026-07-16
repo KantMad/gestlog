@@ -113,6 +113,35 @@ describe("parseMcsPackingList — format simple (tailles nommées), en-tête pas
   });
 });
 
+describe("parseMcsPackingList — disposition LONGUE (une ligne par taille, colonnes « Taille » + « Quantité »)", () => {
+  // Cas réel « FW26 TDH ARETEX PL GESTLOG.xlsx » : la taille et la quantité sont des
+  // VALEURS et non des colonnes, donc aucune colonne de taille à détecter.
+  const grid = [
+    ["FW26 TDH ARETEX PL"], // titre
+    ["N° COMMANDE FOURNISSEUR", "", "100718"],
+    [],
+    [],
+    ["REFERENCE", "COULEUR", "Concat", "Article/Réf.", "Coloris", "Taille", "Quantité"],
+    ["THRPULL_906", "711", "THRPULL_906-711", "Pull", "711 BLEU CANARD", "S", 3],
+    ["THRPULL_906", "711", "THRPULL_906-711", "Pull", "711 BLEU CANARD", "M", 9],
+    ["THRPULL_906", "711", "THRPULL_906-711", "Pull", "711 BLEU CANARD", "M", 1], // 2e colis → sommé
+    ["THRPULL_906", "999", "THRPULL_906-999", "Pull", "999 NOIR", "L", 17],
+    ["THRPULL_906", "999", "THRPULL_906-999", "Pull", "999 NOIR", "XL", 0], // qté 0 → ignorée
+    ["TOTAL", "", "", "", "", "", 30],
+  ];
+
+  it("détecte packing-list et somme les quantités par (réf, couleur, taille)", () => {
+    expect(detectMcsFormat(buf(grid))).toBe("packing-list");
+    const lines = parseMcsPackingList(buf(grid));
+    expect(lines).toHaveLength(2);
+    const c711 = lines.find((l) => l.colorCode === "711")!;
+    expect(c711.reference).toBe("THRPULL_906");
+    expect(c711.sizes).toEqual({ S: 3, M: 10 });
+    const c999 = lines.find((l) => l.colorCode === "999")!;
+    expect(c999.sizes).toEqual({ L: 17 }); // le XL à 0 n'est pas retenu
+  });
+});
+
 describe("parseMcsPackingList — ancien format MCS (FULL MCS PRODUCT REF, tailles en lettres sur la ligne au-dessus)", () => {
   const grid = [
     ["", "", "S", "M", "L", "XL"], // tailles sur la ligne AU-DESSUS de l'en-tête

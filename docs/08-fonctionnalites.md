@@ -286,10 +286,15 @@ Les fichiers réels MCS ne sont pas des tableaux plats → l'import les **auto-d
   ensuite (catégorie, prix, EAN…). La réponse d'import remonte le nombre de produits créés.
 - **« Packing List » (réception)** : format **tolérant** — colonne référence reconnue par
   plusieurs libellés (`FULL MCS PRODUCT REF`, `REFERENCE`, `REF`, `CODE PRODUIT FINI`…),
-  couleur par `COLOR CODE`/`COLOR`/`COULEUR`/`COLORIS`, **tailles repérées par leur nom**
-  (`S,M,L,XL,2XL…` OU numériques `36,38,40…`, **ordre indifférent**). En-tête pas forcément
-  en ligne 0 (un titre peut être au-dessus). Réf **tiret→underscore** (`EPOMC-C001` →
-  `EPOMC_C001`), **somme des lignes de colis** (hors `TOTAL`/récap). Ancien format MCS
+  couleur par `COLOR CODE`/`COLOR`/`COULEUR`/`COLORIS`. **Deux dispositions** reconnues :
+  - **large** : **une colonne par taille**, repérée par son nom (`S,M,L,XL,2XL…` OU numériques
+    `36,38,40…`, **ordre indifférent**) ;
+  - **longue** : **une ligne par taille** — la taille et la quantité sont des *valeurs*, dans
+    les colonnes `Taille` et `Quantité`/`Qté`/`Qty` (cas `FW26 TDH ARETEX PL`).
+
+  En-tête pas forcément en ligne 0 (un titre peut être au-dessus). Réf **tiret→underscore**
+  (`EPOMC-C001` → `EPOMC_C001`), **somme des lignes de colis** (hors `TOTAL`/récap), quantités
+  ≤ 0 ignorées. Ancien format MCS
   (tailles en lettres sur la ligne **au-dessus** de l'en-tête) toujours supporté.
   **N° de commande fournisseur facultatif** : laissé vide → **rattachement automatique** à
   la commande fournisseur de la même saison qui contient le plus de produits reçus ; sinon

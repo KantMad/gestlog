@@ -176,6 +176,7 @@ export const HELP_THEMES: HelpTheme[] = [
           {
             lines: [
               "Dépose la **liste de colisage (packing list)**. Les tailles sont repérées **par leur nom** (l'ordre des colonnes n'a pas d'importance).",
+              "Deux présentations passent : **une colonne par taille** (S, M, L…), ou **une ligne par taille** avec des colonnes `Taille` et `Quantité`. 👍",
               "Le n° de commande fournisseur est **facultatif** : sans lui, la réception se rattache **automatiquement** à la commande de la saison qui contient ces produits.",
             ],
             tip: "Importe la **commande fournisseur d'abord**, sinon l'auto-rattachement ne trouve rien.",

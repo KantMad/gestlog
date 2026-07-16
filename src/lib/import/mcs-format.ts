@@ -64,9 +64,21 @@ const isRefHeader = (h: string): boolean =>
   h === "FULL MCS PRODUCT REF" ||
   h === "REFERENCE" || h === "RÉFÉRENCE" || h === "REF" ||
   h === "CODE PRODUIT FINI" || h.includes("PRODUCT REF");
-// En-tête d'une réception (liste de colisage) : une colonne référence + ≥ 2 colonnes de tailles.
-const isPackingListHeader = (cells: string[]): boolean =>
+// Colonnes du format « LONG » : une ligne PAR TAILLE (la taille et la quantité sont des
+// VALEURS, pas des colonnes). Ex. : REFERENCE | COULEUR | … | Taille | Quantité.
+const isSizeColHeader = (h: string): boolean => h === "TAILLE" || h === "SIZE";
+const isQtyColHeader = (h: string): boolean =>
+  h.startsWith("QUANTIT") || h === "QTE" || h === "QTÉ" || h === "QTY";
+
+// En-tête d'une réception (liste de colisage), 2 dispositions possibles :
+//  - LARGE : une colonne par taille (≥ 2 colonnes de tailles) ;
+//  - LONG  : une ligne par taille (colonnes « Taille » + « Quantité »).
+const isWidePackingListHeader = (cells: string[]): boolean =>
   cells.some(isRefHeader) && cells.filter(isSizeHeader).length >= 2;
+const isLongPackingListHeader = (cells: string[]): boolean =>
+  cells.some(isRefHeader) && cells.some(isSizeColHeader) && cells.some(isQtyColHeader);
+const isPackingListHeader = (cells: string[]): boolean =>
+  isWidePackingListHeader(cells) || isLongPackingListHeader(cells);
 
 // ---------------------------------------------------------------- détection
 export function detectMcsFormat(buffer: ArrayBuffer): McsFormat | null {
@@ -425,10 +437,14 @@ export function parseMcsPackingList(buffer: ArrayBuffer): McsReceptionLine[] {
     // Ancien format MCS : les tailles (lettres) sont sur la ligne AU-DESSUS de l'en-tête.
     // Sinon : les tailles sont dans la ligne d'en-tête elle-même.
     const isOldMcs = header[cRef] === "FULL MCS PRODUCT REF";
-    let sizeCols = isOldMcs
+    const sizeCols = isOldMcs
       ? colsFrom((grid[h - 1] || []).map(up)).filter((x) => SIZE_LETTERS.has(x.size))
       : colsFrom(header);
-    if (sizeCols.length === 0) continue;
+    // Disposition LONGUE : pas de colonne par taille, mais une ligne par taille.
+    const cSize = header.findIndex(isSizeColHeader);
+    const cQty = header.findIndex(isQtyColHeader);
+    const isLong = sizeCols.length === 0 && cSize >= 0 && cQty >= 0;
+    if (sizeCols.length === 0 && !isLong) continue;
 
     const agg = new Map<string, McsReceptionLine>();
     for (let r = h + 1; r < grid.length; r++) {
@@ -446,6 +462,14 @@ export function parseMcsPackingList(buffer: ArrayBuffer): McsReceptionLine[] {
       if (!entry) {
         entry = { reference, colorCode, colorName: cName >= 0 ? norm(row[cName]) : "", sizes: {} };
         agg.set(key, entry);
+      }
+      if (isLong) {
+        const size = up(row[cSize]).replace(/\s+/g, "");
+        if (!size) continue;
+        const v = row[cQty];
+        const n = typeof v === "number" ? v : parseInt(String(v || "0"), 10);
+        if (!isNaN(n) && n > 0) entry.sizes[size] = (entry.sizes[size] || 0) + n;
+        continue;
       }
       for (const { col, size } of sizeCols) {
         const v = row[col];
