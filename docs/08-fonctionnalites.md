@@ -39,6 +39,19 @@ sont gérés par écran (cf. [`05-authentification.md`](05-authentification.md))
   + `ReceptionLine` ; il faut donc que la **commande fournisseur (et/ou la réception) soit
   importée dans la même saison** que les commandes clients. Sinon : 0 produit pour ce
   fournisseur. (`src/app/api/allocation/simulate/route.ts`, `supplierProductFilter`.)
+- **Répartition — règle « à rang égal, on égalise le % de coupe »** : sous pénurie, la
+  répartition se fait **pièce par pièce** (`engine.ts`, Step 1) : à chaque tour on sert la
+  boutique la **plus coupée en relatif** (déficit = 1 − servi/commandé sur ce produit+couleur),
+  départage par **rang** puis **rotation**, dans la taille où il lui manque le plus. Deux
+  boutiques de même rang convergent vers le **même pourcentage** de coupe, quelle que soit la
+  taille de leur commande. Remplace l'ancien **pro-rata par taille + rattrapage d'arrondis**,
+  qui donnait des % très inégaux selon le mix de tailles (-6 % à -17 % observés).
+- **Répartition — invariant « alloué ≤ commande »** : ⚠️ bug historique — le pro-rata
+  n'était pas plafonné à la quantité commandée. Dès qu'une **taille** était sur-livrée alors
+  que le produit était globalement en manque, les boutiques étaient servies **au-dessus de leur
+  commande**, sans action utilisateur (cas réel CCAH26_PU02/005 : XL 53 demandé / 56 reçu,
+  3XL 10/11 → +4 pièces distribuées d'office). Le moteur ne dépasse plus jamais la commande ;
+  le reliquat d'une taille excédentaire reste **non alloué** → « Répartir surplus ». Testé.
 - **Répartition — invariant « alloué ≤ reçu »** : sous pénurie, les **caps de réduction**
   (`maxReductionLine`) ne peuvent restaurer des pièces que dans le **disponible restant** de la
   taille (`remainingBySize` dans `engine.ts`). Sinon le moteur allouait des pièces *fantômes*
@@ -61,11 +74,17 @@ sont gérés par écran (cf. [`05-authentification.md`](05-authentification.md))
   (comme Comparaison) filtrant les produits selon `reçu > 0`, dans les deux vues (par produit /
   par boutique).
 - **Répartition — bouton « Répartir surplus »** : par carte produit (référence + couleur), visible
-  quand `reçu > alloué` sur des tailles commandées. Répartit les pièces livrées **en plus** entre
-  les boutiques **au prorata de leur commande** (taille par taille), le **ranking** départageant
-  les arrondis (`rankingByClient` dans la réponse `simulate`). Alloue **au-delà** de la commande
-  sans jamais dépasser le reçu. Action **client-side** sur les lignes (marquées ajustées),
-  incluse à la validation.
+  quand `reçu > alloué` sur des tailles commandées. Répartition en **2 phases** :
+  1. **Combler les écarts** : les pièces vont d'abord aux boutiques **coupées**, la plus coupée
+     en relatif d'abord (rang pour départager), jusqu'à ramener chacune à sa commande ;
+  2. **Au-delà des commandes** : le reliquat est réparti **au prorata** des commandes.
+  Contraintes : **jamais une taille non commandée**, jamais plus que le reçu de la taille. Action
+  **client-side** (lignes marquées ajustées), incluse à la validation. Le toast détaille combien
+  de pièces ont comblé des écarts vs distribuées au-delà.
+- **Répartition — lecture des écarts (vue par produit)** : pied de tableau avec, **par taille**,
+  `Cmd. clients` / `Reçu fourn.` / `Écart` (rouge = manque, vert = sur-livré) → identifie
+  immédiatement la taille en cause. Les **ajouts** (alloué > commandé) s'affichent en **vert avec
+  un `+`** et la commande rappelée en dessous (avant, seules les réductions étaient marquées).
 - **Répartition — export « EAN / quantité »** : bouton *Export EAN* → xlsx avec colonnes
   Boutique, Code boutique, Référence, Couleur, Libellé couleur, Taille, **EAN**, Quantité (une
   ligne par boutique × produit/couleur × taille allouée, quantités hand-éditées incluses).

@@ -1175,52 +1175,107 @@ export default function AllocationPage() {
     setManualEdits((e) => e + 1);
   };
 
-  // Répartit le SURPLUS reçu (pièces livrées en plus) d'un produit entre les boutiques,
-  // AU PRORATA de leur commande, taille par taille (le ranking départage les arrondis).
-  // Alloue au-delà de la commande ; ne dépasse jamais le reçu.
+  // Répartit le SURPLUS reçu (pièces disponibles au-delà de ce qui est déjà alloué) d'un
+  // produit entre les boutiques, en DEUX temps :
+  //   1) on COMBLE d'abord les boutiques coupées (la plus coupée en relatif d'abord, rang
+  //      pour départager), jusqu'à ramener chacune à sa commande ;
+  //   2) le reliquat éventuel est réparti AU-DELÀ des commandes, au prorata.
+  // Contrainte absolue : jamais une taille que la boutique n'a pas commandée, jamais plus
+  // que le reçu de la taille.
   const distributeSurplus = (productId: string) => {
     const received = receivedByProduct[productId] || {};
-    const additions = new Map<string, SizeQuantities>(); // lineKey → { size: extra }
-    let addedTotal = 0;
-
     const productLines = lines.filter((l) => l.productId === productId);
-    for (const size of Object.keys(received)) {
-      const recv = received[size] || 0;
-      const currentAlloc = productLines.reduce((s, l) => s + (l.allocated[size] || 0), 0);
-      const surplus = recv - currentAlloc;
-      if (surplus <= 0) continue;
-      const eligible = productLines.filter((l) => (l.original[size] || 0) > 0);
-      const totalOrder = eligible.reduce((s, l) => s + (l.original[size] || 0), 0);
-      if (totalOrder <= 0) continue;
-      const floors = eligible.map((l) => Math.floor(surplus * ((l.original[size] || 0) / totalOrder)));
-      let remainder = surplus - floors.reduce((s, n) => s + n, 0);
-      const addOne = (l: SimulationLine, n: number) => {
-        if (n <= 0) return;
-        const k = `${l.clientId}:${l.clientOrderId}:${l.productId}`;
-        const m = additions.get(k) || {};
-        m[size] = (m[size] || 0) + n;
-        additions.set(k, m);
-        addedTotal += n;
-      };
-      eligible.forEach((l, i) => addOne(l, floors[i]));
-      // Reliquat (arrondis) : 1 pièce chacun, aux mieux classés d'abord.
-      const byRank = [...eligible].sort(
-        (a, b) => (rankingByClient[a.clientId] ?? 9999) - (rankingByClient[b.clientId] ?? 9999)
-      );
-      for (let i = 0; i < byRank.length && remainder > 0; i++, remainder--) addOne(byRank[i], 1);
+    if (productLines.length === 0) return;
+
+    // État de travail (copie des allocations courantes, ajustements manuels compris).
+    const work = productLines.map((l) => ({
+      key: `${l.clientId}:${l.clientOrderId}:${l.productId}`,
+      original: l.original,
+      alloc: { ...l.allocated } as SizeQuantities,
+      origTotal: sumQuantities(l.original),
+      allocTotal: sumQuantities(l.allocated),
+      ranking: rankingByClient[l.clientId] ?? 9999,
+    }));
+
+    // Disponible restant par taille = reçu − déjà alloué.
+    const remaining: Record<string, number> = {};
+    for (const [size, recv] of Object.entries(received)) {
+      const used = work.reduce((s, w) => s + (w.alloc[size] || 0), 0);
+      remaining[size] = Math.max(0, recv - used);
     }
 
-    if (additions.size === 0) {
+    let addedTotal = 0;
+    let filledGaps = 0;
+
+    // ── Phase 1 : combler les écarts (boutique la plus coupée en % d'abord) ──────────
+    for (;;) {
+      let best: (typeof work)[number] | null = null;
+      let bestDeficit = -1;
+      for (const w of work) {
+        if (w.allocTotal >= w.origTotal) continue; // plus d'écart à combler
+        const canTake = Object.entries(w.original).some(
+          ([size, req]) => (remaining[size] || 0) > 0 && (w.alloc[size] || 0) < req
+        );
+        if (!canTake) continue;
+        const deficit = w.origTotal > 0 ? 1 - w.allocTotal / w.origTotal : 0;
+        if (!best || deficit > bestDeficit || (deficit === bestDeficit && w.ranking < best.ranking)) {
+          best = w;
+          bestDeficit = deficit;
+        }
+      }
+      if (!best) break;
+      let pickSize: string | null = null;
+      let pickNeed = 0;
+      for (const [size, req] of Object.entries(best.original)) {
+        if ((remaining[size] || 0) <= 0) continue;
+        const need = req - (best.alloc[size] || 0);
+        if (need > pickNeed) {
+          pickNeed = need;
+          pickSize = size;
+        }
+      }
+      if (!pickSize) break;
+      best.alloc[pickSize] = (best.alloc[pickSize] || 0) + 1;
+      best.allocTotal += 1;
+      remaining[pickSize] -= 1;
+      addedTotal += 1;
+      filledGaps += 1;
+    }
+
+    // ── Phase 2 : le reste, AU-DELÀ des commandes, au prorata (tailles commandées) ───
+    for (const size of Object.keys(remaining)) {
+      const surplus = remaining[size];
+      if (surplus <= 0) continue;
+      const eligible = work.filter((w) => (w.original[size] || 0) > 0);
+      const totalOrder = eligible.reduce((s, w) => s + (w.original[size] || 0), 0);
+      if (totalOrder <= 0) continue; // taille commandée par personne → non répartissable
+      const floors = eligible.map((w) => Math.floor(surplus * ((w.original[size] || 0) / totalOrder)));
+      let rest = surplus - floors.reduce((a, b) => a + b, 0);
+      eligible.forEach((w, i) => {
+        if (floors[i] > 0) {
+          w.alloc[size] = (w.alloc[size] || 0) + floors[i];
+          addedTotal += floors[i];
+        }
+      });
+      const byRank = [...eligible].sort((a, b) => a.ranking - b.ranking);
+      for (let i = 0; i < byRank.length && rest > 0; i++, rest--) {
+        byRank[i].alloc[size] = (byRank[i].alloc[size] || 0) + 1;
+        addedTotal += 1;
+      }
+      remaining[size] = 0;
+    }
+
+    if (addedTotal === 0) {
       toast.info("Aucun surplus à répartir sur ce produit");
       return;
     }
+
+    const allocByKey = new Map(work.map((w) => [w.key, w.alloc]));
     setLines((prev) =>
       prev.map((l) => {
         const k = `${l.clientId}:${l.clientOrderId}:${l.productId}`;
-        const extra = additions.get(k);
-        if (!extra) return l;
-        const newAllocated = { ...l.allocated };
-        for (const [s, n] of Object.entries(extra)) newAllocated[s] = (newAllocated[s] || 0) + n;
+        const newAllocated = allocByKey.get(k);
+        if (!newAllocated) return l;
         const newTotal = sumQuantities(newAllocated);
         const newReduced: SizeQuantities = {};
         for (const [s, qty] of Object.entries(l.original)) {
@@ -1238,7 +1293,12 @@ export default function AllocationPage() {
       })
     );
     setManualEdits((e) => e + 1);
-    toast.success(`Surplus réparti : +${addedTotal} pièce(s) au prorata des commandes`);
+    const beyond = addedTotal - filledGaps;
+    toast.success(`Surplus réparti : +${addedTotal} pièce(s)`, {
+      description:
+        `${filledGaps} pièce(s) pour combler les écarts` +
+        (beyond > 0 ? ` · ${beyond} au-delà des commandes (prorata)` : ""),
+    });
   };
 
   const validateAllocation = async () => {

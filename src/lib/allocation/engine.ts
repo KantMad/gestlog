@@ -85,58 +85,75 @@ export function runAllocation(input: AllocationInput): AllocationResult {
     // Rule 5+6: Sort by ranking then rotation
     const sorted = sortByRanking(productDemands, clientConfigs);
 
-    // Step 1: Pro-rata allocation per size.
-    // PLAFONNÉ À LA COMMANDE : une taille peut avoir été reçue en excès (ex. XL demandé 53 /
-    // reçu 56) alors que le produit est globalement en manque. Sans ce Math.min, le pro-rata
-    // servait les boutiques AU-DESSUS de leur commande. Le reliquat d'une taille excédentaire
-    // reste disponible et se répartit explicitement via « Répartir surplus ».
+    // Step 1 — Répartition ÉQUITABLE, pièce par pièce (règle : à rang égal, on égalise le
+    // POURCENTAGE de coupe, pas le nombre de pièces).
+    //
+    // À chaque tour on sert la boutique actuellement la PLUS coupée en relatif (déficit =
+    // 1 − servi/commandé sur ce produit+couleur) ; à déficit égal on départage par rang puis
+    // rotation. On lui donne 1 pièce dans la taille où il lui manque le plus (et qui reste
+    // disponible). Deux boutiques de même rang convergent donc vers le même % de coupe,
+    // quelle que soit la taille de leur commande.
+    //
+    // Invariants garantis par construction :
+    //  - jamais plus que la quantité commandée (par taille ET au total) ;
+    //  - jamais une taille non commandée ;
+    //  - jamais plus que le reçu de la taille (le reliquat d'une taille sur-livrée reste
+    //    disponible → « Répartir surplus »).
+    // Remplace l'ancien pro-rata + rattrapage d'arrondis (qui donnait des % très inégaux
+    // selon le mix de tailles de chaque boutique).
     const allocations = new Map<string, SizeQuantities>();
-    for (const d of sorted) {
+    const state = sorted.map((d) => {
       const alloc: SizeQuantities = {};
-      for (const [size, requested] of Object.entries(d.requested)) {
-        const sizeAvail = avail[size] || 0;
-        const sizeDemand = totalDemandBySize[size] || 0;
-        if (sizeDemand === 0) {
-          alloc[size] = 0;
-        } else {
-          alloc[size] = Math.min(requested, Math.floor((requested / sizeDemand) * sizeAvail));
-        }
-      }
       allocations.set(`${d.clientId}:${d.clientOrderId}`, alloc);
-    }
+      return { d, alloc, requestedTotal: sumQuantities(d.requested), allocTotal: 0 };
+    });
 
-    // Fix rounding: distribute remaining pieces to highest-priority clients
-    for (const size of allSizes) {
-      const sizeAvail = avail[size] || 0;
-      let allocated = 0;
-      for (const alloc of allocations.values()) {
-        allocated += alloc[size] || 0;
-      }
-      let remainder = sizeAvail - allocated;
-      if (remainder > 0) {
-        for (const d of sorted) {
-          if (remainder <= 0) break;
-          const key = `${d.clientId}:${d.clientOrderId}`;
-          const alloc = allocations.get(key)!;
-          const requested = d.requested[size] || 0;
-          const current = alloc[size] || 0;
-          const canAdd = Math.min(remainder, requested - current);
-          if (canAdd > 0) {
-            alloc[size] = current + canAdd;
-            remainder -= canAdd;
-          }
+    const remainingBySize: SizeQuantities = {};
+    for (const size of allSizes) remainingBySize[size] = avail[size] || 0;
+
+    const rankOf = (clientId: string) => clientConfigs.get(clientId)?.ranking ?? 9999;
+    const rotOf = (clientId: string) => clientConfigs.get(clientId)?.rotationScore ?? 0;
+
+    for (;;) {
+      let best: (typeof state)[number] | null = null;
+      let bestDeficit = -1;
+      for (const s of state) {
+        if (s.allocTotal >= s.requestedTotal) continue;
+        // Peut-elle encore recevoir une pièce d'une taille qu'elle a commandée ?
+        const canTake = Object.entries(s.d.requested).some(
+          ([size, req]) => (remainingBySize[size] || 0) > 0 && (s.alloc[size] || 0) < req
+        );
+        if (!canTake) continue;
+        const deficit = s.requestedTotal > 0 ? 1 - s.allocTotal / s.requestedTotal : 0;
+        if (!best || deficit > bestDeficit) {
+          best = s;
+          bestDeficit = deficit;
+          continue;
+        }
+        if (deficit === bestDeficit) {
+          const rb = rankOf(s.d.clientId);
+          const ra = rankOf(best.d.clientId);
+          if (rb < ra || (rb === ra && rotOf(s.d.clientId) < rotOf(best.d.clientId))) best = s;
         }
       }
-    }
+      if (!best) break;
 
-    // Disponible RESTANT par taille (après la répartition pro-rata + arrondis). La
-    // restauration des caps ne peut puiser QUE dans ce reliquat → on n'alloue jamais
-    // plus que ce qui a été reçu (si 0 reçu, rien à restaurer).
-    const remainingBySize: SizeQuantities = {};
-    for (const size of allSizes) {
-      let used = 0;
-      for (const alloc of allocations.values()) used += alloc[size] || 0;
-      remainingBySize[size] = Math.max(0, (avail[size] || 0) - used);
+      // Taille servie : celle où il lui manque le plus (et encore disponible).
+      let pickSize: string | null = null;
+      let pickNeed = 0;
+      for (const [size, req] of Object.entries(best.d.requested)) {
+        if ((remainingBySize[size] || 0) <= 0) continue;
+        const need = req - (best.alloc[size] || 0);
+        if (need > pickNeed) {
+          pickNeed = need;
+          pickSize = size;
+        }
+      }
+      if (!pickSize) break; // sécurité : ne devrait pas arriver (canTake garantit l'inverse)
+
+      best.alloc[pickSize] = (best.alloc[pickSize] || 0) + 1;
+      best.allocTotal += 1;
+      remainingBySize[pickSize] -= 1;
     }
 
     // Step 2: Apply Rule 3 (max reduction per order) and Rule 4 (max reduction per line)
