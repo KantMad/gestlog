@@ -173,6 +173,20 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
 - **Pièges** : l'export Excel exporte **tout** (ignore recherche/filtre affichés) ; statut ligne :
   conforme (écart nul), mineur (≤10 %), majeur (>10 %).
 
+## Contrôle commandes (`/controle-commandes`)
+- **Rôle** : repérer les « **sélections** » — les lignes où un client n'a commandé qu'**une
+  seule taille** pour un produit/couleur, afin de les faire supprimer dans **TIO**.
+- **Source** : `ClientOrderLine` + `ClientOrder` (**source active** via `resolveOrderSource`)
+  + `Product`. Détection en SQL : exactement **1 taille avec qté > 0** dans
+  `quantitiesBySize` (`jsonb_each_text`) **ET** grille produit à **≥ 2 tailles DISTINCTES**.
+- ⚠️ **Le `DISTINCT` est indispensable** : certaines grilles arrivent dupliquées (`"TU,TU"`) →
+  sans lui, tous les produits taille unique (ex. `ZZZ_LOGO`) sortaient en faux positifs
+  (185 → 65 lignes sur AH26 après correction).
+- **Fonctionnalités** : compteurs (lignes / commandes / boutiques / pièces), recherche
+  (boutique, n° commande, référence), **export Excel** de la liste filtrée.
+- **Nuance métier** : en saison **Réassort**, une seule taille est **normal** (réassort à
+  l'unité) — le contrôle vise les commandes de collection.
+
 ## Dashboard (`/dashboard`)
 - **Rôle** : vue d'ensemble d'une saison (7 KPI + graphes).
 - **Source** : `/api/statistics/season` + `/api/statistics/charts`. `ClientOrder` **source

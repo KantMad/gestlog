@@ -49,7 +49,11 @@ export async function POST(request: NextRequest) {
         // gestlog (cascade sur ses lignes) → pas de quantités/CA fantômes.
         if (deleted) {
           if (orderNumber) {
-            const r = await prisma.clientOrder.deleteMany({ where: { orderNumber: String(orderNumber) } });
+            // Restreint à source=TIO : cette synchro ne doit JAMAIS supprimer une commande
+            // Texas (ERP) qui porterait par hasard le même numéro.
+            const r = await prisma.clientOrder.deleteMany({
+              where: { orderNumber: String(orderNumber), source: "TIO" },
+            });
             if (r.count > 0) removed += r.count;
           }
           continue;

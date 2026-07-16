@@ -27,6 +27,7 @@ import {
   UserCog,
   Download,
   LifeBuoy,
+  ScanSearch,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
@@ -49,6 +50,7 @@ const NAV_ITEMS = [
   { href: "/season-comparison", label: "Comparaison saisons / catalogues", icon: ArrowLeftRight },
   { href: "/client-comparison", label: "Comparaison clients", icon: Building2 },
   { href: "/repartition", label: "Répartition magasin", icon: Store },
+  { href: "/controle-commandes", label: "Contrôle commandes", icon: ScanSearch },
   { href: "/export", label: "Exports", icon: Download },
   { href: "/btoc", label: "BtoC", icon: ShoppingBag },
   { href: "/aide", label: "Centre d'aide", icon: LifeBuoy },

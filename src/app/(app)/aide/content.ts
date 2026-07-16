@@ -499,6 +499,37 @@ export const HELP_THEMES: HelpTheme[] = [
         ],
       },
       {
+        id: "controle-commandes",
+        icon: "🔎",
+        title: "Contrôle commandes (les « sélections »)",
+        keywords: "contrôle commandes sélection une seule taille tio supprimer anomalie",
+        sections: [
+          {
+            h: "À quoi ça sert",
+            lines: [
+              "Repérer les lignes où un client n'a commandé qu'**une seule taille** pour un produit/couleur — ce qu'on appelle une « **sélection** ».",
+              "Objectif : les identifier pour les faire **supprimer dans TIO**.",
+            ],
+          },
+          {
+            h: "Comment lire l'écran",
+            lines: [
+              "Les compteurs en haut donnent le nombre de **lignes**, **commandes**, **boutiques** et **pièces** concernées pour la saison affichée.",
+              "Le tableau liste la boutique, le n° de commande, le produit, la **taille commandée** et la **grille complète** du produit (pour voir ce qui manque).",
+              "Tu peux filtrer (boutique, n° de commande, référence) et **exporter en Excel** pour transmettre la liste.",
+            ],
+          },
+          {
+            h: "Bon à savoir",
+            lines: [
+              "Les produits en **taille unique** (TU) sont **exclus** : une seule taille y est normale.",
+              "En saison **Réassort**, commander une seule taille est **normal** (réassort à l'unité) — ce contrôle vise les commandes de collection.",
+            ],
+            tip: "Aucune sélection détectée ? L'écran te le dit clairement. 🎉",
+          },
+        ],
+      },
+      {
         id: "recap",
         icon: "🧑‍🤝‍🧑",
         title: "Récap clients",
