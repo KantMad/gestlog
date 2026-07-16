@@ -159,24 +159,33 @@ function EditableCell({
     );
   }
 
+  // Rouge = pièces retirées ; vert = pièces AJOUTÉES au-dessus de la commande (surplus
+  // réparti). Dans les deux cas la quantité commandée est rappelée en dessous.
   const isReduced = original > value;
+  const isAdded = value > original;
   return (
     <span
       className={cn(
         "cursor-pointer hover:bg-muted rounded px-1 py-0.5 transition-colors inline-block min-w-[2rem] text-center",
-        isReduced && "text-red-600 font-medium"
+        isReduced && "text-red-600 font-medium",
+        isAdded && "text-emerald-600 font-semibold"
       )}
       onClick={() => {
         setDraft(String(value));
         setEditing(true);
       }}
-      title="Cliquer pour modifier"
+      title={
+        isAdded
+          ? `+${value - original} en plus (commandé : ${original})`
+          : isReduced
+            ? `-${original - value} retiré(s) (commandé : ${original})`
+            : "Cliquer pour modifier"
+      }
     >
+      {isAdded && "+"}
       {value > 0 ? value : "-"}
-      {isReduced && (
-        <span className="block text-[10px] text-muted-foreground line-through">
-          {original}
-        </span>
+      {(isReduced || isAdded) && (
+        <span className="block text-[10px] text-muted-foreground line-through">{original}</span>
       )}
     </span>
   );
@@ -596,6 +605,61 @@ function ProductGroup({
                   );
                 })}
               </TableBody>
+              {/* Totaux PAR TAILLE : commandé (toutes boutiques) vs reçu fournisseur, et
+                  l'écart — c'est ce qui révèle qu'une taille est en manque ou sur-livrée. */}
+              <tfoot className="border-t-2 bg-muted/40 text-xs">
+                <tr>
+                  <td className="px-3 py-1.5 font-semibold">Cmd. clients</td>
+                  {sizes.map((s) => (
+                    <td key={s} className="px-1 py-1.5 text-center tabular-nums">
+                      {orderedBySize[s] || 0}
+                    </td>
+                  ))}
+                  <td className="px-3 py-1.5 text-right font-semibold tabular-nums">
+                    {formatNumber(totalOriginal)}
+                  </td>
+                  <td colSpan={2} />
+                </tr>
+                <tr>
+                  <td className="px-3 py-1.5 font-semibold">Reçu fourn.</td>
+                  {sizes.map((s) => (
+                    <td key={s} className="px-1 py-1.5 text-center tabular-nums">
+                      {received?.[s] ?? 0}
+                    </td>
+                  ))}
+                  <td className="px-3 py-1.5 text-right font-semibold tabular-nums">
+                    {formatNumber(totalReceived)}
+                  </td>
+                  <td colSpan={2} />
+                </tr>
+                <tr>
+                  <td className="px-3 py-1.5 font-semibold">Écart</td>
+                  {sizes.map((s) => {
+                    const gap = (received?.[s] ?? 0) - (orderedBySize[s] || 0);
+                    return (
+                      <td
+                        key={s}
+                        className={cn(
+                          "px-1 py-1.5 text-center font-medium tabular-nums",
+                          gap < 0 ? "text-red-600" : gap > 0 ? "text-emerald-600" : "text-muted-foreground"
+                        )}
+                        title={gap > 0 ? "Sur-livré sur cette taille" : gap < 0 ? "Manque sur cette taille" : ""}
+                      >
+                        {gap === 0 ? "—" : gap > 0 ? `+${gap}` : gap}
+                      </td>
+                    );
+                  })}
+                  <td
+                    className={cn(
+                      "px-3 py-1.5 text-right font-semibold tabular-nums",
+                      demandGap < 0 ? "text-red-600" : demandGap > 0 ? "text-emerald-600" : "text-muted-foreground"
+                    )}
+                  >
+                    {demandGap === 0 ? "—" : demandGap > 0 ? `+${formatNumber(demandGap)}` : formatNumber(demandGap)}
+                  </td>
+                  <td colSpan={2} />
+                </tr>
+              </tfoot>
             </Table>
           </ScrollArea>
         </div>
