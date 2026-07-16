@@ -3,10 +3,25 @@
 GestLog **ne lit pas TIO directement en prod**. Un orchestrateur **n8n** lit la source,
 transforme, et **pousse** vers les endpoints `/api/sync/*` de GestLog.
 
+## Les 3 systèmes externes (qui édite quoi)
+
+| Système | Éditeur | Rôle | Comment il arrive dans GestLog |
+|---|---|---|---|
+| **TIO** | société **Tech in Touch** | Outil de **prise de commande B2B** (les commerciaux/agents saisissent les commandes) + PIM produit | **Flux automatique** : un **n8n hébergé sur un serveur OVH** lit la base MySQL TIO et pousse vers `/api/sync/*`. Les commandes clients issues de TIO sont taguées `source = TIO`. |
+| **Texas Win** | société **Asti** | **ERP** : après validations/corrections, produit les **vraies** données de commande | **Import manuel** (écran Import → onglet « Commandes Texas ») → taguées `source = TEXAS`. C'est la **source de vérité** pour la répartition et les stats (cf. [`08-fonctionnalites.md`](08-fonctionnalites.md), section double-source). |
+| **WooCommerce** (+ Brevo) | site e-commerce MCS | Ventes **BtoC** | Synchro Woo → module BtoC (cf. [`07-btoc-brevo.md`](07-btoc-brevo.md)). |
+
+> **Double-source B2B (essentiel) :** une même saison peut contenir des commandes **TIO**
+> (archive, prise de commande) **et Texas** (vérité ERP). Tous les écrans B2B lisent
+> **Texas si la saison en a, sinon TIO** (repli), via `resolveOrderSource(seasonId)`
+> (`src/lib/order-source.ts`). Détails : [`08-fonctionnalites.md`](08-fonctionnalites.md).
+
 ## Source TIO (MySQL)
 
-**TIO** est le système source B2B (PIM/ERP). Base MySQL, tables préfixées **`lng_`**.
-Accès via les credentials MySQL configurés **dans n8n** (credential « MySQL account »).
+**TIO** (éditeur **Tech in Touch**) est le système source B2B (prise de commande + PIM).
+Base MySQL, tables préfixées **`lng_`**. Accès via les credentials MySQL configurés **dans
+n8n** (credential « MySQL account »). Le **n8n est hébergé sur un serveur OVH** (distinct du
+VPS GestLog) ; ses workflows lisent TIO, transforment, et poussent vers `/api/sync/*`.
 
 Tables/clés utiles :
 - **`lng_product`** : produit. `sku` (= `reference`), `label_fr` (désignation), **`prices`**

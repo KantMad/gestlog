@@ -11,8 +11,15 @@ deux mondes :
 - **BtoC** : données e-commerce WooCommerce (clients, commandes, produits, stock) + gestion
   VIP via Brevo. Voir [`07-btoc-brevo.md`](07-btoc-brevo.md).
 
-La donnée **produit/commande** vient principalement d'un système source externe nommé
-**TIO** (MySQL), synchronisée via **n8n**. Voir [`04-sources-et-n8n.md`](04-sources-et-n8n.md).
+La donnée **produit/commande** vient de **systèmes externes** :
+- **TIO** (éditeur **Tech in Touch**) — outil de prise de commande B2B, synchronisé
+  automatiquement via un **n8n hébergé sur OVH**.
+- **Texas Win** (éditeur **Asti**) — l'**ERP** ; import manuel des commandes « vérité ».
+- **WooCommerce** — e-commerce BtoC.
+
+Voir [`04-sources-et-n8n.md`](04-sources-et-n8n.md). Un **centre d'aide utilisateur** est
+intégré dans l'app (écran **`/aide`**) ; le tour fonctionnel écran par écran est dans
+[`08-fonctionnalites.md`](08-fonctionnalites.md).
 
 ## Stack technique
 

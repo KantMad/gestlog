@@ -27,8 +27,9 @@ fichier spécifique concerné. Ce `README.md` est l'index et le mode d'emploi.
 | [`05-authentification.md`](05-authentification.md) | Login code 4 chiffres, sessions, `/account`, permissions par écran, middleware | tu touches à l'auth ou aux accès |
 | [`06-integration-caisse.md`](06-integration-caisse.md) | Intégration sortante GestLog → CaissePro (réception de stock + création produits) | tu travailles sur l'envoi des livraisons à la caisse |
 | [`07-btoc-brevo.md`](07-btoc-brevo.md) | BtoC (WooCommerce), VIP Brevo, synchro Woo | tu travailles sur le module BtoC |
-| [`08-fonctionnalites.md`](08-fonctionnalites.md) | Tour de tous les écrans et de leur rôle métier | tu cherches « où se passe quoi » |
+| [`08-fonctionnalites.md`](08-fonctionnalites.md) | Notes fonctionnelles par feature (décisions, formats, gotchas) | tu cherches « où se passe quoi » |
 | [`09-operations-et-gotchas.md`](09-operations-et-gotchas.md) | Crons, tâches courantes, dépannage, **pièges durement appris** | un truc casse / tu fais une opération sensible |
+| [`10-guide-ecrans.md`](10-guide-ecrans.md) | **Guide complet écran par écran** : rôle, source de données, fonctionnalités, impacts, pièges (base du centre d'aide `/aide`) | tu veux comprendre un écran de bout en bout |
 
 **Ordre de lecture conseillé pour une nouvelle conversation :** ce README →
 `01-architecture` → `02-deploiement` → puis le(s) fichier(s) du domaine concerné.

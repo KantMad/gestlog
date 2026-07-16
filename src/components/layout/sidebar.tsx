@@ -26,6 +26,7 @@ import {
   Building2,
   UserCog,
   Download,
+  LifeBuoy,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
@@ -50,6 +51,7 @@ const NAV_ITEMS = [
   { href: "/repartition", label: "Répartition magasin", icon: Store },
   { href: "/export", label: "Exports", icon: Download },
   { href: "/btoc", label: "BtoC", icon: ShoppingBag },
+  { href: "/aide", label: "Centre d'aide", icon: LifeBuoy },
   { href: "/account", label: "Mon compte", icon: UserCog },
 ];
 
