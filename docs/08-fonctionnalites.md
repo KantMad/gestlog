@@ -73,19 +73,24 @@ sont gérés par écran (cf. [`05-authentification.md`](05-authentification.md))
 - **Répartition — filtre réception** : bouton 3 états *Tout / Réceptionné / Non réceptionné*
   (comme Comparaison) filtrant les produits selon `reçu > 0`, dans les deux vues (par produit /
   par boutique).
-- **Répartition — bouton « Répartir surplus »** : par carte produit (référence + couleur), visible
-  quand `reçu > alloué` sur des tailles commandées. Répartition en **2 phases** :
-  1. **Combler les écarts** : les pièces vont d'abord aux boutiques **coupées**, la plus coupée
-     en relatif d'abord (rang pour départager), jusqu'à ramener chacune à sa commande ;
-  2. **Au-delà des commandes** (prorata) — **UNIQUEMENT si plus aucune boutique n'a d'écart**
-     sur ce produit+couleur. Règle « **minimiser les écarts** » : servir une commande déjà
-     complète ne réduit l'écart de personne. Sinon le reliquat **reste en stock** et le toast
-     l'annonce (l'utilisateur peut le placer à la main).
-     *Cas réel* : XL/3XL sur-livrés (+3/+1) alors que le manque est sur M/L → toutes les
-     boutiques ont déjà leur XL complet, donc **rien à combler** → les 4 pièces restaient
-     distribuées au-delà chez des boutiques complètes pendant que d'autres étaient à -11 %.
-  Contraintes : **jamais une taille non commandée**, jamais plus que le reçu de la taille. Action
-  **client-side** (lignes marquées ajustées), incluse à la validation.
+- **Répartition — bouton « Répartir surplus »** : logique **pure et testée** dans
+  `src/lib/allocation/surplus.ts` (`distributeSurplus`) + `surplus.test.ts` ; la page ne fait
+  que brancher l'état. Objectif : **minimiser l'écart entre les pourcentages d'écart** des
+  boutiques. L'écart se mesure **au niveau de la ligne** (produit+couleur, en pièces totales) —
+  c'est ce qu'affiche la colonne « Écart ». Deux phases :
+  1. **Combler les écarts** : pièce par pièce, à la boutique **la plus coupée en relatif**
+     (rang pour départager), jusqu'à ramener chacune à sa commande → les % convergent.
+  2. **Au-delà des commandes** (prorata) — **UNIQUEMENT si plus aucune boutique n'a d'écart**.
+     Sinon le reliquat **reste en stock** (servir une commande déjà complète pendant qu'une
+     autre est à -11 % n'a pas de sens).
+  - ⚠️ **Contrainte exacte** : une pièce ne peut aller que sur une taille que la boutique a
+    **commandée** (`original[size] > 0`) — mais elle **peut dépasser la quantité commandée sur
+    cette taille**. C'est indispensable : *cas réel CCAH26_PU02/005*, le manque est sur M/L et
+    le surplus sur XL/3XL, or toutes les boutiques ont déjà leur XL complet. Exiger
+    `alloc[size] < original[size]` bloquait tout (« tailles déjà complètes ») alors qu'un XL de
+    plus fait bien passer une boutique coupée de **-11 % à -6 %**.
+  - Jamais plus que le reçu d'une taille. Action **client-side** (lignes marquées ajustées),
+    incluse à la validation.
 - **Répartition — ajout manuel du surplus** : la saisie d'une cellule n'est plus plafonnée à la
   commande mais à **quantité actuelle + reliquat reçu non alloué** sur cette taille
   (`remainingByProduct`, recalculé à chaque changement des lignes). On peut donc **ajouter** du
