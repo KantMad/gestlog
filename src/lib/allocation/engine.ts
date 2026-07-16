@@ -60,11 +60,17 @@ export function runAllocation(input: AllocationInput): AllocationResult {
       }
     }
 
-    const totalDemand = sumQuantities(totalDemandBySize);
-    const totalAvailable = sumQuantities(avail);
+    // Raccourci « tout le monde est servi » : valable UNIQUEMENT si CHAQUE taille a de quoi
+    // couvrir sa demande. Comparer les TOTAUX était faux : un surplus sur une taille masque
+    // le manque d'une autre (cas réel CCAH26_PU02/811 : reçu 144 ≥ demandé 142, mais M est à
+    // 31 pour 32 demandés → on allouait une 32e pièce de M inexistante, et le -1 n'apparaissait
+    // nulle part). Sinon → répartition pièce par pièce, qui respecte le disponible par taille.
+    const enoughEverySize = Object.entries(totalDemandBySize).every(
+      ([size, demand]) => (avail[size] || 0) >= demand
+    );
 
-    if (totalAvailable >= totalDemand) {
-      // Enough stock — allocate everything as requested
+    if (enoughEverySize) {
+      // Enough stock on every size — allocate everything as requested
       for (const d of productDemands) {
         lines.push({
           clientId: d.clientId,

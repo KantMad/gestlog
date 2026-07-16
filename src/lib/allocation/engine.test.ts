@@ -30,6 +30,35 @@ function input(available: Record<string, Record<string, number>>): AllocationInp
 const totalAllocated = (r: ReturnType<typeof runAllocation>) =>
   r.lines.reduce((s, l) => s + sumQuantities(l.allocated), 0);
 
+describe("runAllocation — un surplus sur une taille ne masque pas le manque d'une autre", () => {
+  // Cas réel CCAH26_PU02/811 : reçu TOTAL (144) >= demandé TOTAL (142) → l'ancien raccourci
+  // « stock suffisant » servait tout le monde en plein, alors que M était à 31 pour 32
+  // demandés. On allouait une 32e pièce de M inexistante et le -1 n'apparaissait nulle part.
+  it("le manque d'une taille est appliqué même si le total reçu couvre le total demandé", () => {
+    const r = runAllocation({
+      seasonId: "s1",
+      // M : 31 pour 32 demandés (manque 1) · L : 45 pour 44 demandés (surplus 1)
+      available: new Map([["P", { M: 31, L: 45 }]]),
+      demands: [
+        { clientId: "A", clientOrderId: "oA", productId: "P", sizeScale: ["M", "L"], requested: { M: 20, L: 20 } },
+        { clientId: "B", clientOrderId: "oB", productId: "P", sizeScale: ["M", "L"], requested: { M: 12, L: 24 } },
+      ],
+      clientConfigs: new Map([
+        ["A", cfg(1)],
+        ["B", cfg(2)],
+      ]),
+    });
+    const allocM = r.lines.reduce((s, l) => s + (l.allocated.M ?? 0), 0);
+    const allocL = r.lines.reduce((s, l) => s + (l.allocated.L ?? 0), 0);
+    expect(allocM).toBe(31); // et non 32 : on n'invente pas la pièce manquante
+    expect(allocL).toBe(44); // 44 demandés / 45 reçus → le surplus reste non alloué
+    // Le -1 est bien porté par une boutique (total alloué = 75, pas 76).
+    const total = r.lines.reduce((s, l) => s + sumQuantities(l.allocated), 0);
+    expect(total).toBe(75);
+    expect(r.lines.some((l) => sumQuantities(l.allocated) < sumQuantities(l.original))).toBe(true);
+  });
+});
+
 describe("runAllocation — à rang égal, on égalise le % de coupe (pas les pièces)", () => {
   // Deux boutiques de MÊME rang, commandes de tailles très différentes (40 vs 10) sur la
   // même taille. Reçu 25 sur 50 demandés → 50 % de manque.

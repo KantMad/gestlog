@@ -46,6 +46,14 @@ sont gérés par écran (cf. [`05-authentification.md`](05-authentification.md))
   boutiques de même rang convergent vers le **même pourcentage** de coupe, quelle que soit la
   taille de leur commande. Remplace l'ancien **pro-rata par taille + rattrapage d'arrondis**,
   qui donnait des % très inégaux selon le mix de tailles (-6 % à -17 % observés).
+- **Répartition — le raccourci « stock suffisant » se juge PAR TAILLE** : ⚠️ bug historique —
+  `engine.ts` comparait les **totaux** (`totalAvailable >= totalDemand`) pour servir tout le
+  monde en plein. Un **surplus sur une taille masquait le manque d'une autre** : cas réel
+  CCAH26_PU02/811, reçu **144** ≥ demandé **142**, mais **M à 31 pour 32 demandés** → on
+  allouait une 32ᵉ pièce de M **inexistante**, et le `-1` n'apparaissait sur aucune boutique
+  (toutes à « — », alloué = commandé). La condition est désormais **`enoughEverySize`** :
+  chaque taille demandée doit être couverte, sinon on passe par la répartition pièce par
+  pièce (qui respecte le disponible **par taille**). Testé.
 - **Répartition — invariant « alloué ≤ commande »** : ⚠️ bug historique — le pro-rata
   n'était pas plafonné à la quantité commandée. Dès qu'une **taille** était sur-livrée alors
   que le produit était globalement en manque, les boutiques étaient servies **au-dessus de leur
