@@ -10,7 +10,7 @@
 | Système | Éditeur | Rôle | Entrée dans GestLog |
 |---|---|---|---|
 | **TIO** | **Tech in Touch** | Prise de commande B2B + PIM produit | **Automatique** via un **n8n hébergé sur OVH** → `/api/sync/*`. Commandes taguées `source=TIO` (**archive**). |
-| **Texas Win** | **Asti** | **ERP** — données de commande « vérité » après corrections | **Import manuel** (Import → Commandes Texas) → `source=TEXAS` (**source de vérité**). |
+| **Texas Win** | **Asti** | **ERP** — données de commande « vérité » après corrections | **Import manuel** (Import → Commandes clients (Texas)) → `source=TEXAS` (**source de vérité**). |
 | **WooCommerce** (+ **Brevo**) | site MCS | Ventes **BtoC** + marketing VIP | Sync Woo (n8n) → tables `Btoc*` ; VIP poussés vers Brevo. |
 
 **Règle de lecture B2B (essentielle) :** une saison peut contenir des commandes TIO **et**
@@ -50,12 +50,16 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
 ## Import (`/import`)
 - **Rôle** : alimenter le système B2B depuis des fichiers Excel, **rattachés à une saison
   cible choisie explicitement** (distincte de la saison active), avec suivi et annulation.
-- **5 onglets → endpoints** : Commandes clients TIO (`/api/import/client-orders`, StatGen
-  détecté auto), **Commandes Texas ERP** (`/api/import/texas-orders`, parseur dédié
-  `parseTexasClientOrders`, décodage par gamme, `source=TEXAS`), Commandes fournisseurs
-  (`/api/import/supplier-orders`, StatGen + légende gammes), Réceptions
+- **4 onglets → endpoints** : **Commandes clients (Texas)** (`/api/import/texas-orders`,
+  parseur dédié `parseTexasClientOrders`, décodage par gamme, `source=TEXAS`), Commandes
+  fournisseurs (`/api/import/supplier-orders`, StatGen + légende gammes), Réceptions
   (`/api/import/receptions`, Packing List, tailles par nom), Stock (`/api/import/stock`,
   Excel générique avec **mapping manuel**).
+- ⚠️ **L'import manuel des commandes clients TIO a été retiré** : les commandes TIO
+  n'arrivent plus que par la **synchro n8n automatique** (`/api/sync/orders`, `source=TIO`,
+  archive). Déposer un StatGen client TIO affiche un message explicite (→ utiliser Texas).
+  La route `/api/import/client-orders` + `client-order-mapper` / `importMcsClientOrders`
+  existent encore mais **ne sont plus appelés par l'UI** (repli technique).
 - **Fonctionnalités** : auto-détection de format MCS (`detectMcsFormat`) avec alerte si mauvais
   onglet ; aide contextuelle par onglet ; **bloc « Imports récents » supprimables**
   (`/api/import/logs`, chaque import tague ses entités via `importLogId` → suppression

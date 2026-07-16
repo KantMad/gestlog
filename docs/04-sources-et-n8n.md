@@ -8,7 +8,7 @@ transforme, et **pousse** vers les endpoints `/api/sync/*` de GestLog.
 | Système | Éditeur | Rôle | Comment il arrive dans GestLog |
 |---|---|---|---|
 | **TIO** | société **Tech in Touch** | Outil de **prise de commande B2B** (les commerciaux/agents saisissent les commandes) + PIM produit | **Flux automatique** : un **n8n hébergé sur un serveur OVH** lit la base MySQL TIO et pousse vers `/api/sync/*`. Les commandes clients issues de TIO sont taguées `source = TIO`. |
-| **Texas Win** | société **Asti** | **ERP** : après validations/corrections, produit les **vraies** données de commande | **Import manuel** (écran Import → onglet « Commandes Texas ») → taguées `source = TEXAS`. C'est la **source de vérité** pour la répartition et les stats (cf. [`08-fonctionnalites.md`](08-fonctionnalites.md), section double-source). |
+| **Texas Win** | société **Asti** | **ERP** : après validations/corrections, produit les **vraies** données de commande | **Import manuel** (écran Import → onglet « Commandes clients (Texas) ») → taguées `source = TEXAS`. C'est la **source de vérité** pour la répartition et les stats (cf. [`08-fonctionnalites.md`](08-fonctionnalites.md), section double-source). |
 | **WooCommerce** (+ Brevo) | site e-commerce MCS | Ventes **BtoC** | Synchro Woo → module BtoC (cf. [`07-btoc-brevo.md`](07-btoc-brevo.md)). |
 
 > **Double-source B2B (essentiel) :** une même saison peut contenir des commandes **TIO**

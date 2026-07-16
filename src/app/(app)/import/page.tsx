@@ -28,7 +28,6 @@ import {
 } from "@/lib/import/mcs-format";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  ShoppingCart,
   Factory,
   PackageCheck,
   Warehouse,
@@ -48,35 +47,6 @@ import { cn } from "@/lib/utils";
 
 // Aide par onglet : format attendu, fonctionnement, et comment les liens se font.
 const IMPORT_HELP: Record<string, { format: ReactNode; how: ReactNode; links: ReactNode }> = {
-  "client-orders": {
-    format: (
-      <>
-        Export TIO <strong>StatGen « commande client »</strong>, reconnu automatiquement (aucun
-        mapping à faire). En-tête attendu : <strong>Fiche client</strong>,{" "}
-        <strong>Fiche produit fini</strong>, <strong>Coloris produit fini</strong>,{" "}
-        <strong>N° commande client</strong>, <strong>Total Q</strong> et{" "}
-        <strong>Q. 1 … Q. 16</strong>.
-      </>
-    ),
-    how: (
-      <>
-        La référence vient de « Fiche produit fini », la <strong>couleur = le code</strong> avant
-        le tiret (« 208-Cognac » → 208), et les quantités <strong>Q.N</strong> sont replacées par
-        taille via la grille du produit. Chaque ligne est appariée à un{" "}
-        <strong>produit du référentiel</strong> (réf + code couleur) ; les produits inconnus
-        (ex. <span className="font-mono">ZZZ_LOGO</span>) sont listés en erreurs — c&apos;est normal.
-      </>
-    ),
-    links: (
-      <>
-        Le <strong>client</strong> est créé/mis à jour automatiquement (via « Fiche client ») et la
-        commande est rattachée à la <strong>saison choisie en haut</strong> et à son{" "}
-        <strong>n° de commande</strong> (du fichier). ⚠️ Une commande ne peut exister que sur{" "}
-        <strong>une seule saison</strong> : si le n° existe déjà dans une autre saison, l&apos;import
-        la refuse.
-      </>
-    ),
-  },
   "texas-orders": {
     format: (
       <>
@@ -409,30 +379,13 @@ function RecentImports({
   );
 }
 
+// NB : l'import MANUEL des commandes clients TIO a été retiré — les commandes clients
+// viennent désormais soit de la synchro n8n automatique (TIO, archive), soit de l'import
+// Texas (ERP, source de vérité). Cf. docs/10-guide-ecrans.md.
 const IMPORT_TABS = [
   {
-    id: "client-orders",
-    label: "Commandes clients",
-    icon: ShoppingCart,
-    endpoint: "/api/import/client-orders",
-    patterns: CLIENT_ORDER_PATTERNS,
-    fields: [
-      { key: "orderNumber", label: "N° commande", required: true },
-      { key: "clientCode", label: "Code client", required: true },
-      { key: "clientName", label: "Nom client", required: true },
-      { key: "reference", label: "Référence", required: true },
-      { key: "color", label: "Couleur", required: true },
-      { key: "colorCode", label: "Code couleur" },
-      { key: "catalog", label: "Catalogue" },
-      { key: "status", label: "Statut commande" },
-      { key: "deliveryWindow", label: "Fenêtre de livraison" },
-      { key: "category", label: "Catégorie" },
-      { key: "sizeTypeCode", label: "Type de taille" },
-    ],
-  },
-  {
     id: "texas-orders",
-    label: "Commandes Texas (ERP)",
+    label: "Commandes clients (Texas)",
     icon: Database,
     endpoint: "/api/import/texas-orders",
     patterns: CLIENT_ORDER_PATTERNS,
@@ -506,14 +459,10 @@ function ImportTab({
   const [texasCount, setTexasCount] = useState<number | null>(null);
 
   // Format MCS attendu pour cet onglet (les autres onglets restent en mapping générique).
+  // « client-order » (StatGen client TIO) n'a plus d'onglet : ce format n'est plus importé
+  // manuellement (TIO arrive par la synchro n8n) → il déclenche l'avertissement mcsMismatch.
   const expectedMcs: McsFormat | null =
-    tab.id === "supplier-orders"
-      ? "statgen"
-      : tab.id === "receptions"
-        ? "packing-list"
-        : tab.id === "client-orders"
-          ? "client-order"
-          : null;
+    tab.id === "supplier-orders" ? "statgen" : tab.id === "receptions" ? "packing-list" : null;
 
   const handleFileSelected = useCallback(
     async (selectedFile: File) => {
@@ -735,14 +684,20 @@ function ImportTab({
         <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
           <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
           <span>
-            Ce fichier ressemble à un format MCS «{" "}
-            {mcsFormat === "statgen"
-              ? "commande fournisseur"
-              : mcsFormat === "client-order"
-                ? "commande client"
-                : "réception (liste de colisage)"}{" "}
-            ».
-            Sélectionne l'onglet correspondant pour l'importer.
+            {mcsFormat === "client-order" ? (
+              <>
+                Ce fichier est un export <strong>StatGen « commande client » TIO</strong>. Il
+                n&apos;est <strong>plus importé manuellement</strong> : les commandes TIO arrivent
+                automatiquement par la synchro, et les commandes clients de référence s&apos;importent
+                via l&apos;onglet <strong>Commandes clients (Texas)</strong>.
+              </>
+            ) : (
+              <>
+                Ce fichier ressemble à un format MCS «{" "}
+                {mcsFormat === "statgen" ? "commande fournisseur" : "réception (liste de colisage)"} ».
+                Sélectionne l&apos;onglet correspondant pour l&apos;importer.
+              </>
+            )}
           </span>
         </div>
       )}
@@ -753,12 +708,7 @@ function ImportTab({
             <Check className="h-4 w-4 shrink-0 mt-0.5" />
             <span>
               Format MCS détecté (
-              {mcsFormat === "statgen"
-                ? "commande fournisseur"
-                : mcsFormat === "client-order"
-                  ? "commande client"
-                  : "Packing List"}
-              ) —{" "}
+              {mcsFormat === "statgen" ? "commande fournisseur" : "Packing List"}) —{" "}
               <strong>{mcsRowCount}</strong> ligne{mcsRowCount > 1 ? "s" : ""} prête
               {mcsRowCount > 1 ? "s" : ""}. Pas de mapping de colonnes nécessaire.
             </span>
@@ -885,7 +835,7 @@ export default function ImportPage() {
             </CardHeader>
             <CardContent>
               {importSeason && (
-                <Tabs defaultValue="client-orders">
+                <Tabs defaultValue="texas-orders">
                   <TabsList className="w-full justify-start">
                     {IMPORT_TABS.map((tab) => (
                       <TabsTrigger key={tab.id} value={tab.id} className="gap-2">

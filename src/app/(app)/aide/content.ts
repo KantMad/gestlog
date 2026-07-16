@@ -60,7 +60,7 @@ export const HELP_THEMES: HelpTheme[] = [
             h: "Trois systèmes alimentent GestLog",
             lines: [
               "**TIO** (éditeur *Tech in Touch*) : l'outil où sont **saisies les commandes B2B**. Il se synchronise **tout seul** avec GestLog (via un automate n8n).",
-              "**Texas Win** (éditeur *Asti*) : l'**ERP**. Après validations et corrections, il sort les **vraies** données de commande. Elles s'importent **à la main** (Import → Commandes Texas).",
+              "**Texas Win** (éditeur *Asti*) : l'**ERP**. Après validations et corrections, il sort les **vraies** données de commande. Elles s'importent **à la main** (Import → Commandes clients (Texas)).",
               "**WooCommerce** : la **boutique en ligne** (BtoC), dans son propre espace.",
             ],
           },
@@ -124,21 +124,29 @@ export const HELP_THEMES: HelpTheme[] = [
       {
         id: "import-commandes",
         icon: "🧾",
-        title: "Importer des commandes clients (TIO vs Texas)",
-        keywords: "import commandes clients tio texas erp source vérité onglet",
+        title: "Importer les commandes clients (Texas)",
+        keywords: "import commandes clients texas erp source vérité onglet tio synchro",
         sections: [
           {
-            h: "Deux onglets, deux rôles",
+            h: "Un seul onglet : Commandes clients (Texas)",
             lines: [
-              "**Commandes clients (TIO)** : le format habituel, reconnu automatiquement — aucun mapping à faire.",
-              "**Commandes Texas (ERP)** : le fichier de l'ERP. Dès que tu l'importes, **cette saison bascule sur Texas** (la vérité) ; les commandes TIO passent en archive.",
+              "Les commandes clients s'importent **uniquement depuis le fichier Texas (l'ERP)** : ce sont les données de référence.",
+              "Dès que tu l'importes, **cette saison bascule sur Texas** (la vérité) et tous les écrans B2B s'appuient dessus.",
             ],
+          },
+          {
+            h: "Et les commandes TIO ?",
+            lines: [
+              "Elles **arrivent toutes seules** par la synchro automatique — il n'y a **rien à importer à la main**.",
+              "Elles restent visibles en **archive** tant qu'aucun fichier Texas n'a été importé pour la saison.",
+            ],
+            tip: "Si tu déposes un ancien export « commande client » TIO, l'outil te le dira : ce format n'est plus importé manuellement. 🙂",
           },
           {
             h: "Comment faire",
             lines: [
-              "Choisis la **saison cible** en haut, va dans le bon onglet, dépose le fichier, vérifie le nombre de lignes, puis **Importer**.",
-              "Le résultat indique les lignes importées, les produits créés et les éventuelles erreurs.",
+              "Choisis la **saison cible** en haut, va sur l'onglet **Commandes clients (Texas)**, dépose le fichier, vérifie le nombre de lignes, puis **Importer**.",
+              "Le résultat indique les lignes importées et les éventuelles erreurs.",
             ],
             tip: "Des produits « introuvables » comme **ZZZ_LOGO** dans les erreurs ? C'est **normal** : ce sont des lignes techniques sans vrai produit.",
           },

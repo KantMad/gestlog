@@ -7,7 +7,7 @@ sont gérés par écran (cf. [`05-authentification.md`](05-authentification.md))
 | Écran (href) | Rôle métier | API principales |
 |---|---|---|
 | **`/dashboard`** | Tableau de bord : KPIs et vue d'ensemble. | `/api/statistics/*` |
-| **`/import`** | Import **manuel** de fichiers : commandes clients, commandes fournisseurs, réceptions, stock. | `/api/import/{client-orders,supplier-orders,receptions,stock}` |
+| **`/import`** | Import **manuel** de fichiers : commandes clients **Texas**, commandes fournisseurs, réceptions, stock. (L'import manuel des commandes clients **TIO** a été retiré — TIO arrive par la synchro n8n.) | `/api/import/{texas-orders,supplier-orders,receptions,stock}` |
 | **`/product-info`** | Référentiel produit : EANs, types de tailles, références fournisseurs. | `/api/product-info/{eans,size-types,supplier-refs}` |
 | **`/comparison`** | Comparaison (commandé/livré/stock selon contexte). | `/api/comparison` |
 | **`/reassort`** | **Commandes client** (réassort) : lignes, annulation. Saison **Réassort** dédiée. | `/api/reassort`, `/api/reassort/{lines,cancel}` |
@@ -157,9 +157,10 @@ tout réimporter.
 ### Double-source commandes clients : TIO (archive) vs Texas (ERP, vérité)
 
 Les commandes B2B ont un champ **`ClientOrder.source`** (`TIO` par défaut | `TEXAS`).
-- **TIO** : prise de commande (synchro n8n `/api/sync/orders` + import StatGen manuel) → tagués
+- **TIO** : prise de commande — **uniquement** via la synchro n8n `/api/sync/orders` (l'import
+  StatGen manuel a été retiré de l'UI ; la route `client-orders` subsiste en repli) → tagués
   `TIO`. Deviennent l'**archive**.
-- **TEXAS** : import ERP (`/api/import/texas-orders`, onglet « Commandes Texas ») → tagués
+- **TEXAS** : import ERP (`/api/import/texas-orders`, onglet « Commandes clients (Texas) ») → tagués
   `TEXAS`. **Source de vérité**. Parseur `parseTexasClientOrders` : StatGen client avec colonne
   Saison, client par **code** (« Code client(Commande client) », nom existant non écrasé),
   décodage `Q.N` **absolu par gamme**, montant net réparti au prorata des quantités.
