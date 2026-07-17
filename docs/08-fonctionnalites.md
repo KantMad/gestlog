@@ -11,7 +11,7 @@ sont gérés par écran (cf. [`05-authentification.md`](05-authentification.md))
 | **`/product-info`** | Référentiel produit : EANs, types de tailles, références fournisseurs. | `/api/product-info/{eans,size-types,supplier-refs}` |
 | **`/comparison`** | Comparaison (commandé/livré/stock selon contexte). | `/api/comparison` |
 | **`/reassort`** | **Commandes client** (réassort) : lignes, annulation. Saison **Réassort** dédiée. | `/api/reassort`, `/api/reassort/{lines,cancel}` |
-| **`/allocation`** | **Répartition** : sessions de simulation → validation (qui reçoit quoi). | `/api/allocation/{simulate,validate,sessions}` |
+| **`/allocation`** | **Répartition** : sessions de simulation → validation (qui reçoit quoi). Détail d'une session validée : `/allocation/sessions/[sessionId]`. | `/api/allocation/{simulate,validate,sessions}` |
 | **`/deliveries`** | **Préparation** des livraisons : génération, résolution EAN, déclenche l'envoi caisse à l'expédition. | `/api/deliveries`, `/api/deliveries/[id]`, `/api/deliveries/generate` |
 | **`/depot`** | **Vue dépôt** : BL/Factures importés (FTP), récap des livraisons. | `/api/depot/deliveries` |
 | **`/shipments`** | **Livraisons** : groupes d'expédition, lignes, génération **PDF**. | `/api/shipments`, `/api/shipments/{lines,pdf}`, `/api/shipment-groups` |
@@ -74,6 +74,18 @@ sont gérés par écran (cf. [`05-authentification.md`](05-authentification.md))
   (demande), **Reçu fourn.** (réceptions), **Écart** (= **Reçu − Commande** : négatif = manque,
   positif = surplus) et **Alloué**. Les lignes boutique affichent l'écart **avec %**.
   `receivedByProduct` vient de la réponse `simulate`.
+- **Répartition — sessions validées et leur détail** : « Valider » crée une `AllocationSession`
+  (`status=VALIDATED`) + une `AllocationLine` par ligne (boutique × produit) avec les quantités
+  commandées / allouées / retirées. C'est **persisté en base** (à ne pas confondre avec la
+  simulation, qui vit en `sessionStorage`). Le bouton **Historique** liste les sessions de la
+  saison ; chaque carte ouvre **`/allocation/sessions/[sessionId]`** (totaux, recherche
+  boutique/référence/couleur, détail taille par taille, ajustements manuels marqués).
+  - **Accès** : les sessions sont rattachées à la **saison**, pas à l'utilisateur — tout le monde
+    voit celles de tout le monde. Le middleware mappe `/allocation/*` **et** `/api/allocation/*`
+    sur l'écran **Répartition** (`screenForPath` matche par préfixe → la sous-route est protégée
+    sans rien déclarer).
+  - La session validée alimente ensuite la **Préparation** (`generateDeliveries` part de
+    l'`allocationSessionId`), le récap client, les stats et le détail d'une commande.
 - **Répartition — persistance de la simulation** : les résultats + filtres sont conservés en
   `sessionStorage` (`gestlog:allocation:sim:v1`) → en changeant de page puis en revenant, la
   simulation (y compris ajustements manuels) est **restaurée** sans relancer. Vidée à la

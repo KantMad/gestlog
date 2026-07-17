@@ -339,6 +339,14 @@ export const HELP_THEMES: HelpTheme[] = [
             tip: "Une session validée est un **instantané figé**. Si tu corriges une réception après coup, il faut **re-simuler puis re-valider**.",
           },
           {
+            h: "Retrouver une répartition validée",
+            lines: [
+              "Le bouton **Historique** liste toutes les sessions de la saison. **Clique sur une session** pour rouvrir son détail : qui a reçu quoi, taille par taille, avec les totaux et les écarts.",
+              "Tu peux y rechercher une boutique, une référence ou une couleur, et les lignes que quelqu'un a **ajustées à la main** sont signalées par un crayon.",
+              "Les sessions sont rattachées à la **saison**, pas à toi : tes collègues qui ont accès à la Répartition voient les mêmes.",
+            ],
+          },
+          {
             h: "Ne valider qu'une partie : le périmètre de validation",
             lines: [
               "Le bloc **Périmètre de validation**, en haut des résultats, te laisse choisir les **fournisseurs** et les **catalogues** à valider (plusieurs de chaque). Vide = tout.",

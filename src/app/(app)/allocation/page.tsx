@@ -45,6 +45,7 @@ import {
 } from "lucide-react";
 import { cn, sumQuantities, formatNumber, type SizeQuantities } from "@/lib/utils";
 import { distributeSurplus as distributeSurplusRule } from "@/lib/allocation/surplus";
+import Link from "next/link";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
 
@@ -1687,7 +1688,12 @@ export default function AllocationPage() {
             ) : (
               <div className="space-y-2">
                 {sessions.map((session) => (
-                  <Card key={session.id}>
+                  <Card key={session.id} className="transition-colors hover:bg-accent/50">
+                    <Link
+                      href={`/allocation/sessions/${session.id}`}
+                      className="block"
+                      aria-label={`Voir le détail de la répartition du ${new Date(session.sessionDate).toLocaleDateString("fr-FR")}`}
+                    >
                     <CardContent className="flex items-center justify-between py-3 px-4">
                       <div className="flex items-center gap-3">
                         <Badge
@@ -1715,12 +1721,16 @@ export default function AllocationPage() {
                           </span>
                         </div>
                       </div>
-                      {session.notes && (
-                        <span className="text-xs text-muted-foreground max-w-[200px] truncate">
-                          {session.notes}
-                        </span>
-                      )}
+                      <div className="flex items-center gap-3">
+                        {session.notes && (
+                          <span className="text-xs text-muted-foreground max-w-[200px] truncate">
+                            {session.notes}
+                          </span>
+                        )}
+                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                      </div>
                     </CardContent>
+                    </Link>
                   </Card>
                 ))}
               </div>
