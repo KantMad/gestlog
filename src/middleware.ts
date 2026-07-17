@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { verifySession } from "@/lib/session";
-import { screenForPath, canAccessScreen, APP_SCREENS } from "@/lib/screens";
+import { screensForPath, canAccessScreen, APP_SCREENS } from "@/lib/screens";
 
 const PUBLIC_PATHS = ["/login", "/api/auth/", "/api/sync/"];
 
@@ -48,8 +48,9 @@ export async function middleware(request: NextRequest) {
 
   // Autorisation par écran (pages + API screen-spécifiques). screenAccess est
   // porté par le jeton signé. Les routes transverses renvoient screen=null.
-  const screen = screenForPath(pathname);
-  if (screen && !canAccessScreen(session.role, session.scr, screen)) {
+  // Une API peut servir plusieurs écrans : en avoir UN suffit.
+  const screens = screensForPath(pathname);
+  if (screens && !screens.some((s) => canAccessScreen(session.role, session.scr, s))) {
     if (pathname.startsWith("/api/")) {
       return NextResponse.json({ error: "Accès refusé" }, { status: 403 });
     }

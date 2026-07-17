@@ -65,15 +65,17 @@ export default function DashboardPage() {
       setCharts(null);
       return;
     }
+    // Une réponse d'erreur (403/500) ne porte PAS la forme attendue : sans ce garde-fou,
+    // on injectait `{ error: "…" }` dans l'état et le rendu plantait (page blanche).
     fetch(`/api/statistics/season?seasonId=${activeSeason.id}`)
-      .then((res) => res.json())
-      .then((data) => setStats(data.data))
-      .catch(() => {});
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => setStats(data?.data ?? null))
+      .catch(() => setStats(null));
 
     fetch(`/api/statistics/charts?seasonId=${activeSeason.id}`)
-      .then((res) => res.json())
-      .then((data) => setCharts(data))
-      .catch(() => {});
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => setCharts(data ?? null))
+      .catch(() => setCharts(null));
   }, [activeSeason]);
 
   const statCards = [

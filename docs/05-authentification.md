@@ -74,15 +74,22 @@ Défense en profondeur, exécutée avant les pages/API :
   `/api/sync/*` s'authentifie par `x-api-key`).
 - Jeton vérifié (signé + non expiré) sinon → redirection `/login` (page) ou **401** (API).
 - **Chemins ADMIN** (`/users`, `/api/users`) → **403/redirection** si non-admin.
-- **Autorisation par écran** : `screenForPath(pathname)` mappe pages **et** API spécifiques
-  vers un écran ; si l'utilisateur n'y a pas accès → **403** (API) / redirection (page). Les
-  routes transverses renvoient `screen=null` (pas d'enforcement) — c'est le cas de
-  `/account` et `/api/account`.
+- **Autorisation par écran** : `screensForPath(pathname)` mappe pages **et** API spécifiques
+  vers **un ou plusieurs** écrans ; en avoir **UN seul suffit**. Si l'utilisateur n'en a
+  aucun → **403** (API) / redirection (page). Les routes transverses renvoient `null` (pas
+  d'enforcement) — c'est le cas de `/account` et `/api/account`.
+- ⚠️ **Une API consommée par plusieurs écrans doit les lister TOUS.** Sinon elle casse pour
+  qui n'a que l'autre écran. *Cas réel* : le **Dashboard** se nourrit de
+  `/api/statistics/{season,charts}`, rattachées au seul écran `/statistics` → une
+  utilisatrice ayant « Tableau de bord » **sans** « Statistiques » recevait **403 sur ses
+  propres données** et la page plantait (« page couldn't be loaded »). D'où
+  `["/api/statistics", ["/statistics", "/dashboard"]]`. Couvert par `screens.test.ts`.
 
 ## Quand tu ajoutes un écran
 1. Crée la page sous `(app)/` et son `/api/...`.
 2. Ajoute la clé dans `APP_SCREENS` (`screens.ts`) **et** le mapping API dans
-   `API_SCREEN_MAP` si l'API doit être gardée par écran.
+   `API_SCREEN_MAP` si l'API doit être gardée par écran. **Liste tous les écrans qui
+   consomment cette API**, pas seulement celui du même nom (cf. avertissement ci-dessus).
 3. Ajoute l'item de nav dans la sidebar.
 4. Si l'écran doit être **accessible à tous** (comme `/account`), whiteliste-le dans
    `canAccessScreen` au lieu de l'ajouter à `APP_SCREENS`.

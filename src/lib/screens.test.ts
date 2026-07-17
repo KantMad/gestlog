@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseScreenAccess, screenForPath, canAccessScreen } from "./screens";
+import { parseScreenAccess, screenForPath, screensForPath, canAccessScreen } from "./screens";
 
 describe("parseScreenAccess", () => {
   it("null/vide → null (accès à tout)", () => {
@@ -53,5 +53,36 @@ describe("canAccessScreen", () => {
   });
   it("sous-chemin d'un écran accordé", () => {
     expect(canAccessScreen("USER", ["/recap"], "/recap/client123")).toBe(true);
+  });
+});
+
+describe("screensForPath — une API peut servir plusieurs écrans", () => {
+  // Cas réel : Audrey a « Tableau de bord » mais PAS « Statistiques ». Le Dashboard se
+  // nourrit de /api/statistics/{season,charts} ; rattachées au seul écran /statistics,
+  // elles lui renvoyaient 403 → sa page plantait (« page couldn't be loaded »).
+  it("les données du dashboard sont accessibles avec /dashboard SEUL", () => {
+    const screens = screensForPath("/api/statistics/season")!;
+    expect(screens).toContain("/dashboard");
+    expect(screens.some((s) => canAccessScreen("USER", ["/dashboard"], s))).toBe(true);
+    expect(screensForPath("/api/statistics/charts")!.some((s) => canAccessScreen("USER", ["/dashboard"], s))).toBe(true);
+  });
+
+  it("… et avec /statistics seul", () => {
+    expect(screensForPath("/api/statistics/season")!.some((s) => canAccessScreen("USER", ["/statistics"], s))).toBe(true);
+  });
+
+  it("mais restent refusées sans aucun des deux", () => {
+    const screens = screensForPath("/api/statistics/season")!;
+    expect(screens.some((s) => canAccessScreen("USER", ["/import"], s))).toBe(false);
+  });
+
+  it("les comparaisons gardent leur écran propre (préfixe plus spécifique d'abord)", () => {
+    expect(screensForPath("/api/statistics/season-comparison")).toEqual(["/season-comparison"]);
+    // Avoir le dashboard ne donne PAS accès aux comparaisons.
+    expect(
+      screensForPath("/api/statistics/season-comparison")!.some((s) =>
+        canAccessScreen("USER", ["/dashboard"], s)
+      )
+    ).toBe(false);
   });
 });
