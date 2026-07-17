@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { applyImportedAllocation } from "./imported";
+import { applyImportedAllocation, restrictDemandsToImported } from "./imported";
+import type { SizeQuantities } from "@/lib/utils";
 import type { AllocationDemand, ClientConfig } from "./types";
 
 const cfg = (minDeliveryThreshold = 0): ClientConfig => ({
@@ -82,5 +83,34 @@ describe("applyImportedAllocation — le fichier fait autorité", () => {
     expect(r.lines).toHaveLength(1); // on n'invente pas de ligne
     expect(r.warnings).toHaveLength(1);
     expect(r.warnings[0]).toContain("1 ligne(s) du fichier");
+  });
+});
+
+describe("restrictDemandsToImported — ne garde que les produits du fichier", () => {
+  const alloc = new Map<string, SizeQuantities>([
+    ["A__P", { M: 8 }],
+    ["A__Q", { L: 3 }],
+  ]);
+
+  it("écarte les commandes dont le (boutique, produit) n'est pas dans le fichier", () => {
+    // Cas réel : la saison a 8353 lignes (boutique×produit) mais le fichier n'en couvre que
+    // ~262. Sans filtre, tous les autres produits sortaient à 0 alloué avec un écart complet.
+    const demands = [
+      demand("A", "P", { M: 10 }), // dans le fichier
+      demand("A", "Q", { L: 5 }), // dans le fichier
+      demand("A", "Z", { M: 4 }), // PAS dans le fichier → doit disparaître
+      demand("B", "P", { M: 6 }), // boutique absente du fichier → doit disparaître
+    ];
+    const kept = restrictDemandsToImported(demands, alloc);
+    expect(kept.map((d) => `${d.clientId}__${d.productId}`).sort()).toEqual(["A__P", "A__Q"]);
+  });
+
+  it("agrège les commandes multiples d'une même boutique pour un même produit", () => {
+    // Un client qui a commandé le même produit sur 2 commandes → 1 seule ligne, cumulée.
+    const demands = [demand("A", "P", { M: 10 }), demand("A", "P", { L: 4 })];
+    const kept = restrictDemandsToImported(demands, alloc);
+    expect(kept).toHaveLength(1);
+    expect(kept[0].requested).toEqual({ M: 10, L: 4 });
+    expect(kept[0].sizeScale.sort()).toEqual(["L", "M"]);
   });
 });

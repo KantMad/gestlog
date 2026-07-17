@@ -20,6 +20,32 @@ export interface ImportedAllocationInput {
   clientConfigs: Map<string, ClientConfig>;
 }
 
+/**
+ * Restreint les demandes de la saison aux SEULS couples (boutique, produit) présents dans le
+ * fichier importé, et agrège les commandes multiples d'une même boutique pour un même produit
+ * (le fichier ne distingue pas les n° de commande) → une seule demande par (boutique, produit).
+ * Sans ce filtre, TOUTES les commandes de la saison ressortiraient (produits hors fichier
+ * affichés à 0 alloué avec un écart complet).
+ */
+export function restrictDemandsToImported(
+  demands: AllocationDemand[],
+  allocatedByKey: Map<string, SizeQuantities>
+): AllocationDemand[] {
+  const byKey = new Map<string, AllocationDemand>();
+  for (const d of demands) {
+    const key = `${d.clientId}__${d.productId}`;
+    if (!allocatedByKey.has(key)) continue;
+    const ex = byKey.get(key);
+    if (!ex) {
+      byKey.set(key, { ...d, requested: { ...d.requested }, sizeScale: [...d.sizeScale] });
+    } else {
+      for (const [size, q] of Object.entries(d.requested)) ex.requested[size] = (ex.requested[size] || 0) + q;
+      for (const sz of d.sizeScale) if (!ex.sizeScale.includes(sz)) ex.sizeScale.push(sz);
+    }
+  }
+  return [...byKey.values()];
+}
+
 export function applyImportedAllocation(input: ImportedAllocationInput): AllocationResult {
   const { demands, allocatedByKey, clientConfigs } = input;
   const warnings: string[] = [];

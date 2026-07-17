@@ -122,6 +122,12 @@ sont gérés par écran (cf. [`05-authentification.md`](05-authentification.md))
   appliqués** en mode import (ils écarteraient des lignes du fichier). Lignes du fichier sans
   commande correspondante → **ignorées + averties** (jamais inventées). Passe par
   `/api/allocation/simulate` avec `importedAllocation` (borné à 50 000 lignes).
+  - ⚠️ **Le résultat ne contient QUE les (boutique, produit) du fichier** : `restrictDemandsToImported`
+    filtre les demandes de la saison aux couples présents dans le fichier et agrège les commandes
+    multiples d'une même boutique pour un même produit. Sans ce filtre, **toutes** les commandes
+    de la saison ressortaient (cas réel AH26 : **8353 lignes** affichées au lieu des **262** du
+    fichier, les produits hors fichier apparaissant à 0 alloué avec un écart complet). Pur + testé
+    (`imported.test.ts`).
 - **Répartition — périmètre de validation** (fournisseurs **et** catalogues, multi-sélection) :
   la simulation est **toujours calculée sur toute la demande** (la restreindre fausserait les
   coupes : le stock reçu serait réparti sur un sous-ensemble de boutiques), mais on ne **valide**

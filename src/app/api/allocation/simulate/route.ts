@@ -3,7 +3,7 @@ import { handleApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { allocationSimulateSchema } from "@/lib/validators";
 import { runAllocation } from "@/lib/allocation/engine";
-import { applyImportedAllocation } from "@/lib/allocation/imported";
+import { applyImportedAllocation, restrictDemandsToImported } from "@/lib/allocation/imported";
 import { resolveOrderSource } from "@/lib/order-source";
 import {
   parseSizeQuantities,
@@ -237,7 +237,10 @@ export async function POST(request: NextRequest) {
         importWarnings.push(
           `Fichier : ${unknownProducts.size} produit(s) hors périmètre de cette simulation — ignoré(s) : ${[...unknownProducts].slice(0, 5).join(", ")}${unknownProducts.size > 5 ? "…" : ""}`
         );
-      result = applyImportedAllocation({ demands, allocatedByKey, clientConfigs });
+
+      // La répartition importée ne doit contenir QUE ce qui est dans le fichier.
+      const importedDemands = restrictDemandsToImported(demands, allocatedByKey);
+      result = applyImportedAllocation({ demands: importedDemands, allocatedByKey, clientConfigs });
     } else {
       result = runAllocation(input);
     }
