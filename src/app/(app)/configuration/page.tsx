@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { useSeason, formatSeasonLabel } from "@/lib/season-context";
 import { Topbar } from "@/components/layout/topbar";
 import { PageHeader } from "@/components/layout/page-header";
 import { ClientConfigTable } from "@/components/configuration/client-config-table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Users, HelpCircle, X } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Users, HelpCircle, X, Search } from "lucide-react";
 import type { ClientWithSeason } from "@/lib/types";
 
 // Bouton d'aide (?) + popover expliquant la répartition (rang, %, seuils…).
@@ -112,6 +113,7 @@ export default function ConfigurationPage() {
   const { activeSeason } = useSeason();
   const [clients, setClients] = useState<ClientWithSeason[]>([]);
   const [loading, setLoading] = useState(false);
+  const [search, setSearch] = useState("");
 
   const fetchClients = useCallback(() => {
     if (!activeSeason) {
@@ -131,6 +133,15 @@ export default function ConfigurationPage() {
   }, [fetchClients]);
 
   const activeCount = clients.filter((c) => c.season?.isActive).length;
+
+  // Recherche par code OU nom, insensible à la casse et aux accents (« Talange » trouve
+  // « TALANGE », « rive » trouve « Rivedroite »).
+  const norm = (v: string) => v.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const filteredClients = useMemo(() => {
+    const q = norm(search.trim());
+    if (!q) return clients;
+    return clients.filter((c) => norm(c.code).includes(q) || norm(c.name).includes(q));
+  }, [clients, search]);
 
   return (
     <div>
@@ -160,7 +171,9 @@ export default function ConfigurationPage() {
                 </CardTitle>
                 <div className="flex items-center gap-2">
                   <Badge variant="secondary">
-                    {clients.length} client{clients.length > 1 ? "s" : ""}
+                    {search
+                      ? `${filteredClients.length} / ${clients.length}`
+                      : `${clients.length} client${clients.length > 1 ? "s" : ""}`}
                   </Badge>
                   <Badge variant="outline">
                     {activeCount} actif{activeCount > 1 ? "s" : ""}
@@ -171,6 +184,25 @@ export default function ConfigurationPage() {
                 Cliquez sur une valeur pour la modifier. Les changements sont
                 sauvegardés automatiquement.
               </p>
+              <div className="relative mt-3 max-w-xs">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Rechercher une boutique (code ou nom)..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="pl-9 h-9 text-sm"
+                />
+                {search && (
+                  <button
+                    type="button"
+                    onClick={() => setSearch("")}
+                    aria-label="Effacer la recherche"
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
             </CardHeader>
             <CardContent>
               {loading ? (
@@ -180,10 +212,27 @@ export default function ConfigurationPage() {
                   </p>
                 </div>
               ) : (
-                <ClientConfigTable
-                  clients={clients}
-                  onUpdate={fetchClients}
-                />
+                // Message dédié : le vide de la recherche n'est pas le vide de la saison
+                // (« Importez des commandes clients » n'aurait aucun sens ici).
+                search && filteredClients.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-center">
+                    <p className="text-sm text-muted-foreground">
+                      Aucune boutique ne correspond à «&nbsp;{search}&nbsp;».
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setSearch("")}
+                      className="mt-2 text-sm text-primary hover:underline"
+                    >
+                      Effacer la recherche
+                    </button>
+                  </div>
+                ) : (
+                  <ClientConfigTable
+                    clients={filteredClients}
+                    onUpdate={fetchClients}
+                  />
+                )
               )}
             </CardContent>
           </Card>
