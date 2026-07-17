@@ -62,6 +62,21 @@ export const allocationSimulateSchema = z.object({
   supplierIds: z.array(z.string()).optional(),
   productReferences: z.array(z.string()).optional(),
   orderType: z.enum(["COMMANDE", "VSS", "ALL"]).optional(), // default COMMANDE
+  // Reprise d'une répartition depuis son fichier EAN : si présent, l'alloué VIENT DU
+  // FICHIER (aucun recalcul) et le reste de la réponse est construit normalement.
+  // Borné à 50 000 lignes (le plus gros export observé : ~1 500).
+  importedAllocation: z
+    .array(
+      z.object({
+        clientCode: z.string().min(1),
+        reference: z.string().min(1),
+        color: z.string(),
+        size: z.string().min(1),
+        qty: z.number().int().min(0),
+      })
+    )
+    .max(50000)
+    .optional(),
 });
 
 export const allocationAdjustSchema = z.object({

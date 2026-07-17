@@ -299,6 +299,15 @@ export const HELP_THEMES: HelpTheme[] = [
             ],
             tip: "La simulation est **conservée quand tu changes de page** : tu la retrouves telle quelle (avec tes ajustements) sans la relancer. 💾",
           },
+          {
+            h: "Reprendre une répartition depuis son fichier",
+            lines: [
+              "Le bouton **Importer une répartition** rejoue une répartition à partir de son **fichier EAN** (celui du bouton « Export EAN »).",
+              "Utile si tu as **perdu ta simulation** (page rafraîchie, session expirée) mais que tu avais exporté le fichier : réimporte-le et tu retrouves exactement le même résultat.",
+              "Le **fichier fait foi** : aucune règle n'est recalculée. Les quantités commandées, elles, sont relues automatiquement pour afficher les écarts. Ensuite, valide comme d'habitude.",
+            ],
+            tip: "En mode import, les filtres du haut d'écran sont ignorés : le fichier définit la répartition, il doit pouvoir se reposer en entier. 📄",
+          },
         ],
       },
       {

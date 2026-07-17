@@ -3,6 +3,7 @@ import { handleApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { allocationSimulateSchema } from "@/lib/validators";
 import { runAllocation } from "@/lib/allocation/engine";
+import { applyImportedAllocation } from "@/lib/allocation/imported";
 import { resolveOrderSource } from "@/lib/order-source";
 import {
   parseSizeQuantities,
@@ -15,6 +16,7 @@ import {
 import type {
   AllocationInput,
   AllocationDemand,
+  AllocationResult,
   ClientConfig,
 } from "@/lib/allocation/types";
 
@@ -29,7 +31,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { seasonId, catalogId, clientIds, supplierIds, productReferences, orderType } = parsed.data;
+    const { seasonId, catalogId, clientIds, supplierIds, productReferences, orderType, importedAllocation } = parsed.data;
 
     // Source B2B active pour la saison (Texas prioritaire, repli TIO).
     const orderSource = await resolveOrderSource(seasonId);
@@ -189,7 +191,56 @@ export async function POST(request: NextRequest) {
       productNames,
     };
 
-    const result = runAllocation(input);
+    // Reprise d'un fichier EAN : le fichier fait autorité, on ne recalcule pas. Tout le
+    // reste (commandes, reçus, EAN, rangs…) est chargé normalement ci-dessus → la réponse a
+    // exactement la même forme qu'une simulation et l'écran ne fait aucune différence.
+    const importWarnings: string[] = [];
+    let result: AllocationResult;
+    if (importedAllocation && importedAllocation.length > 0) {
+      // Résolution boutique (par CODE) et produit (référence + couleur, avec équivalences).
+      const clientIdByCode = new Map<string, string>();
+      for (const cs of clientSeasons) clientIdByCode.set(cs.client.code, cs.clientId);
+      const productIdByKey = new Map<string, string>();
+      for (const [productId, p] of productMap) productIdByKey.set(`${p.reference}__${p.color}`, productId);
+
+      const allocatedByKey = new Map<string, SizeQuantities>();
+      const unknownClients = new Set<string>();
+      const unknownProducts = new Set<string>();
+      for (const row of importedAllocation) {
+        if (row.qty <= 0) continue;
+        const clientId = clientIdByCode.get(row.clientCode.trim());
+        if (!clientId) {
+          unknownClients.add(row.clientCode);
+          continue;
+        }
+        const ref = row.reference.trim();
+        const color = row.color.trim();
+        const productId =
+          productIdByKey.get(`${ref}__${color}`) ??
+          // Le fichier peut porter la couleur sans zéros de tête (« 0 » vs « 000 »).
+          productIdByKey.get(`${ref}__${color.padStart(3, "0")}`);
+        if (!productId) {
+          unknownProducts.add(`${ref} / ${color}`);
+          continue;
+        }
+        const key = `${clientId}__${productId}`;
+        const cur = allocatedByKey.get(key) || {};
+        const size = row.size.trim().toUpperCase();
+        cur[size] = (cur[size] || 0) + row.qty;
+        allocatedByKey.set(key, cur);
+      }
+      if (unknownClients.size > 0)
+        importWarnings.push(
+          `Fichier : ${unknownClients.size} boutique(s) inconnue(s) de cette saison — ignorée(s) : ${[...unknownClients].slice(0, 5).join(", ")}${unknownClients.size > 5 ? "…" : ""}`
+        );
+      if (unknownProducts.size > 0)
+        importWarnings.push(
+          `Fichier : ${unknownProducts.size} produit(s) hors périmètre de cette simulation — ignoré(s) : ${[...unknownProducts].slice(0, 5).join(", ")}${unknownProducts.size > 5 ? "…" : ""}`
+        );
+      result = applyImportedAllocation({ demands, allocatedByKey, clientConfigs });
+    } else {
+      result = runAllocation(input);
+    }
 
     const enrichedLines = result.lines.map((line) => ({
       ...line,

@@ -36,6 +36,7 @@ import {
   ChevronRight,
   Download,
   Barcode,
+  Upload,
   History,
   Pencil,
   X,
@@ -48,6 +49,15 @@ import { distributeSurplus as distributeSurplusRule } from "@/lib/allocation/sur
 import Link from "next/link";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
+
+// Ligne d'un fichier EAN à rejouer (cf. bouton « Importer une répartition »).
+interface ImportedRow {
+  clientCode: string;
+  reference: string;
+  color: string;
+  size: string;
+  qty: number;
+}
 
 interface SimulationLine {
   clientId: string;
@@ -1018,6 +1028,7 @@ export default function AllocationPage() {
   const STORE_KEY = "gestlog:allocation:sim:v1";
   const restoredRef = useRef(false);
   const seasonIdRef = useRef<string | null>(null);
+  const importInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (restoredRef.current || !activeSeason) return;
@@ -1213,7 +1224,10 @@ export default function AllocationPage() {
     loadSuppliers();
   }, [activeSeason, loadSessions, loadCatalogs, loadClients, loadSuppliers]);
 
-  const runSimulation = async () => {
+  // `imported` = lignes d'un fichier EAN à rejouer. Dans ce cas les filtres de l'écran ne
+  // sont PAS appliqués : ils restreindraient la demande et écarteraient des lignes du
+  // fichier. Le fichier définit la répartition, il doit pouvoir se poser en entier.
+  const runSimulation = async (imported?: ImportedRow[]) => {
     if (!activeSeason) return;
     setSimulating(true);
     setManualEdits(0);
@@ -1222,17 +1236,21 @@ export default function AllocationPage() {
         seasonId: activeSeason.id,
         orderType,
       };
-      if (selectedCatalog !== "ALL") payload.catalogId = selectedCatalog;
-      if (selectedClients.length > 0) payload.clientIds = selectedClients;
-      if (selectedSuppliers.length > 0) payload.supplierIds = selectedSuppliers;
+      if (imported) {
+        payload.importedAllocation = imported;
+      } else {
+        if (selectedCatalog !== "ALL") payload.catalogId = selectedCatalog;
+        if (selectedClients.length > 0) payload.clientIds = selectedClients;
+        if (selectedSuppliers.length > 0) payload.supplierIds = selectedSuppliers;
 
-      // Parse product references from comma-separated input
-      if (productSearch.trim()) {
-        const refs = productSearch
-          .split(",")
-          .map((r) => r.trim().toUpperCase())
-          .filter(Boolean);
-        if (refs.length > 0) payload.productReferences = refs;
+        // Parse product references from comma-separated input
+        if (productSearch.trim()) {
+          const refs = productSearch
+            .split(",")
+            .map((r) => r.trim().toUpperCase())
+            .filter(Boolean);
+          if (refs.length > 0) payload.productReferences = refs;
+        }
       }
 
       const res = await fetch("/api/allocation/simulate", {
@@ -1252,8 +1270,10 @@ export default function AllocationPage() {
       setCatalogIdByOrder(data.catalogIdByOrder || {});
       setRankingByClient(data.rankingByClient || {});
       setExcludedSizesByClient(data.excludedSizesByClient || {});
-      toast.success("Simulation terminée", {
-        description: `${data.lines?.length || 0} lignes calculées`,
+      toast.success(imported ? "Répartition reprise du fichier" : "Simulation terminée", {
+        description: imported
+          ? `${data.lines?.length || 0} ligne(s) — l'alloué vient du fichier, aucun recalcul`
+          : `${data.lines?.length || 0} lignes calculées`,
       });
     } catch (e) {
       toast.error("Erreur lors de la simulation", {
@@ -1261,6 +1281,53 @@ export default function AllocationPage() {
       });
     } finally {
       setSimulating(false);
+    }
+  };
+
+  // Reprise d'une répartition depuis son fichier EAN (celui du bouton « Export EAN »).
+  const importAllocationFile = async (file: File) => {
+    try {
+      const wb = XLSX.read(await file.arrayBuffer(), { type: "array" });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      if (!ws) throw new Error("Fichier vide");
+      const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws);
+      if (raw.length === 0) throw new Error("Aucune ligne dans le fichier");
+
+      // En-têtes repérés PAR NOM, sans accent ni casse (l'ordre des colonnes n'importe pas).
+      const norm = (v: string) => v.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
+      const cols = Object.keys(raw[0]);
+      const find = (...cands: string[]) =>
+        cols.find((c) => cands.some((x) => norm(c) === x)) ||
+        cols.find((c) => cands.some((x) => norm(c).includes(x)));
+      const cCode = find("code boutique");
+      const cRef = find("reference");
+      const cColor = find("couleur");
+      const cSize = find("taille");
+      const cQty = find("quantite");
+      const missing = [
+        !cCode && "Code boutique",
+        !cRef && "Référence",
+        !cColor && "Couleur",
+        !cSize && "Taille",
+        !cQty && "Quantité",
+      ].filter(Boolean);
+      if (missing.length > 0) throw new Error(`Colonne(s) introuvable(s) : ${missing.join(", ")}`);
+
+      const rows: ImportedRow[] = [];
+      for (const r of raw) {
+        const qtyRaw = r[cQty!];
+        const qty = typeof qtyRaw === "number" ? qtyRaw : parseInt(String(qtyRaw ?? "0"), 10);
+        if (!qty || isNaN(qty) || qty <= 0) continue;
+        const clientCode = String(r[cCode!] ?? "").trim();
+        const reference = String(r[cRef!] ?? "").trim();
+        const size = String(r[cSize!] ?? "").trim();
+        if (!clientCode || !reference || !size) continue;
+        rows.push({ clientCode, reference, color: String(r[cColor!] ?? "").trim(), size, qty });
+      }
+      if (rows.length === 0) throw new Error("Aucune quantité exploitable dans le fichier");
+      await runSimulation(rows);
+    } catch (e) {
+      toast.error("Import impossible", { description: String(e instanceof Error ? e.message : e) });
     }
   };
 
@@ -1799,15 +1866,37 @@ export default function AllocationPage() {
               setProductSearch={setProductSearch}
             />
 
-            <div className="flex justify-center">
+            <div className="flex flex-wrap items-center justify-center gap-3">
               <Button
-                onClick={runSimulation}
+                onClick={() => runSimulation()}
                 disabled={simulating}
                 className="gap-2"
                 size="lg"
               >
                 <Play className="h-4 w-4" />
                 {simulating ? "Calcul en cours..." : lines.length > 0 ? "Relancer la simulation" : "Lancer la simulation"}
+              </Button>
+              <input
+                ref={importInputRef}
+                type="file"
+                accept=".xlsx,.xls"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) importAllocationFile(f);
+                  e.target.value = ""; // permet de réimporter le même fichier
+                }}
+              />
+              <Button
+                variant="outline"
+                size="lg"
+                disabled={simulating}
+                onClick={() => importInputRef.current?.click()}
+                className="gap-2"
+                title="Reprendre une répartition depuis son fichier EAN exporté (ex. après un rafraîchissement)"
+              >
+                <Upload className="h-4 w-4" />
+                Importer une répartition
               </Button>
             </div>
 
@@ -2189,7 +2278,7 @@ export default function AllocationPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={runSimulation}
+                      onClick={() => runSimulation()}
                       disabled={simulating}
                       className="gap-2"
                     >

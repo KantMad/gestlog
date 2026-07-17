@@ -102,6 +102,18 @@ sont gérés par écran (cf. [`05-authentification.md`](05-authentification.md))
   `sessionStorage` (`gestlog:allocation:sim:v1`) → en changeant de page puis en revenant, la
   simulation (y compris ajustements manuels) est **restaurée** sans relancer. Vidée à la
   validation et au **changement de saison** (données d'une autre saison).
+- **Répartition — reprise d'un fichier EAN** (bouton « Importer une répartition ») : rejoue une
+  répartition à partir de son **fichier EAN exporté** (colonnes `Code boutique`, `Référence`,
+  `Couleur`, `Taille`, `Quantité` — repérées **par nom**, ordre libre). Sert de filet quand la
+  simulation a été perdue (rafraîchissement, session expirée) alors que le fichier avait été
+  exporté. **Le fichier fait autorité : aucun recalcul** (`applyImportedAllocation`, pur +
+  testé). L'alloué vient du fichier ; le **commandé** est relu en base pour recomputer écarts /
+  statuts / totaux → la réponse a la **même forme** qu'une simulation (l'écran ne fait aucune
+  différence). Boutique résolue par **code**, produit par **référence + couleur** (avec repli
+  couleur zéro-paddée `0`→`000` et équivalences). ⚠️ Les **filtres de l'écran ne sont pas
+  appliqués** en mode import (ils écarteraient des lignes du fichier). Lignes du fichier sans
+  commande correspondante → **ignorées + averties** (jamais inventées). Passe par
+  `/api/allocation/simulate` avec `importedAllocation` (borné à 50 000 lignes).
 - **Répartition — périmètre de validation** (fournisseurs **et** catalogues, multi-sélection) :
   la simulation est **toujours calculée sur toute la demande** (la restreindre fausserait les
   coupes : le stock reçu serait réparti sur un sous-ensemble de boutiques), mais on ne **valide**
