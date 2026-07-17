@@ -988,6 +988,10 @@ export default function AllocationPage() {
   const [catalogIdByOrder, setCatalogIdByOrder] = useState<Record<string, string | null>>({});
   const [validateSuppliers, setValidateSuppliers] = useState<string[]>([]);
   const [validateCatalogs, setValidateCatalogs] = useState<string[]>([]);
+  // Périmètre de l'EXPORT EAN — distinct de celui de la validation (mêmes règles que sur
+  // une session validée : fournisseurs + boutiques). N'agit que sur le fichier. Vide = tout.
+  const [exportSuppliers, setExportSuppliers] = useState<string[]>([]);
+  const [exportClients, setExportClients] = useState<string[]>([]);
   const [sessions, setSessions] = useState<SessionEntry[]>([]);
   const [catalogs, setCatalogs] = useState<CatalogEntry[]>([]);
   const [clients, setClients] = useState<ClientEntry[]>([]);
@@ -1045,6 +1049,8 @@ export default function AllocationPage() {
       setReceptionFilter(f.receptionFilter ?? "all");
       setValidateSuppliers(f.validateSuppliers ?? []);
       setValidateCatalogs(f.validateCatalogs ?? []);
+      setExportSuppliers(f.exportSuppliers ?? []);
+      setExportClients(f.exportClients ?? []);
     } catch {
       /* stockage indisponible/corrompu → on ignore */
     }
@@ -1066,6 +1072,8 @@ export default function AllocationPage() {
     setCatalogIdByOrder({});
     setValidateSuppliers([]);
     setValidateCatalogs([]);
+    setExportSuppliers([]);
+    setExportClients([]);
     setManualEdits(0);
     try {
       sessionStorage.removeItem(STORE_KEY);
@@ -1107,6 +1115,8 @@ export default function AllocationPage() {
             receptionFilter,
             validateSuppliers,
             validateCatalogs,
+            exportSuppliers,
+            exportClients,
           },
         })
       );
@@ -1135,6 +1145,8 @@ export default function AllocationPage() {
     receptionFilter,
     validateSuppliers,
     validateCatalogs,
+    exportSuppliers,
+    exportClients,
   ]);
 
   const loadSessions = useCallback(async () => {
@@ -1449,10 +1461,35 @@ export default function AllocationPage() {
 
   // Export « EAN / quantité » : une ligne par (boutique × produit/couleur × taille) allouée,
   // avec l'EAN et la quantité répartie. Format destiné à la réception boutique / caisse.
+  // Lignes retenues pour l'export EAN (périmètre fournisseur / boutique). Vide = tout.
+  // Mêmes règles que sur une session validée : ces filtres n'agissent que sur le FICHIER,
+  // jamais sur le calcul — contrairement aux filtres de simulation, qui restreignent la
+  // demande et fausseraient les quantités.
+  const exportLines = useMemo(() => {
+    if (exportSuppliers.length === 0 && exportClients.length === 0) return lines;
+    return lines.filter((l) => {
+      if (exportClients.length > 0 && !exportClients.includes(l.clientId)) return false;
+      if (exportSuppliers.length > 0) {
+        const sups = supplierIdsByProduct[l.productId] || [];
+        if (!sups.some((x) => exportSuppliers.includes(x))) return false;
+      }
+      return true;
+    });
+  }, [lines, exportSuppliers, exportClients, supplierIdsByProduct]);
+
+  // Boutiques présentes dans la simulation (pour le sélecteur d'export).
+  const clientsInSim = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const l of lines) m.set(l.clientId, l.clientName);
+    return [...m.entries()]
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name, "fr"));
+  }, [lines]);
+
   const exportEanFile = () => {
     const rows: Record<string, string | number>[] = [];
     let missing = 0;
-    for (const l of lines) {
+    for (const l of exportLines) {
       if (l.status === "ANNULE") continue;
       const eans = eansByProduct[l.productId] || {};
       for (const [size, qty] of Object.entries(l.allocated)) {
@@ -1472,7 +1509,12 @@ export default function AllocationPage() {
       }
     }
     if (rows.length === 0) {
-      toast.error("Aucune quantité allouée à exporter");
+      toast.error("Aucune quantité allouée à exporter", {
+        description:
+          exportSuppliers.length || exportClients.length
+            ? "Le périmètre d'export choisi (fournisseurs / boutiques) ne contient aucune ligne allouée."
+            : undefined,
+      });
       return;
     }
     rows.sort(
@@ -1640,7 +1682,9 @@ export default function AllocationPage() {
                     title="Fichier EAN / quantité : boutique, produit, couleur, taille, EAN, quantité"
                   >
                     <Barcode className="h-4 w-4" />
-                    Export EAN
+                    {exportLines.length < lines.length
+                      ? `Export EAN (${formatNumber(exportLines.length)})`
+                      : "Export EAN"}
                   </Button>
                   <Button
                     size="sm"
@@ -1885,6 +1929,110 @@ export default function AllocationPage() {
                         {validateCatalogs.length > 0 && (
                           <> Les commandes sans catalogue (réassorts) sont exclues.</>
                         )}
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Périmètre de l'export EAN — distinct de celui de la validation. Mêmes
+                    règles que sur une session validée : n'agit que sur le fichier. */}
+                <Card>
+                  <CardContent className="pt-6">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Barcode className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm font-medium">Périmètre de l&apos;export EAN</span>
+                      <span className="text-xs text-muted-foreground">
+                        — n&apos;affecte que le fichier, jamais le calcul
+                      </span>
+                    </div>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div>
+                        <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
+                          Fournisseurs ({exportSuppliers.length === 0 ? "tous" : exportSuppliers.length})
+                        </label>
+                        <Select
+                          value="__placeholder__"
+                          onValueChange={(v: string | null) => {
+                            if (v && v !== "__placeholder__" && !exportSuppliers.includes(v)) {
+                              setExportSuppliers([...exportSuppliers, v]);
+                            }
+                          }}
+                        >
+                          <SelectTrigger className="text-sm">
+                            <span className="text-sm text-muted-foreground truncate">Ajouter un fournisseur...</span>
+                          </SelectTrigger>
+                          <SelectContent>
+                            {suppliers
+                              .filter((x) => !exportSuppliers.includes(x.id))
+                              .map((x) => (
+                                <SelectItem key={x.id} value={x.id}>
+                                  {x.name} ({x.code})
+                                </SelectItem>
+                              ))}
+                          </SelectContent>
+                        </Select>
+                        {exportSuppliers.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1.5">
+                            {exportSuppliers.map((id) => (
+                              <Badge
+                                key={id}
+                                variant="secondary"
+                                className="text-xs cursor-pointer gap-1"
+                                onClick={() => setExportSuppliers(exportSuppliers.filter((x) => x !== id))}
+                              >
+                                {suppliers.find((x) => x.id === id)?.name || id}
+                                <X className="h-3 w-3" />
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
+                          Boutiques ({exportClients.length === 0 ? "toutes" : exportClients.length})
+                        </label>
+                        <Select
+                          value="__placeholder__"
+                          onValueChange={(v: string | null) => {
+                            if (v && v !== "__placeholder__" && !exportClients.includes(v)) {
+                              setExportClients([...exportClients, v]);
+                            }
+                          }}
+                        >
+                          <SelectTrigger className="text-sm">
+                            <span className="text-sm text-muted-foreground truncate">Ajouter une boutique...</span>
+                          </SelectTrigger>
+                          <SelectContent>
+                            {clientsInSim
+                              .filter((c) => !exportClients.includes(c.id))
+                              .map((c) => (
+                                <SelectItem key={c.id} value={c.id}>
+                                  {c.name}
+                                </SelectItem>
+                              ))}
+                          </SelectContent>
+                        </Select>
+                        {exportClients.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1.5">
+                            {exportClients.map((id) => (
+                              <Badge
+                                key={id}
+                                variant="secondary"
+                                className="text-xs cursor-pointer gap-1"
+                                onClick={() => setExportClients(exportClients.filter((x) => x !== id))}
+                              >
+                                {clientsInSim.find((c) => c.id === id)?.name || id}
+                                <X className="h-3 w-3" />
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    {(exportSuppliers.length > 0 || exportClients.length > 0) && (
+                      <p className="text-xs text-muted-foreground mt-3">
+                        <strong>{formatNumber(exportLines.length)}</strong> ligne(s) sur{" "}
+                        {formatNumber(lines.length)} seront exportées.
                       </p>
                     )}
                   </CardContent>

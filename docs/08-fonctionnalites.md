@@ -84,10 +84,13 @@ sont gérés par écran (cf. [`05-authentification.md`](05-authentification.md))
     voit celles de tout le monde. Le middleware mappe `/allocation/*` **et** `/api/allocation/*`
     sur l'écran **Répartition** (`screenForPath` matche par préfixe → la sous-route est protégée
     sans rien déclarer).
-  - **Export EAN d'une session validée** (bouton sur la page de détail) : mêmes colonnes que
-    l'export de simulation (boutique, code, référence, couleur, taille, EAN, quantité ; lignes
-    `ANNULE` et quantités ≤ 0 exclues ; EAN absent → `MANQUANT_<réf>_<couleur>_<taille>`).
-    Filtrable par **fournisseur** et par **boutique** (multi-sélection). ⚠️ Ne **jamais** utiliser
+  - **Export EAN — mêmes règles en simulation et sur une session validée** : mêmes colonnes
+    (boutique, code, référence, couleur, taille, EAN, quantité), lignes `ANNULE` et quantités
+    ≤ 0 exclues, EAN absent → `MANQUANT_<réf>_<couleur>_<taille>`, et **même périmètre
+    d'export** : **fournisseur** + **boutique** (multi-sélection, vide = tout).
+    - Sur l'écran de simulation, ce périmètre est un bloc **distinct** de celui de la
+      *validation* (fournisseurs + catalogues) : les deux actions ne se filtrent pas pareil,
+      les mélanger ferait valider un périmètre qu'on croyait n'exporter que. ⚠️ Ne **jamais** utiliser
     les filtres de la *simulation* pour restreindre un export : la route `simulate` filtre la
     **demande** (`clientId in [...]`) → simuler sur 3 boutiques répartit le stock entre 3
     boutiques seulement et fausse les quantités. Sur une session **validée** (instantané figé),
