@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createClientSchema } from "@/lib/validators";
+import { parseSizeScale } from "@/lib/utils";
 
 export async function GET(request: NextRequest) {
   const seasonId = request.nextUrl.searchParams.get("seasonId");
@@ -17,6 +18,10 @@ export async function GET(request: NextRequest) {
       code: cs.client.code,
       name: cs.client.name,
       email: cs.client.email,
+      // Réglage GLOBAL de la boutique (pas par saison) — cf. modèle Client.
+      surplusExcludedSizes: cs.client.surplusExcludedSizes
+        ? parseSizeScale(cs.client.surplusExcludedSizes).filter(Boolean)
+        : [],
       season: {
         id: cs.id,
         ranking: cs.ranking,

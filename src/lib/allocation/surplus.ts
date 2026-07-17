@@ -19,12 +19,27 @@ import { sumQuantities, type SizeQuantities } from "@/lib/utils";
 //     est posé **au-delà** des commandes, avec la MÊME logique qu'en phase 1 : pièce par
 //     pièce, à la boutique la moins bien servie en relatif. Sinon on n'y touche pas.
 //  4. Jamais plus que le reçu d'une taille.
+//  5. **Exceptions de taille par boutique** (`Client.surplusExcludedSizes`, écran
+//     Configuration) : une boutique peut être exclue du surplus sur certaines tailles
+//     (ex. « Roubaix ne prend jamais de 4XL en trop »). Deux garde-fous :
+//     - l'exception ne bloque que le surplus **au-delà de la quantité commandée** : si la
+//       boutique a commandé 2 × 4XL et n'en a reçu qu'1, on lui rend bien le 2e ;
+//     - l'exception est **levée si aucune autre boutique n'a commandé cette taille** —
+//       sinon les pièces resteraient bloquées en stock alors que quelqu'un peut les vendre.
 
 export interface SurplusLine {
   key: string;
   original: SizeQuantities;
   allocated: SizeQuantities;
   ranking: number;
+  /**
+   * Tailles que cette boutique ne doit PAS recevoir en surplus (réglage boutique, écran
+   * Configuration). Ne bloque que les pièces posées **au-delà** de la quantité commandée
+   * sur cette taille : une boutique reçoit toujours ce qu'elle a réellement commandé.
+   * Exception : si AUCUNE autre boutique n'a commandé cette taille, les pièces seraient
+   * perdues → on autorise alors les boutiques exclues (cf. `sizeAllowedFor`).
+   */
+  excludedSizes?: string[];
 }
 
 export interface SurplusResult {
@@ -48,7 +63,23 @@ export function distributeSurplus(lines: SurplusLine[], received: SizeQuantities
     origTotal: sumQuantities(l.original),
     allocTotal: sumQuantities(l.allocated),
     ranking: l.ranking,
+    excludedSizes: l.excludedSizes ?? [],
   }));
+  type Work = (typeof work)[number];
+
+  const isExcluded = (w: Work, size: string) => w.excludedSizes.includes(size);
+  // Une AUTRE boutique (sans exception sur cette taille) l'a-t-elle commandée ? Si oui, le
+  // surplus a un meilleur destinataire ; sinon les pièces seraient perdues.
+  const hasOtherTaker = (size: string, self: Work) =>
+    work.some((w) => w !== self && (w.original[size] || 0) > 0 && !isExcluded(w, size));
+  // Une pièce de `size` peut-elle aller à `w` ?
+  const sizeAllowedFor = (w: Work, size: string): boolean => {
+    if (!isExcluded(w, size)) return true;
+    // L'exception ne bloque QUE le surplus : ce que la boutique a commandé lui revient.
+    if ((w.alloc[size] || 0) < (w.original[size] || 0)) return true;
+    // Exception levée si personne d'autre ne peut prendre cette taille.
+    return !hasOtherTaker(size, w);
+  };
 
   // Reliquat disponible par taille = reçu − déjà alloué (toutes boutiques).
   const remaining: SizeQuantities = {};
@@ -69,7 +100,7 @@ export function distributeSurplus(lines: SurplusLine[], received: SizeQuantities
       // Peut recevoir dès qu'une taille COMMANDÉE a encore du reliquat (même si sa
       // quantité commandée sur cette taille est déjà atteinte — règle 1).
       const canTake = Object.entries(w.original).some(
-        ([size, req]) => req > 0 && (remaining[size] || 0) > 0
+        ([size, req]) => req > 0 && (remaining[size] || 0) > 0 && sizeAllowedFor(w, size)
       );
       if (!canTake) continue;
       const deficit = w.origTotal > 0 ? 1 - w.allocTotal / w.origTotal : 0;
@@ -88,6 +119,7 @@ export function distributeSurplus(lines: SurplusLine[], received: SizeQuantities
     let fallbackRem = 0;
     for (const [size, req] of Object.entries(best.original)) {
       if (req <= 0 || (remaining[size] || 0) <= 0) continue;
+      if (!sizeAllowedFor(best, size)) continue;
       const need = req - (best.alloc[size] || 0);
       if (need > gapNeed) {
         gapNeed = need;
@@ -129,7 +161,7 @@ export function distributeSurplus(lines: SurplusLine[], received: SizeQuantities
       let bestRatio = Infinity;
       for (const w of work) {
         const canTake = Object.entries(w.original).some(
-          ([size, req]) => req > 0 && (remaining[size] || 0) > 0
+          ([size, req]) => req > 0 && (remaining[size] || 0) > 0 && sizeAllowedFor(w, size)
         );
         if (!canTake) continue;
         const ratio = w.origTotal > 0 ? w.allocTotal / w.origTotal : Infinity;
@@ -145,6 +177,7 @@ export function distributeSurplus(lines: SurplusLine[], received: SizeQuantities
       let rem = 0;
       for (const [size, req] of Object.entries(best.original)) {
         if (req <= 0) continue;
+        if (!sizeAllowedFor(best, size)) continue;
         if ((remaining[size] || 0) > rem) {
           rem = remaining[size] || 0;
           chosen = size;

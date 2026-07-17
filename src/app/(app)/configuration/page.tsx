@@ -54,7 +54,8 @@ function ConfigHelp() {
           <p className="mb-3 text-muted-foreground">
             Ces réglages pilotent la <strong>répartition automatique</strong> quand le stock reçu
             ne suffit pas à honorer toutes les commandes. Ils sont définis <strong>par client et
-            par saison</strong>, et servent dans l&apos;écran <strong>Répartition</strong>.
+            par saison</strong> — sauf <strong>Tailles hors surplus</strong>, qui est global à la
+            boutique — et servent dans l&apos;écran <strong>Répartition</strong>.
           </p>
           <ul className="space-y-2">
             <li>
@@ -79,6 +80,16 @@ function ConfigHelp() {
             <li>
               <span className="font-medium">Seuil min.</span> — quantité minimale pour livrer. En
               dessous, le client n&apos;est pas servi (évite les micro-livraisons non rentables).
+            </li>
+            <li>
+              <span className="font-medium">Tailles hors surplus</span> — tailles que cette
+              boutique ne reçoit <strong>jamais en trop</strong> lors d&apos;un{" "}
+              <strong>« Répartir surplus »</strong> (ex. 4XL). Tapez la taille puis Entrée ;
+              cliquez sur une étiquette pour la retirer. Deux garde-fous : ce que la boutique a{" "}
+              <strong>réellement commandé</strong> lui est toujours servi, et l&apos;exception est{" "}
+              <strong>levée si aucune autre boutique n&apos;a commandé cette taille</strong> (sinon
+              les pièces resteraient bloquées en stock). Réglage <strong>global</strong> : il suit
+              la boutique d&apos;une saison à l&apos;autre.
             </li>
             <li>
               <span className="font-medium">Actif</span> — inclure ou non le client dans la
@@ -127,7 +138,7 @@ export default function ConfigurationPage() {
       <div className="p-4 sm:p-6 lg:p-8 space-y-8">
         <PageHeader
           title="Configuration"
-          description="Gérez le ranking et les seuils de répartition pour chaque client"
+          description="Gérez le ranking, les seuils de répartition et les exceptions de taille pour chaque client"
           action={<ConfigHelp />}
         />
 

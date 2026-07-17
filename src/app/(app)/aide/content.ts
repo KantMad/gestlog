@@ -304,14 +304,25 @@ export const HELP_THEMES: HelpTheme[] = [
         id: "surplus",
         icon: "➕",
         title: "Répartir le surplus (pièces livrées en plus)",
-        keywords: "surplus pièces en plus répartir prorata bouton livré fournisseur",
+        keywords: "surplus pièces en plus répartir bouton livré fournisseur exception taille",
         sections: [
           {
             lines: [
               "Si un fournisseur a livré **plus** que commandé, un bouton **« Répartir surplus »** apparaît sur la carte du produit (vue par produit).",
-              "Il distribue les pièces en trop **au prorata des commandes** de chaque boutique ; le rang départage les arrondis.",
+              "Il **comble d'abord les écarts** : chaque pièce va à la boutique **la moins bien servie** en pourcentage, jusqu'à ce que plus personne ne soit en manque. Le rang ne sert qu'à départager deux boutiques à égalité.",
+              "**Ensuite seulement**, s'il reste des pièces, elles sont posées **au-delà des commandes** — toujours à la moins bien servie d'abord, pour que les écarts restent serrés.",
             ],
             tip: "Le surplus n'est réparti que sur des **tailles réellement commandées**, et jamais au-delà du stock reçu.",
+          },
+          {
+            h: "Empêcher une boutique de recevoir une taille",
+            lines: [
+              "Dans **Configuration**, la colonne **Tailles hors surplus** te laisse dire qu'une boutique ne doit **jamais** recevoir telle taille en trop (par exemple du 4XL). Tape la taille puis Entrée ; clique sur une étiquette pour la retirer.",
+              "Ce réglage est **global** : il suit la boutique d'une saison à l'autre, tu ne le ressaisis pas chaque saison.",
+              "Ce qu'elle a **réellement commandé** lui est toujours servi : l'exception ne bloque que les pièces **en trop**.",
+              "Et si **aucune autre boutique n'a commandé cette taille**, l'exception est **levée** — sinon les pièces resteraient bloquées en stock alors que quelqu'un peut les vendre.",
+            ],
+            tip: "Utile pour les boutiques qui ne tournent pas sur les tailles extrêmes : elles gardent leur commande, mais n'héritent pas des invendus. 👌",
           },
         ],
       },

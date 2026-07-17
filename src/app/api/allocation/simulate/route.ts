@@ -261,6 +261,15 @@ export async function POST(request: NextRequest) {
     const rankingByClient: Record<string, number> = {};
     for (const [id, c] of clientConfigs) rankingByClient[id] = c.ranking;
 
+    // Tailles exclues du surplus, par boutique (réglage GLOBAL du client). La répartition du
+    // surplus est calculée côté écran (bouton « Répartir surplus ») → on lui fournit la donnée.
+    const excludedSizesByClient: Record<string, string[]> = {};
+    for (const cs of clientSeasons) {
+      excludedSizesByClient[cs.clientId] = cs.client.surplusExcludedSizes
+        ? parseSizeScale(cs.client.surplusExcludedSizes).filter(Boolean)
+        : [];
+    }
+
     // EAN par produit et par taille (pour l'export « EAN / quantité »).
     const refs = [...uniqueRefs];
     const eanRows = refs.length
@@ -288,6 +297,7 @@ export async function POST(request: NextRequest) {
       clientImpacts: Array.from(clientImpacts.values()),
       receivedByProduct: receivedOut,
       rankingByClient,
+      excludedSizesByClient,
       eansByProduct,
       supplierIdsByProduct,
       catalogIdByOrder,

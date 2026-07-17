@@ -6,8 +6,9 @@ const L = (
   key: string,
   original: SizeQuantities,
   allocated: SizeQuantities,
-  ranking: number
-): SurplusLine => ({ key, original, allocated, ranking });
+  ranking: number,
+  excludedSizes?: string[]
+): SurplusLine => ({ key, original, allocated, ranking, ...(excludedSizes ? { excludedSizes } : {}) });
 
 describe("distributeSurplus — le surplus va aux boutiques coupées", () => {
   // Cas réel CCAH26_PU02/005 (simplifié) : le manque est sur M, le surplus sur XL, et
@@ -108,5 +109,60 @@ describe("distributeSurplus — le surplus va aux boutiques coupées", () => {
     const r = distributeSurplus([L("A", { M: 10 }, { M: 5 }, 1)], { M: 8 });
     expect(r.allocByKey.get("A")!.M).toBe(8);
     expect(r.leftover).toBe(0);
+  });
+});
+
+describe("distributeSurplus — exceptions de taille par boutique", () => {
+  it("ne pose pas de surplus sur une taille exclue quand une autre boutique la prend", () => {
+    const r = distributeSurplus(
+      [
+        L("SANS_4XL", { M: 10, "4XL": 2 }, { M: 10, "4XL": 2 }, 1, ["4XL"]), // exclue du 4XL
+        L("NORMALE", { M: 10, "4XL": 2 }, { M: 10, "4XL": 2 }, 2),
+      ],
+      { M: 20, "4XL": 8 } // 4 pièces de 4XL en surplus
+    );
+    // La boutique exclue garde ses 2 (sa commande), tout le surplus va à l'autre.
+    expect(r.allocByKey.get("SANS_4XL")!["4XL"]).toBe(2);
+    expect(r.allocByKey.get("NORMALE")!["4XL"]).toBe(6);
+    expect(r.leftover).toBe(0);
+  });
+
+  it("lève l'exception si AUCUNE autre boutique n'a commandé la taille", () => {
+    const r = distributeSurplus(
+      [
+        L("SANS_4XL", { M: 10, "4XL": 2 }, { M: 10, "4XL": 2 }, 1, ["4XL"]),
+        L("AUTRE", { M: 10 }, { M: 10 }, 2), // n'a pas commandé de 4XL
+      ],
+      { M: 20, "4XL": 5 } // 3 de surplus : personne d'autre ne peut les prendre
+    );
+    // Sans la levée, les 3 pièces resteraient bloquées en stock.
+    expect(r.allocByKey.get("SANS_4XL")!["4XL"]).toBe(5);
+    expect(r.leftover).toBe(0);
+  });
+
+  it("rend à la boutique exclue ce qu'elle a réellement commandé (l'exception ne vise que le surplus)", () => {
+    const r = distributeSurplus(
+      [
+        // A commandé 4 × 4XL, n'en a reçu que 2 → l'exception ne doit pas la priver des 2 autres.
+        L("SANS_4XL", { "4XL": 4 }, { "4XL": 2 }, 1, ["4XL"]),
+        L("NORMALE", { "4XL": 4 }, { "4XL": 4 }, 2),
+      ],
+      { "4XL": 8 } // 2 pièces libres, qui correspondent exactement au manque de SANS_4XL
+    );
+    expect(r.allocByKey.get("SANS_4XL")!["4XL"]).toBe(4); // sa commande, pas du surplus
+    expect(r.allocByKey.get("NORMALE")!["4XL"]).toBe(4);
+    expect(r.stillShort).toBe(false);
+  });
+
+  it("une boutique exclue reste servie normalement sur ses autres tailles", () => {
+    const r = distributeSurplus(
+      [
+        L("SANS_4XL", { M: 10, "4XL": 2 }, { M: 8, "4XL": 2 }, 1, ["4XL"]), // coupée de 2 sur M
+        L("NORMALE", { M: 10, "4XL": 2 }, { M: 10, "4XL": 2 }, 2),
+      ],
+      { M: 20, "4XL": 4 }
+    );
+    expect(r.allocByKey.get("SANS_4XL")!.M).toBe(10); // son écart sur M est comblé
+    expect(r.allocByKey.get("SANS_4XL")!["4XL"]).toBe(2); // mais toujours pas de 4XL en trop
   });
 });

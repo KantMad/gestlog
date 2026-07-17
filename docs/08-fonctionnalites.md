@@ -116,6 +116,17 @@ sont gérés par écran (cf. [`05-authentification.md`](05-authentification.md))
        **+22 % / +9 % / +6 % / 0 % / 0 %**, la **plus petite** commande raflant le plus de
        pièces — l'inverse exact de l'objectif. Après correction : +11 % / +6 % / +6 % / +10 %
        / +6 %, les 9 pièces toujours toutes placées. Couvert par `surplus.test.ts`.
+  - **Exceptions de taille par boutique** (`Client.surplusExcludedSizes`, CSV — réglage
+    **GLOBAL**, pas par saison ; colonne « Tailles hors surplus » de l'écran Configuration,
+    `PATCH /api/clients/[id]`) : une boutique peut être exclue du surplus sur certaines tailles
+    (« Roubaix ne prend jamais de 4XL en trop »). Deux garde-fous **indispensables** :
+    - l'exception ne bloque que le surplus **au-delà de la quantité commandée** : si la boutique
+      a commandé 2 × 4XL et n'en a reçu qu'1, la phase 1 lui rend bien le 2e — on ne prive jamais
+      une boutique de ce qu'elle a commandé ;
+    - l'exception est **levée si aucune AUTRE boutique n'a commandé cette taille** — sinon les
+      pièces resteraient bloquées en stock alors qu'un magasin peut les vendre.
+
+    Le calcul se fait **côté écran** → `simulate` renvoie `excludedSizesByClient`.
   - ⚠️ **Contrainte exacte** : une pièce ne peut aller que sur une taille que la boutique a
     **commandée** (`original[size] > 0`) — mais elle **peut dépasser la quantité commandée sur
     cette taille**. C'est indispensable : *cas réel CCAH26_PU02/005*, le manque est sur M/L et

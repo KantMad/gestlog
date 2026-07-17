@@ -979,6 +979,7 @@ export default function AllocationPage() {
   const [receivedByProduct, setReceivedByProduct] = useState<Record<string, SizeQuantities>>({});
   const [eansByProduct, setEansByProduct] = useState<Record<string, Record<string, string>>>({});
   const [rankingByClient, setRankingByClient] = useState<Record<string, number>>({});
+  const [excludedSizesByClient, setExcludedSizesByClient] = useState<Record<string, string[]>>({});
   // Périmètre de validation : on simule sur TOUTE la demande (sinon le stock reçu serait
   // réparti sur un sous-ensemble et les coupes seraient fausses), mais on ne valide que les
   // fournisseurs / catalogues choisis. Vide = tout.
@@ -1029,6 +1030,7 @@ export default function AllocationPage() {
       setReceivedByProduct(s.receivedByProduct || {});
       setEansByProduct(s.eansByProduct || {});
       setRankingByClient(s.rankingByClient || {});
+      setExcludedSizesByClient(s.excludedSizesByClient || {});
       setSupplierIdsByProduct(s.supplierIdsByProduct || {});
       setCatalogIdByOrder(s.catalogIdByOrder || {});
       setManualEdits(s.manualEdits || 0);
@@ -1058,6 +1060,7 @@ export default function AllocationPage() {
     setReceivedByProduct({});
     setEansByProduct({});
     setRankingByClient({});
+    setExcludedSizesByClient({});
     setSupplierIdsByProduct({});
     setCatalogIdByOrder({});
     setValidateSuppliers([]);
@@ -1089,6 +1092,7 @@ export default function AllocationPage() {
           receivedByProduct,
           eansByProduct,
           rankingByClient,
+          excludedSizesByClient,
           supplierIdsByProduct,
           catalogIdByOrder,
           manualEdits,
@@ -1117,6 +1121,7 @@ export default function AllocationPage() {
     receivedByProduct,
     eansByProduct,
     rankingByClient,
+    excludedSizesByClient,
     supplierIdsByProduct,
     catalogIdByOrder,
     manualEdits,
@@ -1233,6 +1238,7 @@ export default function AllocationPage() {
       setSupplierIdsByProduct(data.supplierIdsByProduct || {});
       setCatalogIdByOrder(data.catalogIdByOrder || {});
       setRankingByClient(data.rankingByClient || {});
+      setExcludedSizesByClient(data.excludedSizesByClient || {});
       toast.success("Simulation terminée", {
         description: `${data.lines?.length || 0} lignes calculées`,
       });
@@ -1291,6 +1297,7 @@ export default function AllocationPage() {
         original: l.original,
         allocated: l.allocated,
         ranking: rankingByClient[l.clientId] ?? 9999,
+        excludedSizes: excludedSizesByClient[l.clientId] ?? [],
       })),
       received
     );

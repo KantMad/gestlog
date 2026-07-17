@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/table";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
+import { X } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import type { ClientWithSeason } from "@/lib/types";
@@ -101,6 +102,83 @@ function InlineEditCell({
   );
 }
 
+// Exceptions de taille : les tailles que cette boutique ne reçoit JAMAIS en surplus.
+// Réglage GLOBAL de la boutique (pas par saison) → PATCH /api/clients/[id].
+function SizeExceptionsCell({
+  clientId,
+  sizes,
+  onSaved,
+}: {
+  clientId: string;
+  sizes: string[];
+  onSaved: () => void;
+}) {
+  const [draft, setDraft] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const save = useCallback(
+    async (next: string[]) => {
+      setSaving(true);
+      try {
+        const res = await fetch(`/api/clients/${clientId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ surplusExcludedSizes: next }),
+        });
+        if (!res.ok) throw new Error();
+        onSaved();
+      } catch {
+        toast.error("Erreur de sauvegarde");
+      } finally {
+        setSaving(false);
+      }
+    },
+    [clientId, onSaved]
+  );
+
+  const add = () => {
+    // Tailles saisies en libre : on normalise (majuscules, sans espace) car elles sont
+    // comparées aux libellés de la grille produit ("4XL", "31"…).
+    const parts = draft
+      .split(",")
+      .map((v) => v.trim().replace(/\s+/g, "").toUpperCase())
+      .filter(Boolean);
+    if (parts.length === 0) return;
+    const next = [...new Set([...sizes, ...parts])];
+    setDraft("");
+    if (next.length !== sizes.length) save(next);
+  };
+
+  return (
+    <div className="flex flex-wrap items-center gap-1">
+      {sizes.map((size) => (
+        <Badge
+          key={size}
+          variant="secondary"
+          className="text-xs cursor-pointer gap-1"
+          title="Retirer l'exception"
+          onClick={() => save(sizes.filter((x) => x !== size))}
+        >
+          {size}
+          <X className="h-3 w-3" />
+        </Badge>
+      ))}
+      <input
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={add}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") add();
+          if (e.key === "Escape") setDraft("");
+        }}
+        disabled={saving}
+        placeholder={sizes.length ? "+" : "Aucune"}
+        className="w-16 bg-transparent text-xs outline-none border-b border-dashed border-muted-foreground/40 focus:border-primary px-1 py-0.5"
+      />
+    </div>
+  );
+}
+
 export function ClientConfigTable({ clients, onUpdate }: ClientConfigTableProps) {
   const handleToggleActive = async (seasonId: string, isActive: boolean) => {
     try {
@@ -139,6 +217,7 @@ export function ClientConfigTable({ clients, onUpdate }: ClientConfigTableProps)
             <TableHead className="text-center">% max ligne</TableHead>
             <TableHead className="text-center">Seuil min.</TableHead>
             <TableHead className="text-center">Rotation</TableHead>
+            <TableHead>Tailles hors surplus</TableHead>
             <TableHead className="text-center">Actif</TableHead>
           </TableRow>
         </TableHeader>
@@ -203,6 +282,13 @@ export function ClientConfigTable({ clients, onUpdate }: ClientConfigTableProps)
                     seasonId={s.id}
                     field="rotationScore"
                     min={0}
+                    onSaved={onUpdate}
+                  />
+                </TableCell>
+                <TableCell>
+                  <SizeExceptionsCell
+                    clientId={client.id}
+                    sizes={client.surplusExcludedSizes ?? []}
                     onSaved={onUpdate}
                   />
                 </TableCell>

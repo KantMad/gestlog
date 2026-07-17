@@ -32,6 +32,11 @@ model Client {
   code      String   @unique
   name      String
   email     String?
+  // Tailles que la boutique ne reçoit PAS en surplus (CSV, ex. "3XL,4XL"). Réglage GLOBAL
+  // (pas par saison) : « cette boutique ne prend jamais de 4XL en trop ». Cf.
+  // src/lib/allocation/surplus.ts pour les deux garde-fous (ne bloque que le surplus
+  // au-delà du commandé ; levée si aucune autre boutique n'a commandé la taille).
+  surplusExcludedSizes String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

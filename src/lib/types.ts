@@ -18,6 +18,8 @@ export interface ClientWithSeason {
   code: string;
   name: string;
   email: string | null;
+  /** Tailles jamais servies en surplus à cette boutique. Réglage GLOBAL (toutes saisons). */
+  surplusExcludedSizes?: string[];
   season?: {
     id: string;
     ranking: number;

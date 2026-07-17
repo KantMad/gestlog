@@ -21,6 +21,12 @@ export const updateClientSeasonSchema = z.object({
   isActive: z.boolean().optional(),
 });
 
+// Réglages GLOBAUX d'une boutique (toutes saisons confondues).
+export const updateClientSchema = z.object({
+  // Tailles exclues du surplus (libellés de tailles : "4XL", "31"…).
+  surplusExcludedSizes: z.array(z.string().min(1).max(10)).max(40).optional(),
+});
+
 export const createSupplierSchema = z.object({
   code: z.string().min(1, "Le code est requis"),
   name: z.string().min(1, "Le nom est requis"),

@@ -48,8 +48,10 @@ colonne.
 ### Saisons & clients
 - **`Season`** — saison (ex. AH25, PE26) ; type AH/PE. Saison **Réassort** = sentinelle pour
   les commandes de réassort (voir `04`/`08`).
-- **`Client`** — client B2B (boutique/grossiste).
-- **`ClientSeason`** — paramétrage d'un client pour une saison.
+- **`Client`** — client B2B (boutique/grossiste). `surplusExcludedSizes` (CSV, ex. `"3XL,4XL"`) :
+  tailles jamais servies **en surplus** à cette boutique — réglage **global** (toutes saisons),
+  cf. `08`.
+- **`ClientSeason`** — paramétrage d'un client **pour une saison** (rang, seuils, rotation).
 
 ### Fournisseurs, commandes fournisseur, réceptions
 - **`Supplier`** — fournisseur.
