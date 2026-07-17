@@ -344,7 +344,9 @@ export const HELP_THEMES: HelpTheme[] = [
               "Le bouton **Historique** liste toutes les sessions de la saison. **Clique sur une session** pour rouvrir son détail : qui a reçu quoi, taille par taille, avec les totaux et les écarts.",
               "Tu peux y rechercher une boutique, une référence ou une couleur, et les lignes que quelqu'un a **ajustées à la main** sont signalées par un crayon.",
               "Les sessions sont rattachées à la **saison**, pas à toi : tes collègues qui ont accès à la Répartition voient les mêmes.",
+              "Le bouton **Export EAN** y régénère le fichier EAN/quantité **quand tu veux**, même longtemps après la validation. Tu peux le limiter à certains **fournisseurs** et/ou certaines **boutiques**.",
             ],
+            tip: "Filtrer l'export d'une session validée est **sans danger** : la répartition est figée, seul le contenu du fichier change. Ne cherche pas à obtenir le même résultat en relançant une simulation sur quelques boutiques — là, le stock serait partagé entre ces seules boutiques et les quantités seraient fausses. ⚠️",
           },
           {
             h: "Ne valider qu'une partie : le périmètre de validation",

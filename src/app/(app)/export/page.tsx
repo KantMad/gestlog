@@ -184,8 +184,8 @@ export default function ExportPage() {
   const linkExports = [
     {
       icon: Calculator,
-      title: "Répartition (simulation)",
-      desc: "Export xlsx + fichier EAN de la répartition — à générer depuis une simulation.",
+      title: "Répartition",
+      desc: "Export xlsx + fichier EAN. Depuis une simulation en cours, ou depuis une répartition déjà validée (Historique → une session), avec filtre fournisseur / boutique.",
       href: "/allocation",
     },
     {

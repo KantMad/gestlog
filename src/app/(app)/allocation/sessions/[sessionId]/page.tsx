@@ -16,16 +16,26 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ArrowLeft, Search, Users, Package, ArrowDown, CheckCircle, Pencil } from "lucide-react";
+import { ArrowLeft, Search, Users, Package, ArrowDown, CheckCircle, Pencil, Barcode, X } from "lucide-react";
 import { cn, sumQuantities, formatNumber, type SizeQuantities } from "@/lib/utils";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+} from "@/components/ui/select";
+import { toast } from "sonner";
+import * as XLSX from "xlsx";
 
 interface SessionLine {
   id: string;
   clientId: string | null;
   clientName: string;
   productId: string;
+  clientCode: string;
   productReference: string;
   productColor: string;
+  productColorLabel: string;
   sizeScale: string[];
   original: SizeQuantities;
   allocated: SizeQuantities;
@@ -33,6 +43,12 @@ interface SessionLine {
   reductionReason: string;
   status: string;
   isManualAdjustment: boolean;
+}
+
+interface SupplierEntry {
+  id: string;
+  code: string;
+  name: string;
 }
 
 interface SessionMeta {
@@ -98,6 +114,13 @@ export default function AllocationSessionDetailPage({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [eansByProduct, setEansByProduct] = useState<Record<string, Record<string, string>>>({});
+  const [supplierIdsByProduct, setSupplierIdsByProduct] = useState<Record<string, string[]>>({});
+  const [suppliers, setSuppliers] = useState<SupplierEntry[]>([]);
+  // Périmètre de l'EXPORT uniquement : la session est un instantané figé, filtrer ici ne
+  // touche donc jamais au calcul de la répartition. Vide = tout.
+  const [exportSuppliers, setExportSuppliers] = useState<string[]>([]);
+  const [exportClients, setExportClients] = useState<string[]>([]);
 
   useEffect(() => {
     setLoading(true);
@@ -107,6 +130,9 @@ export default function AllocationSessionDetailPage({
         if (!res.ok) throw new Error(data.error || "Erreur");
         setSession(data.session);
         setLines(data.lines || []);
+        setEansByProduct(data.eansByProduct || {});
+        setSupplierIdsByProduct(data.supplierIdsByProduct || {});
+        setSuppliers(data.suppliers || []);
         setError(null);
       })
       .catch((e) => setError(String(e instanceof Error ? e.message : e)))
@@ -140,6 +166,75 @@ export default function AllocationSessionDetailPage({
 
   const delta = totals.allocated - totals.original;
 
+  // Boutiques présentes dans la session (pour le sélecteur d'export).
+  const clientsInSession = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const l of lines) if (l.clientId) m.set(l.clientId, l.clientName);
+    return [...m.entries()]
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name, "fr"));
+  }, [lines]);
+
+  // Lignes retenues pour l'export (périmètre fournisseur / boutique). Vide = tout.
+  const exportLines = useMemo(() => {
+    return lines.filter((l) => {
+      if (exportClients.length > 0 && (!l.clientId || !exportClients.includes(l.clientId))) return false;
+      if (exportSuppliers.length > 0) {
+        const sups = supplierIdsByProduct[l.productId] || [];
+        if (!sups.some((x) => exportSuppliers.includes(x))) return false;
+      }
+      return true;
+    });
+  }, [lines, exportClients, exportSuppliers, supplierIdsByProduct]);
+
+  // Fichier EAN / quantité de la session VALIDÉE (mêmes colonnes que l'export de simulation).
+  const exportEanFile = () => {
+    const rows: Record<string, string | number>[] = [];
+    let missing = 0;
+    for (const l of exportLines) {
+      if (l.status === "ANNULE") continue;
+      const eans = eansByProduct[l.productId] || {};
+      for (const [size, qty] of Object.entries(l.allocated)) {
+        if (!qty || qty <= 0) continue;
+        const ean = eans[size];
+        if (!ean) missing++;
+        rows.push({
+          Boutique: l.clientName,
+          "Code boutique": l.clientCode,
+          Référence: l.productReference,
+          Couleur: l.productColor,
+          "Libellé couleur": l.productColorLabel || "",
+          Taille: size,
+          EAN: ean || `MANQUANT_${l.productReference}_${l.productColor}_${size}`,
+          Quantité: qty,
+        });
+      }
+    }
+    if (rows.length === 0) {
+      toast.error("Aucune quantité allouée à exporter", {
+        description:
+          exportSuppliers.length || exportClients.length
+            ? "Le périmètre choisi ne contient aucune ligne allouée."
+            : undefined,
+      });
+      return;
+    }
+    rows.sort(
+      (a, b) =>
+        String(a.Boutique).localeCompare(String(b.Boutique), "fr") ||
+        String(a.Référence).localeCompare(String(b.Référence), "fr") ||
+        String(a.Couleur).localeCompare(String(b.Couleur), "fr")
+    );
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "EAN");
+    const jour = session ? new Date(session.sessionDate).toISOString().slice(0, 10) : "";
+    XLSX.writeFile(wb, `repartition_validee_EAN_${session?.seasonName || ""}_${jour}.xlsx`);
+    if (missing > 0) {
+      toast.warning(`${missing} ligne(s) sans EAN au référentiel (marquées « MANQUANT_… »)`);
+    }
+  };
+
   return (
     <div>
       <Topbar title="Répartition" />
@@ -158,12 +253,28 @@ export default function AllocationSessionDetailPage({
               : "Chargement..."
           }
           action={
-            <Link href="/allocation">
-              <Button variant="outline" size="sm" className="gap-2">
-                <ArrowLeft className="h-4 w-4" />
-                Retour
-              </Button>
-            </Link>
+            <div className="flex items-center gap-2">
+              {!loading && !error && lines.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={exportEanFile}
+                  className="gap-2"
+                  title="Fichier EAN / quantité : boutique, produit, couleur, taille, EAN, quantité"
+                >
+                  <Barcode className="h-4 w-4" />
+                  {exportLines.length < lines.length
+                    ? `Export EAN (${formatNumber(exportLines.length)})`
+                    : "Export EAN"}
+                </Button>
+              )}
+              <Link href="/allocation">
+                <Button variant="outline" size="sm" className="gap-2">
+                  <ArrowLeft className="h-4 w-4" />
+                  Retour
+                </Button>
+              </Link>
+            </div>
           }
         />
 
@@ -251,6 +362,118 @@ export default function AllocationSessionDetailPage({
                 </CardContent>
               </Card>
             )}
+
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-2 mb-3">
+                  <Barcode className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm font-medium">Périmètre de l&apos;export EAN</span>
+                  <span className="text-xs text-muted-foreground">
+                    — n&apos;affecte que le fichier, jamais la répartition (elle est figée)
+                  </span>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
+                      Fournisseurs ({exportSuppliers.length === 0 ? "tous" : exportSuppliers.length})
+                    </label>
+                    <Select
+                      value="__placeholder__"
+                      onValueChange={(v: string | null) => {
+                        if (v && v !== "__placeholder__" && !exportSuppliers.includes(v)) {
+                          setExportSuppliers([...exportSuppliers, v]);
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="text-sm">
+                        <span className="text-sm text-muted-foreground truncate">
+                          Ajouter un fournisseur...
+                        </span>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {suppliers
+                          .filter((x) => !exportSuppliers.includes(x.id))
+                          .map((x) => (
+                            <SelectItem key={x.id} value={x.id}>
+                              {x.name} ({x.code})
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                    {exportSuppliers.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-1.5">
+                        {exportSuppliers.map((id) => (
+                          <Badge
+                            key={id}
+                            variant="secondary"
+                            className="text-xs cursor-pointer gap-1"
+                            onClick={() => setExportSuppliers(exportSuppliers.filter((x) => x !== id))}
+                          >
+                            {suppliers.find((x) => x.id === id)?.name || id}
+                            <X className="h-3 w-3" />
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
+                      Boutiques ({exportClients.length === 0 ? "toutes" : exportClients.length})
+                    </label>
+                    <Select
+                      value="__placeholder__"
+                      onValueChange={(v: string | null) => {
+                        if (v && v !== "__placeholder__" && !exportClients.includes(v)) {
+                          setExportClients([...exportClients, v]);
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="text-sm">
+                        <span className="text-sm text-muted-foreground truncate">
+                          Ajouter une boutique...
+                        </span>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {clientsInSession
+                          .filter((c) => !exportClients.includes(c.id))
+                          .map((c) => (
+                            <SelectItem key={c.id} value={c.id}>
+                              {c.name}
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                    {exportClients.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-1.5">
+                        {exportClients.map((id) => (
+                          <Badge
+                            key={id}
+                            variant="secondary"
+                            className="text-xs cursor-pointer gap-1"
+                            onClick={() => setExportClients(exportClients.filter((x) => x !== id))}
+                          >
+                            {clientsInSession.find((c) => c.id === id)?.name || id}
+                            <X className="h-3 w-3" />
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                {(exportSuppliers.length > 0 || exportClients.length > 0) && (
+                  <p className="text-xs text-muted-foreground mt-3">
+                    <strong>{formatNumber(exportLines.length)}</strong> ligne(s) sur{" "}
+                    {formatNumber(lines.length)} seront exportées.
+                  </p>
+                )}
+                {suppliers.length === 0 && (
+                  <p className="text-xs text-muted-foreground mt-3">
+                    Aucun fournisseur rattaché : les commandes fournisseur de cette saison n&apos;ont
+                    pas été importées, ou ne contiennent pas ces produits.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
 
             <div className="relative max-w-sm">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
