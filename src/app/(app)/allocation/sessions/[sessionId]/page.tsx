@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo, use } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Topbar } from "@/components/layout/topbar";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent } from "@/components/ui/card";
@@ -53,6 +54,7 @@ interface SupplierEntry {
 
 interface SessionMeta {
   id: string;
+  seasonId: string;
   seasonName: string;
   status: string;
   notes: string | null;
@@ -109,6 +111,7 @@ export default function AllocationSessionDetailPage({
   params: Promise<{ sessionId: string }>;
 }) {
   const { sessionId } = use(params);
+  const router = useRouter();
   const [session, setSession] = useState<SessionMeta | null>(null);
   const [lines, setLines] = useState<SessionLine[]>([]);
   const [loading, setLoading] = useState(true);
@@ -187,6 +190,34 @@ export default function AllocationSessionDetailPage({
     });
   }, [lines, exportClients, exportSuppliers, supplierIdsByProduct]);
 
+  // Rouvre la session dans l'écran de répartition pour la modifier. On rejoue l'ALLOUÉ de
+  // la session (pas un recalcul) : l'écran cible utilise le même chemin que l'import de
+  // fichier EAN. Revalider créera une NOUVELLE session (l'originale reste, comme trace).
+  const reopenForEditing = () => {
+    if (!session) return;
+    const rows: { clientCode: string; reference: string; color: string; size: string; qty: number }[] = [];
+    for (const l of lines) {
+      for (const [size, qty] of Object.entries(l.allocated)) {
+        if (!qty || qty <= 0) continue;
+        rows.push({ clientCode: l.clientCode, reference: l.productReference, color: l.productColor, size, qty });
+      }
+    }
+    if (rows.length === 0) {
+      toast.error("Rien à reprendre : aucune quantité allouée dans cette session.");
+      return;
+    }
+    try {
+      sessionStorage.setItem(
+        "gestlog:allocation:reopen",
+        JSON.stringify({ seasonId: session.seasonId, rows })
+      );
+    } catch {
+      toast.error("Impossible de préparer la reprise (stockage indisponible).");
+      return;
+    }
+    router.push("/allocation");
+  };
+
   // Fichier EAN / quantité de la session VALIDÉE (mêmes colonnes que l'export de simulation).
   const exportEanFile = () => {
     const rows: Record<string, string | number>[] = [];
@@ -255,18 +286,29 @@ export default function AllocationSessionDetailPage({
           action={
             <div className="flex items-center gap-2">
               {!loading && !error && lines.length > 0 && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={exportEanFile}
-                  className="gap-2"
-                  title="Fichier EAN / quantité : boutique, produit, couleur, taille, EAN, quantité"
-                >
-                  <Barcode className="h-4 w-4" />
-                  {exportLines.length < lines.length
-                    ? `Export EAN (${formatNumber(exportLines.length)})`
-                    : "Export EAN"}
-                </Button>
+                <>
+                  <Button
+                    size="sm"
+                    onClick={reopenForEditing}
+                    className="gap-2"
+                    title="Recharger cette répartition dans l'écran de répartition pour la modifier, puis la revalider"
+                  >
+                    <Pencil className="h-4 w-4" />
+                    Reprendre pour modifier
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={exportEanFile}
+                    className="gap-2"
+                    title="Fichier EAN / quantité : boutique, produit, couleur, taille, EAN, quantité"
+                  >
+                    <Barcode className="h-4 w-4" />
+                    {exportLines.length < lines.length
+                      ? `Export EAN (${formatNumber(exportLines.length)})`
+                      : "Export EAN"}
+                  </Button>
+                </>
               )}
               <Link href="/allocation">
                 <Button variant="outline" size="sm" className="gap-2">

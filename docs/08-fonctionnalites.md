@@ -96,6 +96,14 @@ sont gérés par écran (cf. [`05-authentification.md`](05-authentification.md))
     boutiques seulement et fausse les quantités. Sur une session **validée** (instantané figé),
     filtrer à l'export est sans risque. `GET /api/allocation/sessions/[sessionId]` renvoie donc
     aussi `eansByProduct`, `supplierIdsByProduct` et `suppliers`.
+  - **Reprendre une session validée pour la modifier** (bouton « Reprendre pour modifier »
+    sur la page de détail) : dépose `{seasonId, rows}` en `sessionStorage`
+    (`gestlog:allocation:reopen`) et renvoie sur `/allocation`, qui **bascule sur la saison
+    de la session** puis **rejoue l'alloué** via le même chemin que l'import de fichier
+    (`applyImportedAllocation`, aucun recalcul). L'utilisateur réajuste puis **revalide** →
+    une **NOUVELLE** session est créée ; **l'originale reste** (pas d'édition en place, pas de
+    suppression — une session est un instantané). ⚠️ Ne pas reprendre une répartition dont des
+    **livraisons ont déjà été générées** : l'aval (Préparation → caisse) serait désynchronisé.
   - La session validée alimente ensuite la **Préparation** (`generateDeliveries` part de
     l'`allocationSessionId`), le récap client, les stats et le détail d'une commande.
 - **Répartition — persistance de la simulation** : les résultats + filtres sont conservés en

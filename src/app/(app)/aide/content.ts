@@ -359,6 +359,14 @@ export const HELP_THEMES: HelpTheme[] = [
             tip: "Filtrer l'export d'une session validée est **sans danger** : la répartition est figée, seul le contenu du fichier change. Ne cherche pas à obtenir le même résultat en relançant une simulation sur quelques boutiques — là, le stock serait partagé entre ces seules boutiques et les quantités seraient fausses. ⚠️",
           },
           {
+            h: "Modifier une répartition déjà validée",
+            lines: [
+              "Une session validée est **figée** — on ne la modifie pas directement. Mais tu peux la **reprendre** : sur sa page de détail, le bouton **Reprendre pour modifier** la recharge dans l'écran de répartition.",
+              "Tu réajustes ce que tu veux, puis tu **revalides** : ça crée une **nouvelle** session. L'ancienne reste dans l'historique comme trace.",
+              "⚠️ Ne reprends pas une répartition dont tu as **déjà généré les livraisons** : ce qui a été préparé et envoyé en caisse ne se mettrait pas à jour tout seul.",
+            ],
+          },
+          {
             h: "Ne valider qu'une partie : le périmètre de validation",
             lines: [
               "Le bloc **Périmètre de validation**, en haut des résultats, te laisse choisir les **fournisseurs** et les **catalogues** à valider (plusieurs de chaque). Vide = tout.",

@@ -981,7 +981,7 @@ function FilterPanel({
 // ─── Main Page ───────────────────────────────────────────────
 
 export default function AllocationPage() {
-  const { activeSeason } = useSeason();
+  const { activeSeason, setActiveSeasonId } = useSeason();
   const [lines, setLines] = useState<SimulationLine[]>([]);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [clientImpacts, setClientImpacts] = useState<ClientImpact[]>([]);
@@ -1026,12 +1026,40 @@ export default function AllocationPage() {
   // Conserve résultats + filtres pour ne pas devoir relancer la simulation à chaque
   // navigation. Restauré une fois au montage si même saison ; vidé au changement de saison.
   const STORE_KEY = "gestlog:allocation:sim:v1";
+  // Reprise d'une session VALIDÉE : la page de détail dépose ici {seasonId, rows} et
+  // renvoie sur cet écran, qui rejoue les lignes (même chemin que l'import de fichier).
+  const REOPEN_KEY = "gestlog:allocation:reopen";
   const restoredRef = useRef(false);
   const seasonIdRef = useRef<string | null>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (restoredRef.current || !activeSeason) return;
+
+    // Reprise d'une session validée — PRIORITAIRE sur la restauration normale.
+    try {
+      const rawReopen = sessionStorage.getItem(REOPEN_KEY);
+      if (rawReopen) {
+        const h = JSON.parse(rawReopen);
+        if (h && Array.isArray(h.rows) && h.rows.length > 0) {
+          // Bascule d'abord sur la saison de la session (sinon 0 commande appariée) : on
+          // NE marque PAS restoredRef → l'effet se relance sur la nouvelle saison.
+          if (h.seasonId && h.seasonId !== activeSeason.id) {
+            setActiveSeasonId(h.seasonId);
+            return;
+          }
+          sessionStorage.removeItem(REOPEN_KEY);
+          restoredRef.current = true;
+          seasonIdRef.current = activeSeason.id;
+          runSimulation(h.rows as ImportedRow[]);
+          return;
+        }
+        sessionStorage.removeItem(REOPEN_KEY);
+      }
+    } catch {
+      /* handoff illisible → on ignore et on restaure normalement */
+    }
+
     restoredRef.current = true;
     seasonIdRef.current = activeSeason.id;
     try {
