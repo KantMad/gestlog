@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import JSZip from "jszip";
 import { handleApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { parseSizeQuantities } from "@/lib/utils";
@@ -10,10 +11,15 @@ import { parseSizeQuantities } from "@/lib/utils";
 // - saison : code LU DANS LE FICHIER commande fournisseur (SupplierOrder.tioSeason),
 //   PAS la saison GestLog (qui ne sert qu'à cadrer la sélection).
 // - quantités agrégées par (commande, EAN) ; toute quantité 0 est retirée.
+//
+// ?groupBy=supplier → un fichier PAR FOURNISSEUR, livrés dans un .zip (un navigateur
+// bloque les téléchargements en rafale, le zip est donc le seul envoi fiable).
+// Sinon → un seul .csv regroupant toutes les réceptions sélectionnées.
 export async function GET(request: NextRequest) {
   try {
     const seasonId = request.nextUrl.searchParams.get("seasonId");
     if (!seasonId) return NextResponse.json({ error: "seasonId requis" }, { status: 400 });
+    const perSupplier = request.nextUrl.searchParams.get("groupBy") === "supplier";
     // Sélection facultative de réceptions précises (sinon toutes celles de la saison).
     const receptionIds = (request.nextUrl.searchParams.get("receptionIds") || "")
       .split(",")
@@ -28,6 +34,7 @@ export async function GET(request: NextRequest) {
         ...(receptionIds.length > 0 ? { id: { in: receptionIds } } : {}),
       },
       select: {
+        supplier: { select: { id: true, code: true, name: true } },
         supplierOrder: { select: { orderNumber: true, tioSeason: true } },
         lines: {
           select: {
@@ -38,8 +45,17 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    // Agrégation par (commande, référence, couleur, taille) → quantité reçue totale.
-    type Agg = { orderNumber: string; tioSeason: string | null; reference: string; color: string; size: string; qty: number };
+    // Agrégation par (fournisseur, commande, référence, couleur, taille) → quantité reçue.
+    type Agg = {
+      supplierId: string;
+      supplierCode: string;
+      orderNumber: string;
+      tioSeason: string | null;
+      reference: string;
+      color: string;
+      size: string;
+      qty: number;
+    };
     const agg = new Map<string, Agg>();
     for (const rec of receptions) {
       const orderNumber = rec.supplierOrder.orderNumber;
@@ -48,11 +64,13 @@ export async function GET(request: NextRequest) {
         const q = parseSizeQuantities(line.quantitiesBySize);
         for (const [size, qty] of Object.entries(q)) {
           if (!qty || qty <= 0) continue;
-          const key = `${orderNumber}|${line.product.reference}|${line.product.color}|${size}`;
+          const key = `${rec.supplier.id}|${orderNumber}|${line.product.reference}|${line.product.color}|${size}`;
           const cur = agg.get(key);
           if (cur) cur.qty += qty;
           else
             agg.set(key, {
+              supplierId: rec.supplier.id,
+              supplierCode: rec.supplier.code || rec.supplier.name,
               orderNumber,
               tioSeason,
               reference: line.product.reference,
@@ -75,7 +93,10 @@ export async function GET(request: NextRequest) {
     const eanByKey = new Map<string, string>();
     for (const e of eanRows) eanByKey.set(`${e.reference}|${e.color}|${e.size}`, e.ean);
 
-    const lines: string[] = [];
+    // Lignes du fichier, regroupées par fournisseur (le mode « fichier unique » les
+    // reconcatène ensuite — le contenu total est strictement le même dans les deux modes).
+    const bySupplier = new Map<string, { code: string; lines: string[] }>();
+    let total = 0;
     let skippedNoSeason = 0;
     let skippedNoEan = 0;
     for (const a of agg.values()) {
@@ -92,23 +113,54 @@ export async function GET(request: NextRequest) {
       const saison = a.tioSeason.toUpperCase().slice(0, 3);
       const cmd = a.orderNumber.padStart(11, "0");
       const ean13 = ean.padStart(13, "0").slice(0, 13);
-      lines.push(`${saison}${cmd}${ean13}${a.qty}`);
+      const entry = bySupplier.get(a.supplierId) || { code: a.supplierCode, lines: [] };
+      entry.lines.push(`${saison}${cmd}${ean13}${a.qty}`);
+      bySupplier.set(a.supplierId, entry);
+      total++;
     }
 
-    // Tri stable pour un fichier reproductible.
-    lines.sort();
+    const seasonLabel = season?.name || seasonId;
+    // Diagnostics (non bloquants) sur les lignes écartées — lus par l'écran Export.
+    const diag = {
+      "X-Rows": String(total),
+      "X-Files": String(perSupplier ? bySupplier.size : total > 0 ? 1 : 0),
+      "X-Skipped-No-Season": String(skippedNoSeason),
+      "X-Skipped-No-Ean": String(skippedNoEan),
+    };
 
-    const csv = lines.join("\r\n");
-    const fileName = `receptions_${season?.name || seasonId}.csv`;
-    return new NextResponse(csv, {
+    if (!perSupplier) {
+      const lines = [...bySupplier.values()].flatMap((e) => e.lines);
+      lines.sort(); // tri stable → fichier reproductible
+      return new NextResponse(lines.join("\r\n"), {
+        status: 200,
+        headers: {
+          "Content-Type": "text/csv; charset=utf-8",
+          "Content-Disposition": `attachment; filename="receptions_${seasonLabel}.csv"`,
+          ...diag,
+        },
+      });
+    }
+
+    // Un fichier par fournisseur, dans un zip.
+    const zip = new JSZip();
+    const used = new Set<string>();
+    for (const { code, lines } of bySupplier.values()) {
+      lines.sort();
+      // Nom de fichier sûr (le code fournisseur vient de l'import) et unique.
+      const safe = (code || "FOURNISSEUR").replace(/[^A-Za-z0-9._-]+/g, "_").slice(0, 40);
+      let name = `receptions_${seasonLabel}_${safe}.csv`;
+      let i = 2;
+      while (used.has(name)) name = `receptions_${seasonLabel}_${safe}_${i++}.csv`;
+      used.add(name);
+      zip.file(name, lines.join("\r\n"));
+    }
+    const buf = await zip.generateAsync({ type: "nodebuffer" });
+    return new NextResponse(new Uint8Array(buf), {
       status: 200,
       headers: {
-        "Content-Type": "text/csv; charset=utf-8",
-        "Content-Disposition": `attachment; filename="${fileName}"`,
-        // Diagnostics (non bloquants) sur les lignes écartées.
-        "X-Rows": String(lines.length),
-        "X-Skipped-No-Season": String(skippedNoSeason),
-        "X-Skipped-No-Ean": String(skippedNoEan),
+        "Content-Type": "application/zip",
+        "Content-Disposition": `attachment; filename="receptions_${seasonLabel}_par_fournisseur.zip"`,
+        ...diag,
       },
     });
   } catch (e) {

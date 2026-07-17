@@ -309,6 +309,12 @@ ligne, **concaténée sans espace** :
   le peupler (upsert). Lignes sans saison/EAN écartées (comptées en en-têtes `X-Skipped-*`).
 - Quantités **agrégées par (commande, EAN)**, sommées sur toutes les réceptions ; **toute
   quantité 0 est retirée**. N° commande padé à 11 (0 à gauche), EAN sur 13.
+- **Découpage des fichiers** (sélecteur de l'écran Export) : par défaut **un seul CSV** ;
+  avec **`&groupBy=supplier`**, **un CSV par fournisseur** livrés dans un **`.zip`**
+  (`jszip`). Le zip est nécessaire : un navigateur **bloque les téléchargements en rafale**,
+  on ne peut donc pas servir N fichiers d'affilée. Le **contenu total est identique** dans
+  les deux modes — seul le nombre de fichiers change. Nom de fichier assaini (le code
+  fournisseur vient de l'import) et dédoublonné. En-tête `X-Files` = nombre de fichiers.
 
 ### Équivalences de code couleur (fichiers ↔ référentiel TIO)
 

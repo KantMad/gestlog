@@ -7,6 +7,7 @@ import { Topbar } from "@/components/layout/topbar";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import {
   Calendar,
   Download,
@@ -41,6 +42,8 @@ export default function ExportPage() {
   // Sélection des réceptions à exporter (multi + recherche fournisseur).
   const [receptions, setReceptions] = useState<ReceptionRow[]>([]);
   const [selectedRec, setSelectedRec] = useState<Set<string>>(new Set());
+  // Découpage du fichier : un seul CSV, ou un CSV par fournisseur (livrés en .zip).
+  const [recSplit, setRecSplit] = useState<"single" | "supplier">("single");
   const [recSearch, setRecSearch] = useState("");
 
   useEffect(() => {
@@ -90,7 +93,8 @@ export default function ExportPage() {
     try {
       const recParam =
         selectedRec.size > 0 ? `&receptionIds=${[...selectedRec].join(",")}` : "";
-      const res = await fetch(`/api/export/receptions?seasonId=${seasonId}${recParam}`);
+      const splitParam = recSplit === "supplier" ? "&groupBy=supplier" : "";
+      const res = await fetch(`/api/export/receptions?seasonId=${seasonId}${recParam}${splitParam}`);
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
         toast.error(j.error || "Export impossible");
@@ -115,12 +119,20 @@ export default function ExportPage() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `receptions_${season?.name || seasonId}.csv`;
+      a.download =
+        recSplit === "supplier"
+          ? `receptions_${season?.name || seasonId}_par_fournisseur.zip`
+          : `receptions_${season?.name || seasonId}.csv`;
       document.body.appendChild(a);
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
-      toast.success(`${rows} ligne(s) exportée(s)`);
+      const files = Number(res.headers.get("X-Files") || 1);
+      toast.success(
+        recSplit === "supplier"
+          ? `${rows} ligne(s) exportée(s) dans ${files} fichier(s) (zip)`
+          : `${rows} ligne(s) exportée(s)`
+      );
       if (noSeason > 0)
         toast.warning(`${noSeason} ligne(s) sans code saison ignorées (réimporte la commande fournisseur)`);
       if (noEan > 0) toast.warning(`${noEan} ligne(s) sans EAN ignorées`);
@@ -318,6 +330,39 @@ export default function ExportPage() {
                     ? `${selectedRec.size} réception(s) sélectionnée(s).`
                     : "Aucune sélection = toutes les réceptions de la saison."}
                 </p>
+
+                {/* Découpage : le contenu total est identique dans les deux modes, seul le
+                    nombre de fichiers change. */}
+                <div>
+                  <p className="mb-1.5 text-xs font-medium text-muted-foreground">Fichiers</p>
+                  <div className="inline-flex rounded-md border p-0.5">
+                    {(
+                      [
+                        { v: "single", label: "Un seul fichier" },
+                        { v: "supplier", label: "Un fichier par fournisseur" },
+                      ] as const
+                    ).map((o) => (
+                      <button
+                        key={o.v}
+                        type="button"
+                        onClick={() => setRecSplit(o.v)}
+                        className={cn(
+                          "rounded px-2.5 py-1 text-xs transition-colors",
+                          recSplit === o.v
+                            ? "bg-primary text-primary-foreground"
+                            : "text-muted-foreground hover:bg-accent"
+                        )}
+                      >
+                        {o.label}
+                      </button>
+                    ))}
+                  </div>
+                  {recSplit === "supplier" && (
+                    <p className="mt-1.5 text-xs text-muted-foreground">
+                      Les fichiers arrivent dans un <strong>.zip</strong> (un par fournisseur).
+                    </p>
+                  )}
+                </div>
 
                 <Button onClick={exportReceptions} disabled={!seasonId || busy !== null} className="gap-2">
                   {busy === "receptions" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}

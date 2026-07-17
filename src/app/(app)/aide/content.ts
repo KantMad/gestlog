@@ -602,7 +602,7 @@ export const HELP_THEMES: HelpTheme[] = [
         id: "export-reception",
         icon: "🔢",
         title: "L'export des réceptions (EAN / quantité)",
-        keywords: "export réception ean quantité csv saison commande sélecteur vide",
+        keywords: "export réception ean quantité csv saison commande sélecteur vide zip fournisseur fichier",
         sections: [
           {
             h: "Le format",
@@ -617,6 +617,15 @@ export const HELP_THEMES: HelpTheme[] = [
               "Un **sélecteur** permet de choisir précisément quelles réceptions exporter (multi-sélection + recherche par fournisseur). Aucune sélection = toutes.",
             ],
             tip: "Export **vide** ? Le code saison vient du **fichier commande fournisseur**. S'il manque, **réimporte la commande fournisseur** puis réessaie — le message te le dira.",
+          },
+          {
+            h: "Un seul fichier, ou un par fournisseur",
+            lines: [
+              "Le sélecteur **Fichiers** te laisse choisir : **un seul fichier** avec toutes les réceptions sélectionnées, ou **un fichier par fournisseur**.",
+              "En mode « un par fournisseur », les fichiers arrivent dans un **.zip** — les navigateurs bloquent les téléchargements en rafale, c'est le seul envoi fiable. Chaque fichier porte le code du fournisseur dans son nom.",
+              "Le **contenu total est le même** dans les deux cas : seul le découpage change.",
+            ],
+            tip: "Pratique quand chaque fournisseur doit recevoir **son** fichier : plus besoin de sélectionner ses réceptions à la main puis de recommencer pour le suivant. 📦",
           },
         ],
       },
