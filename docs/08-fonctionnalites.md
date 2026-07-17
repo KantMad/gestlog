@@ -231,9 +231,14 @@ entités), puis mettent à jour les compteurs. Sur upsert (ré-import), `importL
 Une réception importée peut être **corrigée manuellement** (ex. 2 couleurs échangées) sans
 tout réimporter.
 - **Écran** : `/import/receptions` (liste des réceptions de la **saison active**) →
-  `/import/receptions/[id]` (éditeur). Accessible depuis **Comparaison** (bouton « Corriger une
+  `/import/receptions/[id]` (éditeur). Accessible depuis l'**entrée « Correction réception » de
+  la barre latérale** (sous « Import »), depuis **Comparaison** (bouton « Corriger une
   réception ») et le bloc « Imports récents » de `/import`. **Droits = ceux de l'écran Import**
-  (routes sous `/import` et `/api/import`, gardées par le mapping `/api/import → /import`).
+  (routes sous `/import` et `/api/import`, gardées par le mapping `/api/import → /import` ; l'item
+  de sidebar `/import/receptions` est filtré par `canAccessScreen` via son préfixe `/import`).
+  ⚠️ Ne concerne QUE les produits **réceptionnés par import** : l'éditeur ne propose que les
+  références présentes dans les lignes de la réception (`colorsByReference`), pas tout le
+  référentiel.
 - **API** : `GET /api/import/receptions?seasonId=` (liste), `GET /api/import/receptions/[id]`
   (détail : lignes + `colorsByReference` pour permuter la couleur), `PATCH .../[id]` (remplace
   les lignes : résout chaque `réf + code couleur` vers un produit, refuse les inconnus et les

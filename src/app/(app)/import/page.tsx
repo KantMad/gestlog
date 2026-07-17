@@ -286,9 +286,10 @@ function RecentImports({
         <div className="flex items-center gap-3">
           <Link
             href="/import/receptions"
-            className="text-xs font-medium text-primary hover:underline"
+            className="inline-flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/5 px-2.5 py-1 text-xs font-medium text-primary hover:bg-primary/10"
           >
-            Corriger une réception →
+            <PackageCheck className="h-3.5 w-3.5" />
+            Corriger une réception à la main
           </Link>
           <button
             type="button"

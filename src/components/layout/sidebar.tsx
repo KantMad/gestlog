@@ -28,6 +28,7 @@ import {
   Download,
   LifeBuoy,
   ScanSearch,
+  PackageCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
@@ -37,6 +38,7 @@ import { useMobileNav } from "@/lib/mobile-nav";
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Tableau de bord", icon: LayoutDashboard },
   { href: "/import", label: "Import", icon: Upload },
+  { href: "/import/receptions", label: "Correction réception", icon: PackageCheck },
   { href: "/product-info", label: "Infos produits", icon: Tag },
   { href: "/comparison", label: "Comparaison", icon: GitCompareArrows },
   { href: "/reassort", label: "Commandes client", icon: ClipboardList },
@@ -102,9 +104,15 @@ export function Sidebar() {
       </div>
 
       <nav className="flex-1 min-h-0 overflow-y-auto space-y-1 px-3 py-4">
-        {allItems.map((item) => {
-          const isActive =
-            pathname === item.href || pathname.startsWith(item.href + "/");
+        {/* Item actif = le href le PLUS SPÉCIFIQUE qui préfixe le chemin courant (sinon
+            « Import » et « Correction réception » s'allumeraient tous deux sur
+            /import/receptions). */}
+        {(() => {
+          const activeHref = allItems
+            .filter((i) => pathname === i.href || pathname.startsWith(i.href + "/"))
+            .reduce((best, i) => (i.href.length > best.length ? i.href : best), "");
+          return allItems.map((item) => {
+          const isActive = item.href === activeHref;
           return (
             <Link
               key={item.href}
@@ -126,7 +134,8 @@ export function Sidebar() {
               {item.label}
             </Link>
           );
-        })}
+        });
+        })()}
       </nav>
 
       <div className="border-t border-border p-4 space-y-3">
