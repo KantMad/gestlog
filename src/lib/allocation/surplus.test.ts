@@ -55,6 +55,32 @@ describe("distributeSurplus — le surplus va aux boutiques coupées", () => {
     expect(r.allocByKey.get("PEU_COUPEE")!.XL).toBe(5);
   });
 
+  // Cas réel CCAH26_CH07/752 : 109 commandées, 117 reçues. L'ancien prorata par taille
+  // arrondissait toutes les parts à 0 (3 pièces de surplus pour 13 commandées → 0), donc
+  // TOUT passait par le départage au rang : les 3 meilleures boutiques raflaient tout,
+  // taille après taille (+22 % / +9 % / +6 % / 0 % / 0 %), et c'est la PLUS PETITE commande
+  // qui gagnait le plus — l'inverse du but.
+  it("répartit le surplus sur toutes les boutiques, pas seulement les mieux classées", () => {
+    const shops = [
+      L("Mirabeau", { S: 2, M: 3, L: 4, XL: 4, "2XL": 2, "3XL": 2, "4XL": 1 }, { S: 2, M: 3, L: 4, XL: 4, "2XL": 2, "3XL": 2, "4XL": 1 }, 1),
+      L("Romans", { S: 1, M: 7, L: 11, XL: 9, "2XL": 4, "3XL": 2, "4XL": 1 }, { S: 1, M: 7, L: 10, XL: 9, "2XL": 4, "3XL": 2, "4XL": 1 }, 2),
+      L("ClassicIsl", { M: 3, L: 6, XL: 6, "2XL": 2, "3XL": 1 }, { M: 3, L: 6, XL: 6, "2XL": 2, "3XL": 1 }, 3),
+      L("Roubaix", { M: 3, L: 6, XL: 6, "2XL": 3, "3XL": 1, "4XL": 1 }, { M: 3, L: 6, XL: 6, "2XL": 3, "3XL": 1, "4XL": 1 }, 4),
+      L("Talange", { M: 3, L: 6, XL: 6, "2XL": 2, "3XL": 1 }, { M: 3, L: 6, XL: 6, "2XL": 2, "3XL": 1 }, 5),
+    ];
+    const r = distributeSurplus(shops, { S: 3, M: 22, L: 32, XL: 33, "2XL": 16, "3XL": 8, "4XL": 3 });
+    expect(r.leftover).toBe(0); // les 9 pièces sont placées
+    // AUCUNE boutique ne reste à 0 : c'était le bug (Roubaix et Talange servies à 0 %).
+    for (const s of shops) {
+      const alloc = sumQuantities(r.allocByKey.get(s.key)!);
+      expect(alloc).toBeGreaterThan(sumQuantities(s.original));
+    }
+    // Les écarts en % se resserrent : plus de 22 % pour la plus petite commande.
+    const pct = shops.map((s) => sumQuantities(r.allocByKey.get(s.key)!) / sumQuantities(s.original) - 1);
+    expect(Math.max(...pct) - Math.min(...pct)).toBeLessThan(0.1);
+    expect(Math.max(...pct)).toBeLessThan(0.15);
+  });
+
   it("ne sert au-delà des commandes que si plus aucune boutique n'a d'écart", () => {
     const r = distributeSurplus(
       [L("A", { M: 10 }, { M: 10 }, 1), L("B", { M: 10 }, { M: 10 }, 2)],

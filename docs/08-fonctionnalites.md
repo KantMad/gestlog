@@ -102,9 +102,20 @@ sont gérés par écran (cf. [`05-authentification.md`](05-authentification.md))
   c'est ce qu'affiche la colonne « Écart ». Deux phases :
   1. **Combler les écarts** : pièce par pièce, à la boutique **la plus coupée en relatif**
      (rang pour départager), jusqu'à ramener chacune à sa commande → les % convergent.
-  2. **Au-delà des commandes** (prorata) — **UNIQUEMENT si plus aucune boutique n'a d'écart**.
+  2. **Au-delà des commandes** — **UNIQUEMENT si plus aucune boutique n'a d'écart**.
      Sinon le reliquat **reste en stock** (servir une commande déjà complète pendant qu'une
-     autre est à -11 % n'a pas de sens).
+     autre est à -11 % n'a pas de sens). **Même logique que la phase 1** : pièce par pièce, à
+     la boutique au **taux de service le plus bas** (alloué/commandé), rang pour départager.
+     - ⚠️ **Ne pas revenir à un prorata par taille** : il ne distribuait en réalité **jamais
+       rien**. La part était arrondie à l'entier **inférieur**, or le surplus d'une taille
+       (1 à 3 pièces) est toujours minuscule devant le total commandé sur cette taille
+       (13 à 31) → `floor(3 × 2/13) = 0`, **toutes** les parts tombaient à 0. 100 % du surplus
+       basculait donc dans le départage, qui servait **dans l'ordre du rang** : avec 3 pièces
+       et 5 boutiques, seules les 3 premières étaient atteintes — **les mêmes à chaque taille**,
+       donc ça s'empilait. *Cas réel CCAH26_CH07/752* (109 commandées / 117 reçues) :
+       **+22 % / +9 % / +6 % / 0 % / 0 %**, la **plus petite** commande raflant le plus de
+       pièces — l'inverse exact de l'objectif. Après correction : +11 % / +6 % / +6 % / +10 %
+       / +6 %, les 9 pièces toujours toutes placées. Couvert par `surplus.test.ts`.
   - ⚠️ **Contrainte exacte** : une pièce ne peut aller que sur une taille que la boutique a
     **commandée** (`original[size] > 0`) — mais elle **peut dépasser la quantité commandée sur
     cette taille**. C'est indispensable : *cas réel CCAH26_PU02/005*, le manque est sur M/L et

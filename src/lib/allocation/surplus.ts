@@ -16,7 +16,8 @@ import { sumQuantities, type SizeQuantities } from "@/lib/utils";
 //     (déficit = 1 − alloué/commandé), rang pour départager, jusqu'à combler son écart.
 //     Les % convergent donc les uns vers les autres.
 //  3. Phase 2 — s'il reste du surplus ET que plus aucune boutique n'a d'écart, le reliquat
-//     est réparti au prorata **au-delà** des commandes. Sinon on n'y touche pas.
+//     est posé **au-delà** des commandes, avec la MÊME logique qu'en phase 1 : pièce par
+//     pièce, à la boutique la moins bien servie en relatif. Sinon on n'y touche pas.
 //  4. Jamais plus que le reçu d'une taille.
 
 export interface SurplusLine {
@@ -108,28 +109,53 @@ export function distributeSurplus(lines: SurplusLine[], received: SizeQuantities
 
   const stillShort = work.some((w) => w.allocTotal < w.origTotal);
 
-  // ── Phase 2 : au-delà des commandes, au prorata — seulement si plus aucun écart ────
+  // ── Phase 2 : au-delà des commandes — seulement si plus aucun écart ───────────────
+  //
+  // MÊME logique que la phase 1 : pièce par pièce, à la boutique dont le TAUX DE SERVICE
+  // (alloué/commandé) est le plus bas ; le rang ne départage que les égalités. Les taux
+  // convergent donc, conformément à l'objectif de la règle.
+  //
+  // Remplace un prorata par taille qui ne distribuait en réalité jamais rien : sa part
+  // était arrondie à l'entier INFÉRIEUR, or le surplus d'une taille (1 à 3 pièces) est
+  // toujours minuscule face au total commandé sur cette taille (13 à 31) → toutes les
+  // parts tombaient à 0, et 100 % du surplus basculait dans le départage, qui servait
+  // dans l'ordre du rang. Avec 3 pièces et 5 boutiques, seules les 3 premières étaient
+  // atteintes — les mêmes à chaque taille, donc ça s'empilait. Cas réel CCAH26_CH07/752 :
+  // +22 % / +9 % / +6 % / 0 % / 0 %, la PLUS PETITE commande raflant le plus de pièces,
+  // soit l'inverse exact du but recherché.
   if (!stillShort) {
-    for (const size of Object.keys(remaining)) {
-      const surplus = remaining[size] || 0;
-      if (surplus <= 0) continue;
-      const eligible = work.filter((w) => (w.original[size] || 0) > 0);
-      const totalOrder = eligible.reduce((s, w) => s + (w.original[size] || 0), 0);
-      if (totalOrder <= 0) continue; // taille commandée par personne → non répartissable
-      const floors = eligible.map((w) => Math.floor(surplus * ((w.original[size] || 0) / totalOrder)));
-      let rest = surplus - floors.reduce((a, b) => a + b, 0);
-      eligible.forEach((w, i) => {
-        if (floors[i] > 0) {
-          w.alloc[size] = (w.alloc[size] || 0) + floors[i];
-          beyond += floors[i];
+    for (;;) {
+      let best: (typeof work)[number] | null = null;
+      let bestRatio = Infinity;
+      for (const w of work) {
+        const canTake = Object.entries(w.original).some(
+          ([size, req]) => req > 0 && (remaining[size] || 0) > 0
+        );
+        if (!canTake) continue;
+        const ratio = w.origTotal > 0 ? w.allocTotal / w.origTotal : Infinity;
+        if (!best || ratio < bestRatio || (ratio === bestRatio && w.ranking < best.ranking)) {
+          best = w;
+          bestRatio = ratio;
         }
-      });
-      const byRank = [...eligible].sort((a, b) => a.ranking - b.ranking);
-      for (let i = 0; i < byRank.length && rest > 0; i++, rest--) {
-        byRank[i].alloc[size] = (byRank[i].alloc[size] || 0) + 1;
-        beyond += 1;
       }
-      remaining[size] = 0;
+      if (!best) break;
+
+      // Taille servie : parmi celles commandées, celle où il reste le plus de surplus.
+      let chosen: string | null = null;
+      let rem = 0;
+      for (const [size, req] of Object.entries(best.original)) {
+        if (req <= 0) continue;
+        if ((remaining[size] || 0) > rem) {
+          rem = remaining[size] || 0;
+          chosen = size;
+        }
+      }
+      if (!chosen) break; // sécurité (canTake garantit normalement l'inverse)
+
+      best.alloc[chosen] = (best.alloc[chosen] || 0) + 1;
+      best.allocTotal += 1;
+      remaining[chosen] = (remaining[chosen] || 0) - 1;
+      beyond += 1;
     }
   }
 
