@@ -190,10 +190,22 @@ export async function importMcsReceptions(
 
   // Résolution des produits (une seule fois) — sert aussi à l'auto-rattachement.
   const resolved: { productId: string; quantities: Record<string, number> }[] = [];
+  // Produits non résolus : on ne se contente pas de « introuvable ». On dit COMBIEN de
+  // pièces sont ignorées et POURQUOI, en distinguant les deux cas — sinon l'utilisateur ne
+  // peut pas savoir s'il s'agit d'une coquille du fournisseur ou d'un référentiel en retard.
+  // (Cas réel FW26 MCS TG LOT1 : RMSWET_C012 livré mais jamais commandé — 251 pièces
+  // silencieusement absentes de la réception.)
+  const skipped: { reference: string; colorCode: string; colorName: string; pieces: number }[] = [];
   for (const line of lines) {
     const product = await findProduct(line.reference, line.colorCode, equivs);
     if (!product) {
-      errors.push(`Réception : produit introuvable ${line.reference} / ${line.colorCode}`);
+      const pieces = Object.values(line.sizes).reduce((s, n) => s + (n > 0 ? n : 0), 0);
+      skipped.push({
+        reference: line.reference,
+        colorCode: line.colorCode,
+        colorName: line.colorName || "",
+        pieces,
+      });
       continue;
     }
     const quantities: Record<string, number> = {};
@@ -204,8 +216,62 @@ export async function importMcsReceptions(
     if (Object.keys(quantities).length === 0) continue;
     resolved.push({ productId: product.id, quantities });
   }
+  // Construit, pour chaque produit non résolu, un message qui dit COMBIEN de pièces sont
+  // ignorées et POURQUOI. `orderLabel`/`orderedRefs` ne sont connus qu'une fois la commande
+  // fournisseur rattachée → on rappelle la fonction ensuite pour enrichir le diagnostic.
+  const describeSkipped = async (
+    orderLabel?: string,
+    orderedRefs?: Set<string>
+  ): Promise<string[]> => {
+    if (skipped.length === 0) return [];
+    const refs = [...new Set(skipped.map((s) => s.reference))];
+    const known = await prisma.product.findMany({
+      where: { reference: { in: refs } },
+      select: { reference: true, color: true },
+    });
+    const colorsByRef = new Map<string, string[]>();
+    for (const p of known) {
+      const l = colorsByRef.get(p.reference) || [];
+      l.push(p.color);
+      colorsByRef.set(p.reference, l);
+    }
+    return skipped.map((s) => {
+      const who = `${s.reference} / ${s.colorCode}${s.colorName ? ` (${s.colorName})` : ""}`;
+      const head = `${s.pieces} pièce(s) NON importée(s) — ${who} : `;
+      const colors = colorsByRef.get(s.reference);
+      if (colors && colors.length > 0) {
+        // La référence existe : c'est la COULEUR qui ne correspond pas.
+        return (
+          head +
+          `cette référence existe au référentiel mais pas en couleur « ${s.colorCode} » ` +
+          `(couleurs connues : ${colors.slice(0, 8).join(", ")}${colors.length > 8 ? "…" : ""}). ` +
+          `Vérifiez le code couleur du colisage, ou créez une équivalence de couleur (écran Infos produits).`
+        );
+      }
+      // Référence totalement inconnue : le plus souvent une coquille du colisage, ou un
+      // produit livré sans avoir été commandé.
+      const notOrdered =
+        orderedRefs && !orderedRefs.has(s.reference)
+          ? ` Cette référence ne figure PAS dans la commande fournisseur ${orderLabel} : soit le fournisseur a livré un produit non commandé, soit la référence du colisage comporte une erreur.`
+          : "";
+      return (
+        head +
+        `référence inconnue du référentiel.${notOrdered} ` +
+        `Un produit n'est jamais créé depuis une réception : importez d'abord la commande fournisseur qui le contient (elle, crée les produits manquants).`
+      );
+    });
+  };
+
   if (resolved.length === 0) {
-    return { imported, errors: errors.length ? errors : ["Aucun produit reconnu dans la réception."] };
+    const why = await describeSkipped();
+    return {
+      imported,
+      errors: [
+        ...errors,
+        ...why,
+        ...(why.length === 0 ? ["Aucun produit reconnu dans la réception."] : []),
+      ],
+    };
   }
 
   // Détermination de la commande fournisseur à rattacher :
@@ -272,6 +338,20 @@ export async function importMcsReceptions(
     where: { id: supplierOrder.id },
     data: { status: "PARTIEL" },
   });
+
+  // Diagnostic des produits ignorés, enrichi du contexte « est-ce dans la commande ? ».
+  if (skipped.length > 0) {
+    const order = await prisma.supplierOrder.findUnique({
+      where: { id: supplierOrder.id },
+      select: { orderNumber: true, lines: { select: { product: { select: { reference: true } } } } },
+    });
+    const orderedRefs = new Set((order?.lines || []).map((l) => l.product.reference));
+    errors.push(...(await describeSkipped(order?.orderNumber, orderedRefs)));
+    const lost = skipped.reduce((s, x) => s + x.pieces, 0);
+    errors.unshift(
+      `⚠ ${skipped.length} produit(s) du colisage n'ont PAS été importés (${lost} pièce(s) au total) — détail ci-dessous. Le reste de la réception a bien été enregistré.`
+    );
+  }
 
   return { imported, errors };
 }

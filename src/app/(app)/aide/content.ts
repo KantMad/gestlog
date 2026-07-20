@@ -181,6 +181,16 @@ export const HELP_THEMES: HelpTheme[] = [
             ],
             tip: "Importe la **commande fournisseur d'abord**, sinon l'auto-rattachement ne trouve rien.",
           },
+          {
+            h: "Un produit du colisage n'a pas été importé ?",
+            lines: [
+              "Le résultat d'import te dit **combien de pièces** n'ont pas été prises et **pourquoi**, produit par produit. Lis le cadre rouge : la cause y est écrite en clair.",
+              "**La référence existe mais pas dans cette couleur** → c'est le code couleur qui diffère. Vérifie le colisage, ou crée une **équivalence de couleur** dans Infos produits.",
+              "**La référence est inconnue** → le plus souvent le fournisseur a livré un produit **non commandé**, ou le colisage comporte une coquille. L'outil te dit si la référence figure ou non dans la commande fournisseur.",
+              "Un produit n'est **jamais créé** depuis une réception : c'est une sécurité pour ne pas fabriquer un produit fantôme à partir d'une erreur de saisie du fournisseur. Passe par la **commande fournisseur**, qui elle crée les produits manquants.",
+            ],
+            tip: "Le reste de la réception est bien enregistré : seules les lignes non résolues sont écartées. 👍",
+          },
         ],
       },
       {

@@ -441,6 +441,16 @@ Les fichiers réels MCS ne sont pas des tableaux plats → l'import les **auto-d
   lectures** (`sizes` + `sizesAlt`, la principale étant celle qui capte le plus de pièces) et
   `pickReceptionSizes` **choisit via la grille du produit au référentiel** (`Product.sizeScale`),
   produit par produit — un fichier mixant jeans et mailles est donc correctement lu.
+  **Produits non résolus → erreur EXPLICITE** (jamais un silence) : l'import indique le
+  nombre de **pièces non importées** et la **cause**, en distinguant deux cas —
+  (a) la référence existe mais **pas dans cette couleur** (les couleurs connues sont listées
+  → vérifier le code couleur, ou créer une **équivalence**) ; (b) la **référence est inconnue**,
+  auquel cas on précise si elle **ne figure pas dans la commande fournisseur rattachée**
+  (fournisseur ayant livré un produit non commandé, ou coquille du colisage). *Cas réel
+  FW26 MCS TG LOT1* : `RMSWET_C012` livré mais absent de la commande 100760 → **251 pièces**
+  disparaissaient sans explication lisible. ⚠️ Un produit n'est **jamais créé** depuis une
+  réception (contrairement à la commande fournisseur) : c'est volontaire — on ne fabrique pas
+  un produit fantôme à partir d'une faute de frappe fournisseur.
   **N° de commande fournisseur facultatif** : laissé vide → **rattachement automatique** à
   la commande fournisseur de la même saison qui contient le plus de produits reçus ; sinon
   le n° saisi force une commande précise.

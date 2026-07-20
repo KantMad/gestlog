@@ -634,15 +634,17 @@ function ImportTab({
             )}
           </div>
           {result.errors.length > 0 && (
-            <div className="mt-3 max-h-32 overflow-auto rounded-md bg-destructive/5 p-3 text-left">
-              {result.errors.slice(0, 10).map((err, i) => (
-                <p key={i} className="text-xs text-destructive">
+            // Messages détaillés (ce qui n'a pas été importé et POURQUOI) → il faut de la
+            // place : tronqués trop court, l'utilisateur ne voyait pas la cause.
+            <div className="mt-3 max-h-72 space-y-1.5 overflow-auto rounded-md bg-destructive/5 p-3 text-left">
+              {result.errors.slice(0, 30).map((err, i) => (
+                <p key={i} className="text-xs leading-relaxed text-destructive">
                   {err}
                 </p>
               ))}
-              {result.errors.length > 10 && (
+              {result.errors.length > 30 && (
                 <p className="text-xs text-muted-foreground mt-1">
-                  ... et {result.errors.length - 10} autres
+                  ... et {result.errors.length - 30} autres
                 </p>
               )}
             </div>
