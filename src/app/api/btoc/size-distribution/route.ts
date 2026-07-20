@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { parisRangeToUtc } from "@/lib/btoc-dates";
 import { handleApiError } from "@/lib/api";
 
 // GET — Répartition des ventes BtoC par TAILLE, regroupée par SOUS-CATÉGORIE BtoB
@@ -24,8 +25,8 @@ export async function GET(request: NextRequest) {
     const p = request.nextUrl.searchParams;
     const dateFrom = p.get("dateFrom");
     const dateTo = p.get("dateTo");
-    const from = dateFrom ? new Date(dateFrom) : null;
-    const to = dateTo ? new Date(dateTo + "T23:59:59.999") : null;
+    // Bornes en fuseau Paris (jour de fin inclus), cf. lib/btoc-dates.
+    const { gte: from, lt: to } = parisRangeToUtc(dateFrom, dateTo);
 
     const rows = await prisma.$queryRawUnsafe<
       { subCategory: string; size: string; qty: bigint }[]
@@ -41,7 +42,7 @@ export async function GET(request: NextRequest) {
         WHERE o.status NOT IN ('cancelled', 'refunded', 'failed')
           AND ol.sku IS NOT NULL AND ol.sku != ''
           AND ($1::timestamp IS NULL OR o."orderDate" >= $1)
-          AND ($2::timestamp IS NULL OR o."orderDate" <= $2)
+          AND ($2::timestamp IS NULL OR o."orderDate" < $2)
         UNION ALL
         -- Remboursements (quantité négative) — déduits des ventes
         SELECT
@@ -53,7 +54,7 @@ export async function GET(request: NextRequest) {
         WHERE o.status NOT IN ('cancelled', 'refunded', 'failed')
           AND rl.sku IS NOT NULL AND rl.sku != ''
           AND ($1::timestamp IS NULL OR o."orderDate" >= $1)
-          AND ($2::timestamp IS NULL OR o."orderDate" <= $2)
+          AND ($2::timestamp IS NULL OR o."orderDate" < $2)
       ),
       matched AS (
         SELECT s.size, s.qty,

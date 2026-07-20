@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { handleApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
+import { parisRangeToUtc } from "@/lib/btoc-dates";
 
 // ─── Top Clients export ─────────────────────────────────
 // Critère : clients ayant passé PLUS DE 2 commandes (> 2)
@@ -23,9 +24,8 @@ export async function GET(request: NextRequest) {
     const dateFrom = params.get("dateFrom");
     const dateTo = params.get("dateTo");
 
-    const from = dateFrom ? new Date(dateFrom) : null;
-    // borne de fin inclusive (fin de journée)
-    const to = dateTo ? new Date(dateTo + "T23:59:59.999") : null;
+    // Bornes en fuseau Paris (jour de fin inclus), cf. lib/btoc-dates.
+    const { gte: from, lt: to } = parisRangeToUtc(dateFrom, dateTo);
 
     const rows = await prisma.$queryRawUnsafe<
       {
@@ -74,7 +74,7 @@ export async function GET(request: NextRequest) {
       filtered AS (
         SELECT * FROM sales
         WHERE ($1::timestamp IS NULL OR order_date >= $1)
-          AND ($2::timestamp IS NULL OR order_date <= $2)
+          AND ($2::timestamp IS NULL OR order_date < $2)
       ),
       agg AS (
         SELECT

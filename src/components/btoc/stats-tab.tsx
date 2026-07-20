@@ -43,6 +43,7 @@ interface StatsData {
   overview: {
     totalOrders: number;
     totalRevenue: number;
+    netRevenue: number;
     totalCustomers: number;
     avgOrderValue: number;
     totalItems: number;
@@ -425,7 +426,16 @@ export function BtocStatsTab() {
                   {formatEuro(data.overview.totalRevenue)}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Chiffre d&apos;affaires
+                  CA TTC encaissé
+                </p>
+                {/* Net HT (hors TVA et frais de port) : rapproche la « Ventes nettes » de
+                    WooCommerce. Peut différer de quelques euros — la synchro ne transmet pas
+                    le sous-total avant remise que WooCommerce utilise pour son calcul. */}
+                <p
+                  className="mt-0.5 text-xs font-medium text-muted-foreground"
+                  title="Chiffre d'affaires hors TVA et hors frais de port (proche des « Ventes nettes » WooCommerce)"
+                >
+                  {formatEuro(data.overview.netRevenue)} HT
                 </p>
               </div>
             </div>

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { handleApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
+import { parisRangeToUtc } from "@/lib/btoc-dates";
 
 // ─── Types ──────────────────────────────────────────────
 interface SizeTypeInfo {
@@ -127,14 +128,15 @@ export async function GET(request: NextRequest) {
     const queryParams: unknown[] = [];
     let idx = 1;
 
-    if (dateFrom) {
+    const { gte: dateGte, lt: dateLt } = parisRangeToUtc(dateFrom, dateTo);
+    if (dateGte) {
       conditions.push(`o."orderDate" >= $${idx}`);
-      queryParams.push(new Date(dateFrom));
+      queryParams.push(dateGte);
       idx++;
     }
-    if (dateTo) {
-      conditions.push(`o."orderDate" <= $${idx}`);
-      queryParams.push(new Date(dateTo));
+    if (dateLt) {
+      conditions.push(`o."orderDate" < $${idx}`);
+      queryParams.push(dateLt);
       idx++;
     }
     if (productRef) {

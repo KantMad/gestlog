@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { handleApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
+import { parisRangeToUtc } from "@/lib/btoc-dates";
 
 export async function GET(request: NextRequest) {
   try {
@@ -10,6 +11,8 @@ export async function GET(request: NextRequest) {
     const category = params.get("category");
     const parentProduct = params.get("parentProduct"); // now expects a SKU / reference
     const customerId = params.get("customerId");
+    // Bornes de dates en fuseau Paris (jour de fin INCLUS, cf. lib/btoc-dates).
+    const { gte: dateGte, lt: dateLt } = parisRangeToUtc(dateFrom, dateTo);
 
     // ─── Build WHERE clauses for orders ──────────────────────
     const orderConditions: string[] = [];
@@ -18,12 +21,12 @@ export async function GET(request: NextRequest) {
 
     if (dateFrom) {
       orderConditions.push(`o."orderDate" >= $${paramIndex}`);
-      orderParams.push(new Date(dateFrom));
+      orderParams.push(dateGte!);
       paramIndex++;
     }
     if (dateTo) {
-      orderConditions.push(`o."orderDate" <= $${paramIndex}`);
-      orderParams.push(new Date(dateTo));
+      orderConditions.push(`o."orderDate" < $${paramIndex}`);
+      orderParams.push(dateLt!);
       paramIndex++;
     }
     if (customerId) {
@@ -68,6 +71,7 @@ export async function GET(request: NextRequest) {
       {
         totalOrders: bigint;
         totalRevenue: number;
+        netRevenue: number;
         totalCustomers: bigint;
         avgOrderValue: number;
         totalItems: bigint;
@@ -79,13 +83,14 @@ export async function GET(request: NextRequest) {
       `SELECT
         COUNT(*) AS "totalOrders",
         COALESCE(SUM(o.total - o."totalRefunded"), 0) AS "totalRevenue",
+        COALESCE(SUM(o.total - o."totalRefunded" - COALESCE(o."totalTax",0) - COALESCE(o."shippingTotal",0)), 0) AS "netRevenue",
         COUNT(DISTINCT o."customerId") AS "totalCustomers",
         CASE WHEN COUNT(*) > 0
           THEN ROUND((SUM(o.total - o."totalRefunded") / COUNT(*))::numeric, 2)
           ELSE 0 END AS "avgOrderValue",
         COALESCE(SUM(GREATEST(o."itemCount" - o."refQty", 0)), 0) AS "totalItems"
       FROM (
-        SELECT DISTINCT o.id, o.total, o."totalRefunded", o."customerId", o."itemCount",
+        SELECT DISTINCT o.id, o.total, o."totalRefunded", o."totalTax", o."shippingTotal", o."customerId", o."itemCount",
           (SELECT COALESCE(SUM(rl.quantity), 0) FROM "BtocRefundLine" rl WHERE rl."orderWooId" = o."wooId") AS "refQty"
         FROM "BtocOrder" o
         ${lineJoin}
@@ -97,6 +102,7 @@ export async function GET(request: NextRequest) {
     const overview = {
       totalOrders: Number(overviewRows[0]?.totalOrders ?? 0),
       totalRevenue: Number(overviewRows[0]?.totalRevenue ?? 0),
+      netRevenue: Number(overviewRows[0]?.netRevenue ?? 0),
       totalCustomers: Number(overviewRows[0]?.totalCustomers ?? 0),
       avgOrderValue: Number(overviewRows[0]?.avgOrderValue ?? 0),
       totalItems: Number(overviewRows[0]?.totalItems ?? 0),
@@ -107,13 +113,13 @@ export async function GET(request: NextRequest) {
       { month: string; revenue: number; orders: bigint }[]
     >(
       `SELECT
-        TO_CHAR(o."orderDate", 'YYYY-MM') AS month,
+        TO_CHAR(((o."orderDate" AT TIME ZONE 'UTC') AT TIME ZONE 'Europe/Paris'), 'YYYY-MM') AS month,
         COALESCE(SUM(o.total - o."totalRefunded"), 0) AS revenue,
         COUNT(DISTINCT o.id) AS orders
       FROM "BtocOrder" o
       ${lineJoin}
       ${revenueWhere} AND o."orderDate" >= NOW() - INTERVAL '12 months'
-      GROUP BY TO_CHAR(o."orderDate", 'YYYY-MM')
+      GROUP BY TO_CHAR(((o."orderDate" AT TIME ZONE 'UTC') AT TIME ZONE 'Europe/Paris'), 'YYYY-MM')
       ORDER BY month ASC`,
       ...orderParams
     );
@@ -126,12 +132,12 @@ export async function GET(request: NextRequest) {
 
     if (dateFrom) {
       topProductConditions.push(`o."orderDate" >= $${tpIdx}`);
-      topProductParams.push(new Date(dateFrom));
+      topProductParams.push(dateGte!);
       tpIdx++;
     }
     if (dateTo) {
-      topProductConditions.push(`o."orderDate" <= $${tpIdx}`);
-      topProductParams.push(new Date(dateTo));
+      topProductConditions.push(`o."orderDate" < $${tpIdx}`);
+      topProductParams.push(dateLt!);
       tpIdx++;
     }
     if (customerId) {
@@ -163,8 +169,8 @@ export async function GET(request: NextRequest) {
     const tpAllParams = [...topProductParams];
     const tpRefundConds: string[] = [REVENUE_FILTER];
     let tpr = topProductParams.length + 1;
-    if (dateFrom) { tpRefundConds.push(`o."orderDate" >= $${tpr++}`); tpAllParams.push(new Date(dateFrom)); }
-    if (dateTo) { tpRefundConds.push(`o."orderDate" <= $${tpr++}`); tpAllParams.push(new Date(dateTo)); }
+    if (dateFrom) { tpRefundConds.push(`o."orderDate" >= $${tpr++}`); tpAllParams.push(dateGte!); }
+    if (dateTo) { tpRefundConds.push(`o."orderDate" < $${tpr++}`); tpAllParams.push(dateLt!); }
     if (customerId) { tpRefundConds.push(`o."customerId" = $${tpr++}`); tpAllParams.push(customerId); }
     const tpRefundWhere = "WHERE " + tpRefundConds.join(" AND ");
 
@@ -230,11 +236,11 @@ export async function GET(request: NextRequest) {
     let geoIdx = 1;
     if (dateFrom) {
       geoConditions.push(`o."orderDate" >= $${geoIdx++}`);
-      geoParams.push(new Date(dateFrom));
+      geoParams.push(dateGte!);
     }
     if (dateTo) {
-      geoConditions.push(`o."orderDate" <= $${geoIdx++}`);
-      geoParams.push(new Date(dateTo));
+      geoConditions.push(`o."orderDate" < $${geoIdx++}`);
+      geoParams.push(dateLt!);
     }
     if (customerId) {
       geoConditions.push(`o."customerId" = $${geoIdx++}`);
@@ -327,13 +333,13 @@ export async function GET(request: NextRequest) {
       { date: string; revenue: number; orders: bigint }[]
     >(
       `SELECT
-        TO_CHAR(o."orderDate", 'YYYY-MM-DD') AS date,
+        TO_CHAR(((o."orderDate" AT TIME ZONE 'UTC') AT TIME ZONE 'Europe/Paris'), 'YYYY-MM-DD') AS date,
         COALESCE(SUM(o.total - o."totalRefunded"), 0) AS revenue,
         COUNT(DISTINCT o.id) AS orders
       FROM "BtocOrder" o
       ${lineJoin}
       ${revenueWhere}
-      GROUP BY TO_CHAR(o."orderDate", 'YYYY-MM-DD')
+      GROUP BY TO_CHAR(((o."orderDate" AT TIME ZONE 'UTC') AT TIME ZONE 'Europe/Paris'), 'YYYY-MM-DD')
       ORDER BY date ASC`,
       ...orderParams
     );

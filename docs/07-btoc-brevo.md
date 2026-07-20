@@ -39,6 +39,26 @@ sur cet endpoint). Le total réel est **recalculé côté GestLog** à partir de
 
 Donc : **ne pas se fier à `total_spent` de Woo** ; utiliser le total recalculé par GestLog.
 
+## Dates & montants (rapprochement WooCommerce) ⚠️
+
+- **Fuseau des périodes = Europe/Paris** (comme WooCommerce Analytics). `BtocOrder.orderDate`
+  est stocké en **UTC** ; les filtres et regroupements par jour/mois passent par
+  `src/lib/btoc-dates.ts` (`parisRangeToUtc`, borne haute **exclusive** = jour de fin INCLUS ;
+  `parisDayExpr` pour grouper en heure de Paris). Toutes les routes `/api/btoc/*` filtrées par
+  date l'utilisent (stats, exports, size-distribution).
+  - ⚠️ **Bug historique corrigé** : `orderDate <= new Date(dateTo)` bornait à **minuit UTC** du
+    jour de fin → **quasi toute la journée `dateTo` manquait** (+ décalage de 2 h). *Cas réel
+    17-18/07 : GestLog affichait 44 commandes / 3 987 € au lieu de 71 / 7 363 € ; après
+    correction, le nombre de commandes tombe pile sur les 71 de WooCommerce.* Ne JAMAIS
+    reborner en `new Date("YYYY-MM-DD")` (minuit UTC) : repasser par `parisRangeToUtc`.
+- **Deux montants affichés** (tuile CA de l'onglet Stats) :
+  - **CA TTC encaissé** = `SUM(total − totalRefunded)` — TVA et frais de port **inclus**
+    (montant réellement encaissé).
+  - **Net HT** = `SUM(total − totalRefunded − totalTax − shippingTotal)` — rapproche la
+    « Ventes nettes » WooCommerce. ⚠️ **Ne matche pas au centime** : la synchro n8n **n'envoie
+    pas le `subtotal`** (avant remise) ni le détail coupons que WooCommerce utilise pour son
+    net (`BtocOrder.subtotal` = 0 en base). Écart résiduel attendu (~quelques %).
+
 ## Quand tu travailles sur le BtoC
 - Vérifie d'abord par quel(s) workflow(s) n8n la donnée arrive (`/api/sync/btoc/*`).
 - Si tu touches au calcul VIP, garde cohérents : le recompute, le seuil (`BREVO_VIP_THRESHOLD`)
