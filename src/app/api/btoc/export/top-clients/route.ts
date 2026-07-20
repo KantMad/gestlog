@@ -26,6 +26,8 @@ export async function GET(request: NextRequest) {
 
     // Bornes en fuseau Paris (jour de fin inclus), cf. lib/btoc-dates.
     const { gte: from, lt: to } = parisRangeToUtc(dateFrom, dateTo);
+    const statuses = (params.get("statuses") || "").split(",").map((x) => x.trim()).filter(Boolean);
+    const statusCond = statuses.length > 0 ? "o.status = ANY($3)" : "o.status NOT IN ('cancelled', 'refunded', 'failed')";
 
     const rows = await prisma.$queryRawUnsafe<
       {
@@ -55,7 +57,7 @@ export async function GET(request: NextRequest) {
           o."orderDate"            AS order_date
         FROM "BtocOrder" o
         WHERE o."customerEmail" IS NOT NULL AND o."customerEmail" != ''
-          AND o.status NOT IN ('cancelled', 'refunded', 'failed')
+          AND ${statusCond}
         UNION ALL
         -- Historique importé
         SELECT
@@ -106,7 +108,8 @@ export async function GET(request: NextRequest) {
       WHERE a.orders_count > 2 OR (a.total_spent / NULLIF(a.orders_count, 0)) > 150
       ORDER BY a.total_spent DESC`,
       from,
-      to
+      to,
+      statuses.length > 0 ? statuses : null
     );
 
     // Nom / Prénom : on privilégie la fiche client / l'historique, sinon on

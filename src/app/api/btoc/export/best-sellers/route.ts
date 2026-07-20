@@ -22,6 +22,10 @@ export async function GET(request: NextRequest) {
     const dateTo = params.get("dateTo");
     // Bornes en fuseau Paris (jour de fin inclus), cf. lib/btoc-dates.
     const { gte: from, lt: to } = parisRangeToUtc(dateFrom, dateTo);
+    const statuses = (params.get("statuses") || "").split(",").map((x) => x.trim()).filter(Boolean);
+    // Vide → défaut « ventes » (exclut annulées/remboursées/échouées) ; sinon EXACTEMENT
+    // les statuts choisis. $3 porte la liste (NULL = pas de filtre explicite).
+    const statusCond = statuses.length > 0 ? "o.status = ANY($3)" : "o.status NOT IN ('cancelled', 'refunded', 'failed')";
 
     const rows = await prisma.$queryRawUnsafe<
       {
@@ -42,7 +46,7 @@ export async function GET(request: NextRequest) {
         FROM "BtocOrderLine" ol
         JOIN "BtocOrder" o ON o.id = ol."orderId"
         LEFT JOIN "BtocProduct" bp ON bp.sku = SPLIT_PART(ol.sku, '-', 1)
-        WHERE o.status NOT IN ('cancelled', 'refunded', 'failed')
+        WHERE ${statusCond}
           AND ol.sku IS NOT NULL AND ol.sku != ''
         UNION ALL
         -- Historique importé
@@ -67,7 +71,7 @@ export async function GET(request: NextRequest) {
         FROM "BtocRefundLine" rl
         JOIN "BtocOrder" o ON o."wooId" = rl."orderWooId"
         LEFT JOIN "BtocProduct" bp ON bp.sku = SPLIT_PART(rl.sku, '-', 1)
-        WHERE o.status NOT IN ('cancelled', 'refunded', 'failed')
+        WHERE ${statusCond}
           AND rl.sku IS NOT NULL AND rl.sku != ''
       )
       SELECT
@@ -82,7 +86,8 @@ export async function GET(request: NextRequest) {
       ORDER BY quantity DESC
       LIMIT ${limit}`,
       from,
-      to
+      to,
+      statuses.length > 0 ? statuses : null
     );
 
     return NextResponse.json({

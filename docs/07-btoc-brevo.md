@@ -51,6 +51,12 @@ Donc : **ne pas se fier à `total_spent` de Woo** ; utiliser le total recalculé
     17-18/07 : GestLog affichait 44 commandes / 3 987 € au lieu de 71 / 7 363 € ; après
     correction, le nombre de commandes tombe pile sur les 71 de WooCommerce.* Ne JAMAIS
     reborner en `new Date("YYYY-MM-DD")` (minuit UTC) : repasser par `parisRangeToUtc`.
+- **Filtre de statuts dans les exports** (onglet Export) : un multi-sélecteur **partagé**
+  (Ventes / Top Clients / Best Sellers) liste les statuts **réellement présents** en base avec
+  leur nombre (`/api/btoc/export/orders` renvoie `availableStatuses`), y compris les statuts
+  **personnalisés** WooCommerce (`lpc_transit`, `mp-warning`…). Défaut = **Ventes** (tous sauf
+  `cancelled`/`refunded`/`failed`). Param `statuses=` (CSV) → `o.status = ANY($n)` dans les 3
+  routes ; absent = comportement d'origine de chaque route.
 - **Deux montants affichés** (tuile CA de l'onglet Stats) :
   - **CA TTC encaissé** = `SUM(total − totalRefunded)` — TVA et frais de port **inclus**
     (montant réellement encaissé).

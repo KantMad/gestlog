@@ -122,11 +122,22 @@ export async function GET(request: NextRequest) {
     const color = params.get("color");
     const size = params.get("size");
     const customerName = params.get("customerName");
+    // Statuts à inclure (multi-sélection). Vide → tous (comportement d'origine de l'export).
+    const statuses = (params.get("statuses") || "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
 
     // ─── Filters ──────────────────────────────────────────
     const conditions: string[] = [];
     const queryParams: unknown[] = [];
     let idx = 1;
+
+    if (statuses.length > 0) {
+      conditions.push(`o.status = ANY($${idx})`);
+      queryParams.push(statuses);
+      idx++;
+    }
 
     const { gte: dateGte, lt: dateLt } = parisRangeToUtc(dateFrom, dateTo);
     if (dateGte) {
@@ -393,6 +404,10 @@ export async function GET(request: NextRequest) {
       `SELECT DISTINCT UPPER(size) AS size FROM "BtocOrderLine"
        WHERE size IS NOT NULL AND size != '' ORDER BY size`
     );
+    // Statuts réellement présents en base (+ nb de commandes) pour peupler le multi-sélecteur.
+    const availableStatuses = await prisma.$queryRawUnsafe<{ status: string; count: bigint }[]>(
+      `SELECT status, COUNT(*) AS count FROM "BtocOrder" GROUP BY status ORDER BY count DESC`
+    );
 
     return NextResponse.json({
       sizeColumns,
@@ -400,6 +415,7 @@ export async function GET(request: NextRequest) {
       total: pivotedRows.length,
       availableColors: availableColors.map((c) => c.color),
       availableSizes: availableSizes.map((s) => s.size),
+      availableStatuses: availableStatuses.map((s) => ({ status: s.status, count: Number(s.count) })),
     });
   } catch (e) {
     return handleApiError(e, "api/btoc/export/orders");

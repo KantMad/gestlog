@@ -154,6 +154,9 @@ export function BtocExportTab() {
   const [orderCustomer, setOrderCustomer] = useState("");
   const [orderColors, setOrderColors] = useState<string[]>([]);
   const [orderSizes, setOrderSizes] = useState<string[]>([]);
+  // Statuts de commande (multi-sélection) — partagé par Commandes / Top clients / Best-sellers.
+  const [availableStatuses, setAvailableStatuses] = useState<{ status: string; count: number }[]>([]);
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
 
   // Customer filters
   const [custSearch, setCustSearch] = useState("");
@@ -182,6 +185,12 @@ export function BtocExportTab() {
       .then((d) => {
         setOrderColors(d.availableColors || []);
         setOrderSizes(d.availableSizes || []);
+        const st: { status: string; count: number }[] = d.availableStatuses || [];
+        setAvailableStatuses(st);
+        // Défaut « ventes » : on exclut annulées / remboursées / échouées.
+        setSelectedStatuses(
+          st.map((x) => x.status).filter((x) => !["cancelled", "refunded", "failed"].includes(x))
+        );
       })
       .catch(() => {});
 
@@ -232,6 +241,10 @@ export function BtocExportTab() {
     }
   };
 
+  const statusesParam = () => selectedStatuses.join(",");
+  const toggleStatus = (st: string) =>
+    setSelectedStatuses((cur) => (cur.includes(st) ? cur.filter((x) => x !== st) : [...cur, st]));
+
   // ─── Export Orders (grouped by ref+color, sizes as cols) ──
   const handleExportOrders = async () => {
     setExportingOrders(true);
@@ -243,6 +256,7 @@ export function BtocExportTab() {
       if (orderColor) params.set("color", orderColor);
       if (orderSize) params.set("size", orderSize);
       if (orderCustomer) params.set("customerName", orderCustomer);
+      if (statusesParam()) params.set("statuses", statusesParam());
 
       const res = await fetch(`/api/btoc/export/orders?${params}`);
       const data = await res.json();
@@ -363,6 +377,7 @@ export function BtocExportTab() {
       const params = new URLSearchParams();
       if (tcDateFrom) params.set("dateFrom", tcDateFrom);
       if (tcDateTo) params.set("dateTo", tcDateTo);
+      if (statusesParam()) params.set("statuses", statusesParam());
       const res = await fetch(`/api/btoc/export/top-clients?${params}`);
       const data = await res.json();
       const customers: {
@@ -416,6 +431,7 @@ export function BtocExportTab() {
       params.set("limit", "10");
       if (bsDateFrom) params.set("dateFrom", bsDateFrom);
       if (bsDateTo) params.set("dateTo", bsDateTo);
+      if (statusesParam()) params.set("statuses", statusesParam());
       const res = await fetch(`/api/btoc/export/best-sellers?${params}`);
       const data = await res.json();
       const products: {
@@ -519,6 +535,79 @@ export function BtocExportTab() {
           )}
         </CardContent>
       </Card>
+
+      {/* ─── Statuts inclus (partagé Ventes / Top clients / Best-sellers) ─── */}
+      {availableStatuses.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between gap-3">
+              <CardTitle className="text-base">Statuts de commande inclus</CardTitle>
+              <div className="flex items-center gap-2 text-xs">
+                <button
+                  type="button"
+                  className="text-primary hover:underline"
+                  onClick={() => setSelectedStatuses(availableStatuses.map((x) => x.status))}
+                >
+                  Tout
+                </button>
+                <span className="text-muted-foreground">·</span>
+                <button
+                  type="button"
+                  className="text-primary hover:underline"
+                  onClick={() =>
+                    setSelectedStatuses(
+                      availableStatuses
+                        .map((x) => x.status)
+                        .filter((x) => !["cancelled", "refunded", "failed"].includes(x))
+                    )
+                  }
+                >
+                  Ventes (défaut)
+                </button>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              S&apos;applique aux exports <strong>Ventes</strong>, <strong>Top Clients</strong> et{" "}
+              <strong>Best Sellers</strong>. Les statuts personnalisés WooCommerce (ex.{" "}
+              <span className="font-mono">lpc_transit</span>) apparaissent aussi.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap gap-2">
+              {availableStatuses.map((s) => {
+                const on = selectedStatuses.includes(s.status);
+                return (
+                  <button
+                    key={s.status}
+                    type="button"
+                    onClick={() => toggleStatus(s.status)}
+                    className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs transition-colors ${
+                      on
+                        ? "border-primary bg-primary/10 text-foreground"
+                        : "border-input text-muted-foreground hover:bg-accent"
+                    }`}
+                  >
+                    <span
+                      className={`flex h-3.5 w-3.5 items-center justify-center rounded-sm border text-[9px] ${
+                        on ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/40"
+                      }`}
+                    >
+                      {on ? "✓" : ""}
+                    </span>
+                    <span className="font-mono">{s.status}</span>
+                    <span className="text-muted-foreground">({s.count})</span>
+                  </button>
+                );
+              })}
+            </div>
+            {selectedStatuses.length === 0 && (
+              <p className="mt-2 text-xs text-destructive">
+                Aucun statut sélectionné : les exports seront vides.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* ─── Export Ventes ────────────────────────────── */}
       <Card>
