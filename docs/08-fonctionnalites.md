@@ -70,6 +70,12 @@ sont gérés par écran (cf. [`05-authentification.md`](05-authentification.md))
   Corriger une réception (cf. éditeur) puis **Relancer** la simulation recompute la
   répartition à partir des nouvelles quantités reçues. ⚠️ Une session déjà **validée** est un
   instantané : il faut re-simuler puis re-valider pour la mettre à jour.
+- **Répartition — ordre d'affichage** : **boutiques ET produits par ordre ALPHABÉTIQUE**, dans
+  les deux vues (groupes *et* lignes à l'intérieur d'un groupe), ainsi que dans le **détail d'une
+  session validée**. Remplace l'ancien tri « par impact » (% de coupe décroissant) des groupes
+  boutique : on retrouve une boutique là où on l'attend plutôt qu'à une place qui change à chaque
+  simulation. Comparaison `localeCompare("fr", { sensitivity: "base", numeric: true })` →
+  insensible casse/accents et « 10 » après « 9 ».
 - **Répartition — vue « par produit »** : l'en-tête de chaque produit affiche **Cmd. clients**
   (demande), **Reçu fourn.** (réceptions), **Écart** (= **Reçu − Commande** : négatif = manque,
   positif = surplus) et **Alloué**. Les lignes boutique affichent l'écart **avec %**.

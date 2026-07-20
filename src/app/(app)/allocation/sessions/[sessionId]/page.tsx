@@ -146,12 +146,23 @@ export default function AllocationSessionDetailPage({
   const norm = (v: string) => v.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
   const filtered = useMemo(() => {
     const q = norm(search.trim());
-    if (!q) return lines;
-    return lines.filter(
-      (l) =>
-        norm(l.clientName).includes(q) ||
-        norm(l.productReference).includes(q) ||
-        norm(l.productColor).includes(q)
+    const rows = q
+      ? lines.filter(
+          (l) =>
+            norm(l.clientName).includes(q) ||
+            norm(l.productReference).includes(q) ||
+            norm(l.productColor).includes(q)
+        )
+      : [...lines];
+    // Boutique par ORDRE ALPHABÉTIQUE, puis référence et couleur (même ordre que l'écran
+    // de répartition) — la base renvoie les lignes dans l'ordre d'insertion.
+    const cmp = (a: string, b: string) =>
+      a.localeCompare(b, "fr", { sensitivity: "base", numeric: true });
+    return rows.sort(
+      (a, b) =>
+        cmp(a.clientName, b.clientName) ||
+        cmp(a.productReference, b.productReference) ||
+        cmp(a.productColor, b.productColor)
     );
   }, [lines, search]);
 

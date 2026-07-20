@@ -1690,29 +1690,25 @@ export default function AllocationPage() {
     }
     productGroups.get(line.productId)!.lines.push(line);
   }
-
-  // Helper: sort groups by most impacted first
-  const sortByImpact = <T,>(entries: [string, { lines: SimulationLine[] } & T][]) => {
-    entries.sort((a, b) => {
-      const aOrig = a[1].lines.reduce((s, l) => s + sumQuantities(l.original), 0);
-      const aAlloc = a[1].lines.reduce((s, l) => s + sumQuantities(l.allocated), 0);
-      const bOrig = b[1].lines.reduce((s, l) => s + sumQuantities(l.original), 0);
-      const bAlloc = b[1].lines.reduce((s, l) => s + sumQuantities(l.allocated), 0);
-      const aRed = aOrig > 0 ? (aOrig - aAlloc) / aOrig : 0;
-      const bRed = bOrig > 0 ? (bOrig - bAlloc) / bOrig : 0;
-      return bRed - aRed;
-    });
-    return entries;
-  };
+  // Dans la vue par produit, les lignes SONT des boutiques → ordre alphabétique.
+  for (const g of productGroups.values()) {
+    g.lines.sort((a, b) =>
+      a.clientName.localeCompare(b.clientName, "fr", { sensitivity: "base", numeric: true })
+    );
+  }
 
   // Filter + sort client groups
-  const filteredClientGroups = sortByImpact(
+  // Boutiques triées par ORDRE ALPHABÉTIQUE — et non plus par impact : on retrouve ainsi
+  // une boutique précise là où on l'attend dans la liste (même choix que pour les produits).
+  const filteredClientGroups = (
     (resultSearch && viewMode === "client"
       ? Array.from(clientGroups.entries()).filter(([, g]) =>
           g.clientName.toLowerCase().includes(resultSearch.toLowerCase())
         )
       : Array.from(clientGroups.entries())
     ) as [string, { clientName: string; lines: SimulationLine[] }][]
+  ).sort((a, b) =>
+    a[1].clientName.localeCompare(b[1].clientName, "fr", { sensitivity: "base", numeric: true })
   );
 
   // Filter + sort product groups
