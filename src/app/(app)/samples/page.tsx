@@ -212,24 +212,28 @@ export default function SamplesPage() {
                     <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
                       Réception
                     </label>
-                    <Select value={recId || "__none__"} onValueChange={(v: string | null) => v && setRecId(v === "__none__" ? "" : v)}>
-                      <SelectTrigger className="text-sm">
+                    {/* La valeur contrôlée doit TOUJOURS correspondre à un SelectItem rendu
+                        (sinon base-ui ne sélectionne rien) → item sentinelle « __none__ ». */}
+                    <Select
+                      value={recId || "__none__"}
+                      onValueChange={(v: string | null) => v && setRecId(v === "__none__" ? "" : v)}
+                    >
+                      <SelectTrigger className="w-full text-sm">
                         <span className="truncate text-sm">
                           {reception ? recLabel(reception) : "Choisir une réception..."}
                         </span>
                       </SelectTrigger>
                       <SelectContent>
-                        {receptions.length === 0 ? (
-                          <SelectItem value="__none__" disabled>
-                            Aucune réception pour cette saison
+                        <SelectItem value="__none__">
+                          {receptions.length === 0
+                            ? "Aucune réception pour cette saison"
+                            : "Choisir une réception..."}
+                        </SelectItem>
+                        {receptions.map((r) => (
+                          <SelectItem key={r.id} value={r.id}>
+                            {recLabel(r)}
                           </SelectItem>
-                        ) : (
-                          receptions.map((r) => (
-                            <SelectItem key={r.id} value={r.id}>
-                              {recLabel(r)}
-                            </SelectItem>
-                          ))
-                        )}
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -241,12 +245,13 @@ export default function SamplesPage() {
                       value={productId || "__none__"}
                       onValueChange={(v: string | null) => v && setProductId(v === "__none__" ? "" : v)}
                     >
-                      <SelectTrigger className="text-sm" disabled={!reception}>
+                      <SelectTrigger className="w-full text-sm" disabled={!reception}>
                         <span className="truncate text-sm">
                           {product ? `${product.reference} / ${product.color}` : "Choisir..."}
                         </span>
                       </SelectTrigger>
                       <SelectContent>
+                        <SelectItem value="__none__">Choisir...</SelectItem>
                         {(reception?.products || []).map((p) => (
                           <SelectItem key={p.productId} value={p.productId}>
                             {p.reference} / {p.color}
@@ -260,11 +265,15 @@ export default function SamplesPage() {
                     <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
                       Taille
                     </label>
-                    <Select value={size || "__none__"} onValueChange={(v: string | null) => v && setSize(v === "__none__" ? "" : v)}>
-                      <SelectTrigger className="text-sm" disabled={!product}>
+                    <Select
+                      value={size || "__none__"}
+                      onValueChange={(v: string | null) => v && setSize(v === "__none__" ? "" : v)}
+                    >
+                      <SelectTrigger className="w-full text-sm" disabled={!product}>
                         <span className="truncate text-sm">{size || "Choisir..."}</span>
                       </SelectTrigger>
                       <SelectContent>
+                        <SelectItem value="__none__">Choisir...</SelectItem>
                         {sizes.map(([s, n]) => (
                           <SelectItem key={s} value={s}>
                             {s} — {n} reçue{n > 1 ? "s" : ""}
