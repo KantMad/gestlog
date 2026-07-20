@@ -329,7 +329,8 @@ export const HELP_THEMES: HelpTheme[] = [
           {
             lines: [
               "L'écran **Échantillons** sert à mettre de côté des pièces que le **siège récupère pour contrôler la qualité**. Elles ne partiront jamais en boutique.",
-              "Tape une **référence** : toutes ses **couleurs** et toutes les **tailles reçues** s'affichent en tableau. Tu saisis les quantités dans les cases, puis tu cliques **Enregistrer** une seule fois.",
+              "Deux façons de travailler : choisis une **réception** pour voir **tous les produits** de cette livraison, ou tape une **référence** pour voir ses coloris (toutes réceptions confondues). Tu peux combiner les deux.",
+              "Dans les deux cas tu obtiens un **tableau couleurs × tailles** : tu saisis les quantités dans les cases, puis tu cliques **Enregistrer** une seule fois.",
               "Le petit nombre sous chaque case est la quantité **reçue** : tu ne peux pas prélever au-delà. Laisse vide pour ne rien prendre.",
               "Ces pièces sont aussitôt **retirées du disponible à la répartition** : elles ne seront donc jamais attribuées à une boutique.",
             ],

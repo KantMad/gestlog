@@ -16,6 +16,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+} from "@/components/ui/select";
 import { FlaskConical, Search, Trash2, Save, X } from "lucide-react";
 import { toast } from "sonner";
 import { cn, formatNumber, type SizeQuantities } from "@/lib/utils";
@@ -81,6 +87,9 @@ export default function SamplesPage() {
 
   // Grille : référence saisie + quantités en cours d'édition (clé cellule → quantité).
   const [refQuery, setRefQuery] = useState("");
+  // Réception de travail : on prélève sur une LIVRAISON physique → c'est le point de
+  // départ naturel. Vide = toutes réceptions (on cherche alors par référence).
+  const [recFilter, setRecFilter] = useState("");
   const [draft, setDraft] = useState<Record<string, string>>({});
 
   const load = useCallback(() => {
@@ -125,11 +134,15 @@ export default function SamplesPage() {
   // Lignes de la grille pour la référence saisie : TOUTES ses couleurs, toutes réceptions.
   const gridRows = useMemo<GridRow[]>(() => {
     const q = norm(refQuery.trim());
-    if (!q) return [];
+    // Une réception choisie affiche TOUS ses produits (la référence n'est alors qu'un
+    // filtre supplémentaire). Sans réception, il faut une référence pour ne pas afficher
+    // toute la saison d'un coup.
+    if (!q && !recFilter) return [];
     const rows: GridRow[] = [];
     for (const r of receptions) {
+      if (recFilter && r.id !== recFilter) continue;
       for (const p of r.products) {
-        if (!norm(p.reference).includes(q)) continue;
+        if (q && !norm(p.reference).includes(q)) continue;
         rows.push({
           receptionId: r.id,
           supplierName: r.supplierName,
@@ -147,7 +160,7 @@ export default function SamplesPage() {
         a.reference.localeCompare(b.reference, "fr", { numeric: true }) ||
         a.color.localeCompare(b.color, "fr", { numeric: true })
     );
-  }, [receptions, refQuery]);
+  }, [receptions, refQuery, recFilter]);
 
   // Colonnes = union des tailles reçues sur les lignes affichées.
   const gridSizes = useMemo(() => {
@@ -241,6 +254,9 @@ export default function SamplesPage() {
     );
   }, [samples, search]);
 
+  const recLabel = (r: ReceptionEntry) =>
+    `${r.supplierName} — cmd ${r.orderNumber} (${new Date(r.receptionDate).toLocaleDateString("fr-FR")})`;
+
   const totalPieces = samples.reduce((s, x) => s + x.quantity, 0);
   const draftPieces = changed.reduce((s, c) => s + c.qty, 0);
 
@@ -276,9 +292,36 @@ export default function SamplesPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex flex-wrap items-end gap-3">
+                  <div className="min-w-[260px] flex-1 max-w-sm">
+                    <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
+                      Réception
+                    </label>
+                    <Select
+                      value={recFilter || "__all__"}
+                      onValueChange={(v: string | null) =>
+                        v && setRecFilter(v === "__all__" ? "" : v)
+                      }
+                    >
+                      <SelectTrigger className="w-full text-sm">
+                        <span className="truncate text-sm">
+                          {recFilter
+                            ? recLabel(receptions.find((r) => r.id === recFilter)!)
+                            : "Toutes les réceptions"}
+                        </span>
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__all__">Toutes les réceptions</SelectItem>
+                        {receptions.map((r) => (
+                          <SelectItem key={r.id} value={r.id}>
+                            {recLabel(r)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                   <div className="relative min-w-[260px] flex-1 max-w-sm">
                     <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
-                      Référence
+                      Référence {recFilter && <span className="font-normal">(facultatif)</span>}
                     </label>
                     <Search className="absolute left-2.5 top-[34px] h-4 w-4 text-muted-foreground" />
                     <Input
@@ -294,8 +337,16 @@ export default function SamplesPage() {
                       ))}
                     </datalist>
                   </div>
-                  {refQuery && (
-                    <Button variant="ghost" size="sm" onClick={() => setRefQuery("")} className="gap-1.5">
+                  {(refQuery || recFilter) && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setRefQuery("");
+                        setRecFilter("");
+                      }}
+                      className="gap-1.5"
+                    >
                       <X className="h-4 w-4" />
                       Effacer
                     </Button>
@@ -313,14 +364,16 @@ export default function SamplesPage() {
                   </div>
                 </div>
 
-                {!refQuery ? (
+                {!refQuery && !recFilter ? (
                   <p className="py-8 text-center text-sm text-muted-foreground">
-                    Saisis une référence pour afficher sa grille ({allRefs.length} référence(s)
-                    reçue(s) cette saison).
+                    Choisis une <strong>réception</strong> pour voir tous ses produits, ou tape une{" "}
+                    <strong>référence</strong> ({allRefs.length} référence(s) reçue(s) cette saison).
                   </p>
                 ) : gridRows.length === 0 ? (
                   <p className="py-8 text-center text-sm text-muted-foreground">
-                    Aucune référence reçue ne correspond à «&nbsp;{refQuery}&nbsp;».
+                    {refQuery
+                      ? `Aucun produit reçu ne correspond à « ${refQuery} »${recFilter ? " dans cette réception" : ""}.`
+                      : "Cette réception ne contient aucun produit."}
                   </p>
                 ) : (
                   <div className="overflow-x-auto rounded-md border">

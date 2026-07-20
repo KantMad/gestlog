@@ -81,6 +81,10 @@ sont gérés par écran (cf. [`05-authentification.md`](05-authentification.md))
   - **Rattachés à une réception précise** (traçabilité + cascade si la réception est
     supprimée/réimportée). On ne peut prélever **que du réellement reçu** : l'API refuse une
     quantité > reçu sur cette taille, et l'écran ne propose que les tailles reçues.
+  - **Deux points d'entrée** : choisir une **réception** (on prélève sur une livraison
+    physique → point de départ naturel) affiche **tous ses produits** ; taper une **référence**
+    affiche ses coloris **toutes réceptions confondues**. Les deux se combinent (référence =
+    filtre à l'intérieur d'une réception).
   - **Saisie EN GRILLE** (`POST /api/samples/bulk`) : on tape une **référence** → toutes ses
     **couleurs × tailles reçues** s'affichent en tableau, une case par taille (avec la quantité
     reçue en dessous comme plafond), et **un seul enregistrement** pour toute la grille. Le
