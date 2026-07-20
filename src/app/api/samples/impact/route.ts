@@ -7,9 +7,11 @@ import { parseSizeQuantities } from "@/lib/utils";
 // POST — AVANT d'enregistrer une grille de prélèvements, dit lesquels empiètent sur une
 // répartition DÉJÀ VALIDÉE, et chez quelles boutiques les pièces se trouvent.
 //
-// Règle : pour un (produit, taille), reçu R, alloué A (dernière session validée) et
-// prélèvements totaux S — il faut retirer `S + A − R` pièces des boutiques dès que
-// `S + A > R`. L'utilisateur choisit ensuite CHEZ QUI (cf. /api/samples/bulk).
+// Règle : pour un (produit, taille), reçu R, alloué A et prélèvements totaux S — il faut
+// retirer `S + A − R` pièces des boutiques dès que `S + A > R`. L'utilisateur choisit
+// ensuite CHEZ QUI (cf. /api/samples/bulk).
+// A est lu dans la session validée la plus récente CONTENANT CE PRODUIT (pas la dernière
+// de la saison : les sessions couvrent des lots/fournisseurs différents).
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -28,27 +30,42 @@ export async function POST(request: NextRequest) {
     const seasonId = receptions[0]?.supplierOrder.seasonId;
     if (!seasonId) return NextResponse.json({ conflicts: [], session: null });
 
-    // Dernière répartition VALIDÉE de la saison : c'est elle qui fait foi.
-    const session = await prisma.allocationSession.findFirst({
-      where: { seasonId, status: "VALIDATED" },
-      orderBy: { sessionDate: "desc" },
+    const productIds = [...new Set(items.map((i) => i.productId))];
+
+    // ⚠️ PAS « la dernière session de la saison » : les sessions couvrent des périmètres
+    // différents (une par fournisseur/lot). Un produit peut être réparti dans une session
+    // ANTÉRIEURE → la chercher sur la seule dernière session manquait le conflit et laissait
+    // prélever des pièces déjà attribuées. On retient, POUR CHAQUE PRODUIT, la session
+    // validée la plus récente qui le contient.
+    const allLines = await prisma.allocationLine.findMany({
+      where: {
+        productId: { in: productIds },
+        allocationSession: { seasonId, status: "VALIDATED" },
+      },
       select: {
         id: true,
-        sessionDate: true,
-        lines: {
-          select: {
-            id: true,
-            clientId: true,
-            productId: true,
-            allocatedBySize: true,
-            product: { select: { reference: true, color: true, colorLabel: true } },
-          },
-        },
+        clientId: true,
+        productId: true,
+        allocatedBySize: true,
+        product: { select: { reference: true, color: true, colorLabel: true } },
+        allocationSession: { select: { id: true, sessionDate: true } },
       },
+      orderBy: { allocationSession: { sessionDate: "desc" } },
     });
-    if (!session) return NextResponse.json({ conflicts: [], session: null });
+    if (allLines.length === 0) return NextResponse.json({ conflicts: [], session: null });
 
-    const productIds = [...new Set(items.map((i) => i.productId))];
+    // Session retenue par produit = celle de sa ligne la plus récente (tri desc ci-dessus).
+    const sessionByProduct = new Map<string, { id: string; sessionDate: Date }>();
+    for (const l of allLines) {
+      if (!sessionByProduct.has(l.productId)) sessionByProduct.set(l.productId, l.allocationSession);
+    }
+    const linesByProduct = new Map<string, typeof allLines>();
+    for (const l of allLines) {
+      if (l.allocationSession.id !== sessionByProduct.get(l.productId)?.id) continue;
+      const arr = linesByProduct.get(l.productId) || [];
+      arr.push(l);
+      linesByProduct.set(l.productId, arr);
+    }
 
     // Reçu TOTAL par produit/taille sur la saison (un produit peut venir de 2 réceptions).
     const recLines = await prisma.receptionLine.findMany({
@@ -82,7 +99,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Clients (pour afficher des noms lisibles).
-    const clientIds = [...new Set(session.lines.map((l) => l.clientId).filter(Boolean))] as string[];
+    const clientIds = [...new Set(allLines.map((l) => l.clientId).filter(Boolean))] as string[];
     const clients = await prisma.client.findMany({
       where: { id: { in: clientIds } },
       select: { id: true, name: true },
@@ -95,7 +112,7 @@ export async function POST(request: NextRequest) {
       for (const size of sizes) {
         const R = received[productId]?.[size] || 0;
         const S = samplesTotal[productId]?.[size] || 0;
-        const rows = session.lines.filter((l) => l.productId === productId);
+        const rows = linesByProduct.get(productId) || [];
         const A = rows.reduce((s, l) => s + (parseSizeQuantities(l.allocatedBySize)[size] || 0), 0);
         const needed = S + A - R;
         if (needed <= 0) continue;
@@ -109,11 +126,14 @@ export async function POST(request: NextRequest) {
           .filter((a) => a.allocated > 0)
           .sort((a, b) => b.allocated - a.allocated);
         const p = rows[0]?.product;
+        const sess = sessionByProduct.get(productId);
         conflicts.push({
           productId,
           reference: p?.reference || "",
           color: p?.color || "",
           colorLabel: p?.colorLabel || null,
+          sessionId: sess?.id || null,
+          sessionDate: sess?.sessionDate || null,
           size,
           received: R,
           samples: S,
@@ -124,10 +144,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({
-      session: { id: session.id, sessionDate: session.sessionDate },
-      conflicts,
-    });
+    // Plus de « session » unique : chaque conflit porte la sienne (cf. sessionId/sessionDate).
+    return NextResponse.json({ conflicts });
   } catch (e) {
     return handleApiError(e, "api/samples/impact");
   }

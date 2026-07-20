@@ -108,7 +108,12 @@ sont gérés par écran (cf. [`05-authentification.md`](05-authentification.md))
     concernées avec leurs quantités et **l'utilisateur choisit chez qui reprendre** (pré-rempli
     en commençant par les mieux servies) ; **rien n'est enregistré tant qu'il n'a pas
     confirmé**, et le total repris doit correspondre exactement au besoin.
-    - Seule la **dernière session VALIDÉE** de la saison est concernée.
+    - ⚠️ **Session retenue = la plus récente CONTENANT CE PRODUIT**, et non « la dernière de
+      la saison ». Les sessions couvrent des **périmètres différents** (une par lot/fournisseur) :
+      *cas réel AH26* — les sessions du 18/07 couvrent 45 produits `THR*`, celles du 17/07 les
+      61 `CCAH26_*`. En ne regardant que la dernière, les `CCAH26_*` étaient annoncés « aucune
+      répartition » **et leurs conflits n'étaient pas détectés** (on prélevait des pièces déjà
+      attribuées, sans alerte). Vaut pour `/impact` **et** `/allocations`.
     - `/bulk` applique les retraits : `allocatedBySize` mis à jour, `reducedBySize`,
       `reductionReason` et `status` **recalculés**, et une **trace** est ajoutée aux `notes` de
       la session (un instantané validé ne doit jamais être modifié silencieusement).

@@ -15,17 +15,28 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "seasonId et productId requis" }, { status: 400 });
     }
 
-    const session = await prisma.allocationSession.findFirst({
-      where: { seasonId, status: "VALIDATED" },
-      orderBy: { sessionDate: "desc" },
-      select: { id: true, sessionDate: true },
+    // ⚠️ PAS « la dernière session de la saison » : les sessions couvrent des périmètres
+    // différents (une par fournisseur/lot). Un produit peut être réparti dans une session
+    // ANTÉRIEURE et absent de la dernière → on prenait alors « aucune répartition » à tort.
+    // On cherche donc la session validée la plus récente QUI CONTIENT CE PRODUIT.
+    const candidates = await prisma.allocationLine.findMany({
+      where: {
+        productId,
+        allocationSession: { seasonId, status: "VALIDATED" },
+      },
+      select: {
+        id: true,
+        clientId: true,
+        allocatedBySize: true,
+        originalBySize: true,
+        allocationSession: { select: { id: true, sessionDate: true } },
+      },
+      orderBy: { allocationSession: { sessionDate: "desc" } },
     });
-    if (!session) return NextResponse.json({ session: null, rows: [] });
+    if (candidates.length === 0) return NextResponse.json({ session: null, rows: [] });
 
-    const lines = await prisma.allocationLine.findMany({
-      where: { allocationSessionId: session.id, productId },
-      select: { id: true, clientId: true, allocatedBySize: true, originalBySize: true },
-    });
+    const session = candidates[0].allocationSession;
+    const lines = candidates.filter((l) => l.allocationSession.id === session.id);
     const clientIds = [...new Set(lines.map((l) => l.clientId).filter(Boolean))] as string[];
     const clients = await prisma.client.findMany({
       where: { id: { in: clientIds } },
