@@ -29,6 +29,7 @@ import {
   LifeBuoy,
   ScanSearch,
   PackageCheck,
+  FlaskConical,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
@@ -43,6 +44,7 @@ const NAV_ITEMS = [
   { href: "/comparison", label: "Comparaison", icon: GitCompareArrows },
   { href: "/reassort", label: "Commandes client", icon: ClipboardList },
   { href: "/allocation", label: "Répartition", icon: Calculator },
+  { href: "/samples", label: "Échantillons", icon: FlaskConical },
   { href: "/deliveries", label: "Préparation", icon: RefreshCw },
   { href: "/depot", label: "Vue dépôt", icon: Warehouse },
   { href: "/shipments", label: "Livraisons", icon: Truck },

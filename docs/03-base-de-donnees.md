@@ -54,6 +54,10 @@ colonne.
 - **`ClientSeason`** — paramétrage d'un client **pour une saison** (rang, seuils, rotation).
 
 ### Fournisseurs, commandes fournisseur, réceptions
+- **`ShipmentSample`** — pièces **prélevées sur une réception** pour le contrôle qualité du
+  siège (« shipment sample »). Clé `(supplierReceptionId, productId, size)` + `quantity`.
+  Elles ne sont **jamais livrées** : retirées du **disponible** à la répartition, sans
+  modifier la réception (fait physique). Cascade sur la réception. Cf. `08`.
 - **`Supplier`** — fournisseur.
 - **`SupplierOrder`** / **`SupplierOrderLine`** — commandes fournisseur et lignes.
 - **`SupplierReception`** / **`ReceptionLine`** — réceptions de marchandise et lignes.

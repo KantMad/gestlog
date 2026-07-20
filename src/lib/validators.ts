@@ -79,6 +79,16 @@ export const allocationSimulateSchema = z.object({
     .optional(),
 });
 
+// Prélèvement « shipment sample » : pièces retirées du disponible à la répartition.
+// quantity = 0 → suppression du prélèvement (les pièces redeviennent disponibles).
+export const createSampleSchema = z.object({
+  supplierReceptionId: z.string().min(1),
+  productId: z.string().min(1),
+  size: z.string().min(1).max(10),
+  quantity: z.number().int().min(0).max(100000),
+  notes: z.string().max(500).optional(),
+});
+
 export const allocationAdjustSchema = z.object({
   lineId: z.string().min(1),
   newAllocatedBySize: z.record(z.string(), z.number().int().min(0)),

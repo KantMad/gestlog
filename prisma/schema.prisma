@@ -100,6 +100,7 @@ model Product {
   stockEntries       StockEntry[]
   allocationLines    AllocationLine[]
   deliveryLines      DeliveryLine[]
+  shipmentSamples    ShipmentSample[]
 
   @@unique([reference, color])
   @@index([reference])
@@ -227,6 +228,7 @@ model SupplierReception {
   supplierOrder SupplierOrder @relation(fields: [supplierOrderId], references: [id], onDelete: Cascade)
   supplier      Supplier      @relation(fields: [supplierId], references: [id], onDelete: Cascade)
   lines         ReceptionLine[]
+  samples       ShipmentSample[]
 
   @@index([supplierOrderId])
   @@index([importLogId])
@@ -242,6 +244,31 @@ model ReceptionLine {
 
   supplierReception SupplierReception @relation(fields: [supplierReceptionId], references: [id], onDelete: Cascade)
   product           Product           @relation(fields: [productId], references: [id], onDelete: Cascade)
+}
+
+// Pièces PRÉLEVÉES sur une réception pour le contrôle qualité du siège (« shipment
+// samples »). Elles ne seront JAMAIS livrées : elles sont retirées du DISPONIBLE à la
+// répartition. La réception, elle, reste inchangée (c'est un fait physique : ce que le
+// fournisseur a livré) → la comparaison commande/réception n'est pas faussée.
+// La saison vient de la réception (supplierOrder.seasonId).
+model ShipmentSample {
+  id                  String   @id @default(cuid())
+  supplierReceptionId String
+  productId           String
+  size                String
+  quantity            Int
+  notes               String?
+  createdBy           String? // nom de l'utilisateur ayant prélevé (audit)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  supplierReception SupplierReception @relation(fields: [supplierReceptionId], references: [id], onDelete: Cascade)
+  product           Product           @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  // Un seul prélèvement par (réception, produit, taille) — on cumule via la quantité.
+  @@unique([supplierReceptionId, productId, size])
+  @@index([supplierReceptionId])
+  @@index([productId])
 }
 
 model Catalog {

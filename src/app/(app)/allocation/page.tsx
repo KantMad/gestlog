@@ -447,6 +447,7 @@ function ProductGroup({
   color,
   lines,
   received,
+  sampled,
   remainingByProduct,
   onLineChange,
   onDistributeSurplus,
@@ -455,6 +456,8 @@ function ProductGroup({
   color: string;
   lines: SimulationLine[];
   received?: SizeQuantities;
+  /** Pièces mises de côté (échantillons contrôle qualité) → retirées du disponible. */
+  sampled?: SizeQuantities;
   /** Reliquat reçu non alloué par produit/taille → plafond de saisie manuelle. */
   remainingByProduct: Record<string, Record<string, number>>;
   onLineChange: (lineKey: string, size: string, value: number) => void;
@@ -471,6 +474,8 @@ function ProductGroup({
   // même convention de signe que la colonne Écart des lignes boutique.
   const totalReceived = received ? sumQuantities(received) : 0;
   const demandGap = totalReceived - totalOriginal;
+  // Échantillons prélevés : jamais livrés → expliquent qu'on alloue moins que le reçu.
+  const totalSampled = sampled ? sumQuantities(sampled) : 0;
   // Surplus RÉPARTISSABLE = reçu − déjà alloué, uniquement sur les tailles commandées
   // (une taille reçue que personne n'a commandée n'est pas auto-répartissable).
   const allocBySize: Record<string, number> = {};
@@ -528,6 +533,14 @@ function ProductGroup({
             >
               {formatNumber(totalReceived)}
             </span>
+            {totalSampled > 0 && (
+              <span
+                className="block text-[10px] text-amber-600"
+                title="Pièces mises de côté pour le contrôle qualité — retirées du disponible à la répartition"
+              >
+                dont {formatNumber(totalSampled)} éch.
+              </span>
+            )}
           </div>
           <div className="text-right">
             <span className="text-xs text-muted-foreground">Écart</span>
@@ -991,6 +1004,7 @@ export default function AllocationPage() {
   const [eansByProduct, setEansByProduct] = useState<Record<string, Record<string, string>>>({});
   const [rankingByClient, setRankingByClient] = useState<Record<string, number>>({});
   const [excludedSizesByClient, setExcludedSizesByClient] = useState<Record<string, string[]>>({});
+  const [sampledByProduct, setSampledByProduct] = useState<Record<string, SizeQuantities>>({});
   // Périmètre de validation : on simule sur TOUTE la demande (sinon le stock reçu serait
   // réparti sur un sous-ensemble et les coupes seraient fausses), mais on ne valide que les
   // fournisseurs / catalogues choisis. Vide = tout.
@@ -1075,6 +1089,7 @@ export default function AllocationPage() {
       setEansByProduct(s.eansByProduct || {});
       setRankingByClient(s.rankingByClient || {});
       setExcludedSizesByClient(s.excludedSizesByClient || {});
+      setSampledByProduct(s.sampledByProduct || {});
       setSupplierIdsByProduct(s.supplierIdsByProduct || {});
       setCatalogIdByOrder(s.catalogIdByOrder || {});
       setManualEdits(s.manualEdits || 0);
@@ -1107,6 +1122,7 @@ export default function AllocationPage() {
     setEansByProduct({});
     setRankingByClient({});
     setExcludedSizesByClient({});
+    setSampledByProduct({});
     setSupplierIdsByProduct({});
     setCatalogIdByOrder({});
     setValidateSuppliers([]);
@@ -1141,6 +1157,7 @@ export default function AllocationPage() {
           eansByProduct,
           rankingByClient,
           excludedSizesByClient,
+          sampledByProduct,
           supplierIdsByProduct,
           catalogIdByOrder,
           manualEdits,
@@ -1172,6 +1189,7 @@ export default function AllocationPage() {
     eansByProduct,
     rankingByClient,
     excludedSizesByClient,
+    sampledByProduct,
     supplierIdsByProduct,
     catalogIdByOrder,
     manualEdits,
@@ -1298,6 +1316,7 @@ export default function AllocationPage() {
       setCatalogIdByOrder(data.catalogIdByOrder || {});
       setRankingByClient(data.rankingByClient || {});
       setExcludedSizesByClient(data.excludedSizesByClient || {});
+      setSampledByProduct(data.sampledByProduct || {});
       toast.success(imported ? "Répartition reprise du fichier" : "Simulation terminée", {
         description: imported
           ? `${data.lines?.length || 0} ligne(s) — l'alloué vient du fichier, aucun recalcul`
@@ -2358,6 +2377,7 @@ export default function AllocationPage() {
                           color={group.color}
                           lines={group.lines}
                           received={receivedByProduct[productId]}
+                          sampled={sampledByProduct[productId]}
                           onLineChange={handleLineChange}
                           onDistributeSurplus={() => distributeSurplus(productId)}
                         />

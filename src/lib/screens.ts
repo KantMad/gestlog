@@ -8,6 +8,7 @@ export const APP_SCREENS: { key: string; label: string }[] = [
   { key: "/comparison", label: "Comparaison" },
   { key: "/reassort", label: "Commandes client" },
   { key: "/allocation", label: "Répartition" },
+  { key: "/samples", label: "Échantillons" },
   { key: "/deliveries", label: "Préparation" },
   { key: "/depot", label: "Vue dépôt" },
   { key: "/shipments", label: "Livraisons" },
@@ -50,6 +51,9 @@ export function parseScreenAccess(raw: unknown): string[] | null {
 // « Statistiques » recevait 403 sur ses propres données et la page plantait.
 const API_SCREEN_MAP: [string, string[]][] = [
   ["/api/allocation", ["/allocation"]],
+  // Les échantillons retirent du disponible à la répartition → accessibles aussi à qui
+  // gère la répartition, sans devoir cocher deux écrans.
+  ["/api/samples", ["/samples", "/allocation"]],
   ["/api/btoc", ["/btoc"]],
   ["/api/controle-commandes", ["/controle-commandes"]],
   ["/api/comparison", ["/comparison"]],

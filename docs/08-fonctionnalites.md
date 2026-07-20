@@ -11,6 +11,7 @@ sont gérés par écran (cf. [`05-authentification.md`](05-authentification.md))
 | **`/product-info`** | Référentiel produit : EANs, types de tailles, références fournisseurs. | `/api/product-info/{eans,size-types,supplier-refs}` |
 | **`/comparison`** | Comparaison (commandé/livré/stock selon contexte). | `/api/comparison` |
 | **`/reassort`** | **Commandes client** (réassort) : lignes, annulation. Saison **Réassort** dédiée. | `/api/reassort`, `/api/reassort/{lines,cancel}` |
+| **`/samples`** | **Échantillons** : pièces prélevées sur une réception pour le contrôle qualité (retirées du disponible à la répartition). | `/api/samples` |
 | **`/allocation`** | **Répartition** : sessions de simulation → validation (qui reçoit quoi). Détail d'une session validée : `/allocation/sessions/[sessionId]`. | `/api/allocation/{simulate,validate,sessions}` |
 | **`/deliveries`** | **Préparation** des livraisons : génération, résolution EAN, déclenche l'envoi caisse à l'expédition. | `/api/deliveries`, `/api/deliveries/[id]`, `/api/deliveries/generate` |
 | **`/depot`** | **Vue dépôt** : BL/Factures importés (FTP), récap des livraisons. | `/api/depot/deliveries` |
@@ -70,6 +71,20 @@ sont gérés par écran (cf. [`05-authentification.md`](05-authentification.md))
   Corriger une réception (cf. éditeur) puis **Relancer** la simulation recompute la
   répartition à partir des nouvelles quantités reçues. ⚠️ Une session déjà **validée** est un
   instantané : il faut re-simuler puis re-valider pour la mettre à jour.
+- **Échantillons « shipment sample » (`/samples`)** : pièces mises de côté pour le contrôle
+  qualité du siège. **Jamais livrées** → **retirées du DISPONIBLE** à la répartition
+  (`simulate` soustrait `sampledByProduct` de `available`, par produit ET par taille).
+  - **La réception n'est JAMAIS modifiée** : elle reste le fait physique (ce que le
+    fournisseur a livré) → la Comparaison commande/réception et « Reçu fourn. » ne sont pas
+    faussés. L'écran de répartition affiche « dont N éch. » sous le reçu pour expliquer
+    l'écart entre reçu et allouable.
+  - **Rattachés à une réception précise** (traçabilité + cascade si la réception est
+    supprimée/réimportée). On ne peut prélever **que du réellement reçu** : l'API refuse une
+    quantité > reçu sur cette taille, et l'écran ne propose que les tailles reçues.
+  - Un prélèvement retiré rend les pièces **immédiatement disponibles** (il faut relancer la
+    simulation). `quantity: 0` en POST = suppression.
+  - **Accès** : écran `/samples`, mais l'API accepte aussi le droit `/allocation` (celui qui
+    répartit doit voir ce qui est retiré du disponible).
 - **Répartition — ordre d'affichage** : **boutiques ET produits par ordre ALPHABÉTIQUE**, dans
   les deux vues (groupes *et* lignes à l'intérieur d'un groupe), ainsi que dans le **détail d'une
   session validée**. Remplace l'ancien tri « par impact » (% de coupe décroissant) des groupes

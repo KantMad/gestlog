@@ -109,9 +109,38 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Échantillons « shipment sample » : pièces prélevées sur ces réceptions pour le contrôle
+    // qualité du siège. Elles ne seront JAMAIS livrées → on les retire du DISPONIBLE, sans
+    // toucher au reçu (qui reste le fait physique affiché en « Reçu fourn. »).
+    const receptionIds = supplierOrders.flatMap((so) => so.receptions.map((r) => r.id));
+    const samples = receptionIds.length
+      ? await prisma.shipmentSample.findMany({
+          where: { supplierReceptionId: { in: receptionIds } },
+          select: { productId: true, size: true, quantity: true },
+        })
+      : [];
+    const sampledByProduct: Record<string, SizeQuantities> = {};
+    for (const s of samples) {
+      if (s.quantity <= 0) continue;
+      const m = (sampledByProduct[s.productId] ||= {});
+      m[s.size] = (m[s.size] || 0) + s.quantity;
+    }
+
     const available = new Map<string, SizeQuantities>();
     for (const [productId, qty] of receivedByProduct) {
-      available.set(productId, qty);
+      const taken = sampledByProduct[productId];
+      if (!taken) {
+        available.set(productId, qty);
+        continue;
+      }
+      // Jamais négatif : un prélèvement ne peut pas dépasser le reçu (garde-fou côté API),
+      // mais une réception corrigée À LA BAISSE après coup pourrait le rendre caduc.
+      const net: SizeQuantities = {};
+      for (const [size, n] of Object.entries(qty)) {
+        const left = n - (taken[size] || 0);
+        if (left > 0) net[size] = left;
+      }
+      available.set(productId, net);
     }
 
     // Build a set of product references to filter (if any)
@@ -352,6 +381,7 @@ export async function POST(request: NextRequest) {
       receivedByProduct: receivedOut,
       rankingByClient,
       excludedSizesByClient,
+      sampledByProduct,
       eansByProduct,
       supplierIdsByProduct,
       catalogIdByOrder,

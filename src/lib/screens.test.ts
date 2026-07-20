@@ -86,3 +86,24 @@ describe("screensForPath — une API peut servir plusieurs écrans", () => {
     ).toBe(false);
   });
 });
+
+describe("écran Échantillons", () => {
+  it("est accessible via son propre écran OU via la répartition", () => {
+    // Les prélèvements retirent du disponible à la répartition : qui gère la répartition
+    // doit pouvoir les consulter sans qu'on lui coche un second écran.
+    const screens = screensForPath("/api/samples")!;
+    expect(screens.some((s) => canAccessScreen("USER", ["/samples"], s))).toBe(true);
+    expect(screens.some((s) => canAccessScreen("USER", ["/allocation"], s))).toBe(true);
+  });
+
+  it("reste refusé sans aucun des deux", () => {
+    const screens = screensForPath("/api/samples")!;
+    expect(screens.some((s) => canAccessScreen("USER", ["/import"], s))).toBe(false);
+  });
+
+  it("la page /samples est bien un écran restreignable", () => {
+    expect(screensForPath("/samples")).toEqual(["/samples"]);
+    expect(canAccessScreen("USER", ["/samples"], "/samples")).toBe(true);
+    expect(canAccessScreen("USER", ["/import"], "/samples")).toBe(false);
+  });
+});

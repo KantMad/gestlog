@@ -311,6 +311,29 @@ export const HELP_THEMES: HelpTheme[] = [
         ],
       },
       {
+        id: "echantillons",
+        icon: "🧪",
+        title: "Mettre des pièces de côté (échantillons)",
+        keywords: "échantillon shipment sample contrôle qualité siège prélever retirer disponible",
+        sections: [
+          {
+            lines: [
+              "L'écran **Échantillons** sert à mettre de côté des pièces que le **siège récupère pour contrôler la qualité**. Elles ne partiront jamais en boutique.",
+              "Choisis la **réception**, le **produit**, la **taille** et la quantité. Tu ne peux prélever que des pièces **réellement reçues** — l'outil refuse d'aller au-delà.",
+              "Ces pièces sont aussitôt **retirées du disponible à la répartition** : elles ne seront donc jamais attribuées à une boutique.",
+            ],
+            tip: "La **réception n'est pas modifiée** : elle garde ce que le fournisseur a livré. C'est normal de voir « Reçu 117 » avec la mention « dont 2 éch. » — seules 115 pièces sont réparties. 👌",
+          },
+          {
+            h: "Changer d'avis",
+            lines: [
+              "La corbeille en bout de ligne **annule un prélèvement** : les pièces redeviennent disponibles.",
+              "Dans les deux cas (ajout ou retrait), pense à **relancer la simulation** de répartition pour que le changement soit pris en compte.",
+            ],
+          },
+        ],
+      },
+      {
         id: "surplus",
         icon: "➕",
         title: "Répartir le surplus (pièces livrées en plus)",
