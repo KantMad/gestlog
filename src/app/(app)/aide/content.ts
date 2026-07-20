@@ -329,7 +329,8 @@ export const HELP_THEMES: HelpTheme[] = [
           {
             lines: [
               "L'écran **Échantillons** sert à mettre de côté des pièces que le **siège récupère pour contrôler la qualité**. Elles ne partiront jamais en boutique.",
-              "Choisis la **réception**, le **produit**, la **taille** et la quantité. Tu ne peux prélever que des pièces **réellement reçues** — l'outil refuse d'aller au-delà.",
+              "Tape une **référence** : toutes ses **couleurs** et toutes les **tailles reçues** s'affichent en tableau. Tu saisis les quantités dans les cases, puis tu cliques **Enregistrer** une seule fois.",
+              "Le petit nombre sous chaque case est la quantité **reçue** : tu ne peux pas prélever au-delà. Laisse vide pour ne rien prendre.",
               "Ces pièces sont aussitôt **retirées du disponible à la répartition** : elles ne seront donc jamais attribuées à une boutique.",
             ],
             tip: "La **réception n'est pas modifiée** : elle garde ce que le fournisseur a livré. C'est normal de voir « Reçu 117 » avec la mention « dont 2 éch. » — seules 115 pièces sont réparties. 👌",

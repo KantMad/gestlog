@@ -16,15 +16,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-} from "@/components/ui/select";
-import { FlaskConical, Search, Trash2, Plus } from "lucide-react";
+import { FlaskConical, Search, Trash2, Save, X } from "lucide-react";
 import { toast } from "sonner";
-import { formatNumber, type SizeQuantities } from "@/lib/utils";
+import { cn, formatNumber, type SizeQuantities } from "@/lib/utils";
 
 interface ReceptionEntry {
   id: string;
@@ -53,6 +47,30 @@ interface SampleEntry {
   product: { id: string; reference: string; color: string; colorLabel: string | null };
 }
 
+/** Une ligne de la grille : un coloris d'une référence, dans une réception donnée. */
+interface GridRow {
+  receptionId: string;
+  supplierName: string;
+  orderNumber: string;
+  productId: string;
+  reference: string;
+  color: string;
+  colorLabel: string | null;
+  received: SizeQuantities;
+}
+
+// Ordre d'affichage des tailles : lettres dans l'ordre naturel, puis numériques croissantes.
+const SIZE_ORDER = ["TU", "XS", "S", "M", "L", "XL", "XXL", "2XL", "3XL", "4XL", "5XL", "6XL"];
+const sizeRank = (s: string) => {
+  const i = SIZE_ORDER.indexOf(s.toUpperCase());
+  if (i >= 0) return i;
+  const n = parseInt(s, 10);
+  return isNaN(n) ? 900 : 1000 + n;
+};
+
+const cellKey = (receptionId: string, productId: string, size: string) =>
+  `${receptionId}__${productId}__${size}`;
+
 export default function SamplesPage() {
   const { activeSeason } = useSeason();
   const [receptions, setReceptions] = useState<ReceptionEntry[]>([]);
@@ -61,12 +79,9 @@ export default function SamplesPage() {
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
 
-  // Formulaire de prélèvement
-  const [recId, setRecId] = useState("");
-  const [productId, setProductId] = useState("");
-  const [size, setSize] = useState("");
-  const [qty, setQty] = useState("1");
-  const [notes, setNotes] = useState("");
+  // Grille : référence saisie + quantités en cours d'édition (clé cellule → quantité).
+  const [refQuery, setRefQuery] = useState("");
+  const [draft, setDraft] = useState<Record<string, string>>({});
 
   const load = useCallback(() => {
     if (!activeSeason) {
@@ -89,52 +104,107 @@ export default function SamplesPage() {
     load();
   }, [load]);
 
-  // Réinitialise les niveaux inférieurs quand on change de niveau supérieur.
-  useEffect(() => {
-    setProductId("");
-    setSize("");
-  }, [recId]);
-  useEffect(() => {
-    setSize("");
-  }, [productId]);
+  const norm = (v: string) => v.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 
-  const reception = receptions.find((r) => r.id === recId);
-  const product = reception?.products.find((p) => p.productId === productId);
-  // Tailles proposées = celles RÉELLEMENT reçues (on ne prélève que du reçu).
-  const sizes = product ? Object.entries(product.received).filter(([, n]) => n > 0) : [];
-  const receivedForSize = size && product ? product.received[size] || 0 : 0;
-
-  const submit = async () => {
-    if (!recId || !productId || !size) return;
-    const n = parseInt(qty, 10);
-    if (isNaN(n) || n <= 0) {
-      toast.error("Quantité invalide");
-      return;
+  // Quantités DÉJÀ prélevées, par cellule.
+  const existing = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const s of samples) {
+      m[cellKey(s.supplierReceptionId, s.product.id, s.size)] = s.quantity;
     }
+    return m;
+  }, [samples]);
+
+  // Toutes les références reçues cette saison (pour l'aide à la saisie).
+  const allRefs = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of receptions) for (const p of r.products) set.add(p.reference);
+    return [...set].sort((a, b) => a.localeCompare(b, "fr", { numeric: true }));
+  }, [receptions]);
+
+  // Lignes de la grille pour la référence saisie : TOUTES ses couleurs, toutes réceptions.
+  const gridRows = useMemo<GridRow[]>(() => {
+    const q = norm(refQuery.trim());
+    if (!q) return [];
+    const rows: GridRow[] = [];
+    for (const r of receptions) {
+      for (const p of r.products) {
+        if (!norm(p.reference).includes(q)) continue;
+        rows.push({
+          receptionId: r.id,
+          supplierName: r.supplierName,
+          orderNumber: r.orderNumber,
+          productId: p.productId,
+          reference: p.reference,
+          color: p.color,
+          colorLabel: p.colorLabel,
+          received: p.received,
+        });
+      }
+    }
+    return rows.sort(
+      (a, b) =>
+        a.reference.localeCompare(b.reference, "fr", { numeric: true }) ||
+        a.color.localeCompare(b.color, "fr", { numeric: true })
+    );
+  }, [receptions, refQuery]);
+
+  // Colonnes = union des tailles reçues sur les lignes affichées.
+  const gridSizes = useMemo(() => {
+    const set = new Set<string>();
+    for (const row of gridRows) {
+      for (const [s, n] of Object.entries(row.received)) if (n > 0) set.add(s);
+    }
+    return [...set].sort((a, b) => sizeRank(a) - sizeRank(b));
+  }, [gridRows]);
+
+  // Valeur affichée d'une cellule : brouillon si touché, sinon prélèvement existant.
+  const cellValue = (k: string) => (k in draft ? draft[k] : existing[k] ? String(existing[k]) : "");
+
+  const setCell = (k: string, v: string) =>
+    setDraft((d) => ({ ...d, [k]: v.replace(/[^0-9]/g, "") }));
+
+  // Cellules réellement modifiées (on n'envoie que le delta).
+  const changed = useMemo(() => {
+    const out: { key: string; qty: number }[] = [];
+    for (const [k, v] of Object.entries(draft)) {
+      const n = v === "" ? 0 : parseInt(v, 10);
+      const before = existing[k] || 0;
+      if (!isNaN(n) && n !== before) out.push({ key: k, qty: n });
+    }
+    return out;
+  }, [draft, existing]);
+
+  const saveGrid = async () => {
+    if (changed.length === 0) return;
     setSaving(true);
     try {
-      const res = await fetch("/api/samples", {
+      const items = changed.map(({ key, qty }) => {
+        const [supplierReceptionId, productId, size] = key.split("__");
+        return { supplierReceptionId, productId, size, quantity: qty };
+      });
+      const res = await fetch("/api/samples/bulk", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          supplierReceptionId: recId,
-          productId,
-          size,
-          quantity: n,
-          ...(notes.trim() ? { notes: notes.trim() } : {}),
-        }),
+        body: JSON.stringify({ items }),
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || "Erreur");
-      toast.success(`${n} pièce(s) mise(s) de côté`, {
-        description: "Elles sont retirées du disponible à la répartition.",
+      const bits: string[] = [];
+      if (d.saved) bits.push(`${d.saved} ligne(s) enregistrée(s)`);
+      if (d.deleted) bits.push(`${d.deleted} retirée(s)`);
+      toast.success("Prélèvements enregistrés", {
+        description: `${bits.join(" · ")} — retirés du disponible à la répartition.`,
       });
-      setSize("");
-      setQty("1");
-      setNotes("");
+      if (d.errors?.length) {
+        toast.warning(`${d.errors.length} cellule(s) ignorée(s)`, { description: d.errors[0] });
+      }
+      setDraft({});
       load();
     } catch (e) {
-      toast.error("Prélèvement impossible", { description: String(e instanceof Error ? e.message : e) });
+      toast.error("Enregistrement impossible", {
+        description: String(e instanceof Error ? e.message : e),
+      });
     } finally {
       setSaving(false);
     }
@@ -153,7 +223,6 @@ export default function SamplesPage() {
     }
   };
 
-  const norm = (v: string) => v.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
   const filtered = useMemo(() => {
     const q = norm(search.trim());
     const rows = q
@@ -166,15 +235,14 @@ export default function SamplesPage() {
       : [...samples];
     return rows.sort(
       (a, b) =>
-        a.product.reference.localeCompare(b.product.reference, "fr", { sensitivity: "base", numeric: true }) ||
-        a.product.color.localeCompare(b.product.color, "fr", { sensitivity: "base", numeric: true }) ||
-        a.size.localeCompare(b.size, "fr", { numeric: true })
+        a.product.reference.localeCompare(b.product.reference, "fr", { numeric: true }) ||
+        a.product.color.localeCompare(b.product.color, "fr", { numeric: true }) ||
+        sizeRank(a.size) - sizeRank(b.size)
     );
   }, [samples, search]);
 
   const totalPieces = samples.reduce((s, x) => s + x.quantity, 0);
-  const recLabel = (r: ReceptionEntry) =>
-    `${r.supplierName} — cmd ${r.orderNumber} (${new Date(r.receptionDate).toLocaleDateString("fr-FR")})`;
+  const draftPieces = changed.reduce((s, c) => s + c.qty, 0);
 
   return (
     <div>
@@ -198,126 +266,134 @@ export default function SamplesPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-base">
-                  <Plus className="h-4 w-4" />
-                  Mettre des pièces de côté
+                  <FlaskConical className="h-4 w-4" />
+                  Saisie par référence
                 </CardTitle>
                 <p className="text-sm text-muted-foreground">
-                  Choisis la réception, le produit puis la taille. Tu ne peux prélever que des
-                  pièces réellement reçues.
+                  Tape une référence : toutes ses couleurs et toutes les tailles reçues
+                  s&apos;affichent. Saisis les quantités à prélever, puis enregistre en une fois.
                 </p>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                  <div className="lg:col-span-2">
+                <div className="flex flex-wrap items-end gap-3">
+                  <div className="relative min-w-[260px] flex-1 max-w-sm">
                     <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
-                      Réception
+                      Référence
                     </label>
-                    {/* La valeur contrôlée doit TOUJOURS correspondre à un SelectItem rendu
-                        (sinon base-ui ne sélectionne rien) → item sentinelle « __none__ ». */}
-                    <Select
-                      value={recId || "__none__"}
-                      onValueChange={(v: string | null) => v && setRecId(v === "__none__" ? "" : v)}
-                    >
-                      <SelectTrigger className="w-full text-sm">
-                        <span className="truncate text-sm">
-                          {reception ? recLabel(reception) : "Choisir une réception..."}
-                        </span>
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">
-                          {receptions.length === 0
-                            ? "Aucune réception pour cette saison"
-                            : "Choisir une réception..."}
-                        </SelectItem>
-                        {receptions.map((r) => (
-                          <SelectItem key={r.id} value={r.id}>
-                            {recLabel(r)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
-                      Produit
-                    </label>
-                    <Select
-                      value={productId || "__none__"}
-                      onValueChange={(v: string | null) => v && setProductId(v === "__none__" ? "" : v)}
-                    >
-                      <SelectTrigger className="w-full text-sm" disabled={!reception}>
-                        <span className="truncate text-sm">
-                          {product ? `${product.reference} / ${product.color}` : "Choisir..."}
-                        </span>
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">Choisir...</SelectItem>
-                        {(reception?.products || []).map((p) => (
-                          <SelectItem key={p.productId} value={p.productId}>
-                            {p.reference} / {p.color}
-                            {p.colorLabel ? ` — ${p.colorLabel}` : ""}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
-                      Taille
-                    </label>
-                    <Select
-                      value={size || "__none__"}
-                      onValueChange={(v: string | null) => v && setSize(v === "__none__" ? "" : v)}
-                    >
-                      <SelectTrigger className="w-full text-sm" disabled={!product}>
-                        <span className="truncate text-sm">{size || "Choisir..."}</span>
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">Choisir...</SelectItem>
-                        {sizes.map(([s, n]) => (
-                          <SelectItem key={s} value={s}>
-                            {s} — {n} reçue{n > 1 ? "s" : ""}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                  <div>
-                    <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
-                      Quantité {receivedForSize > 0 && `(max ${receivedForSize})`}
-                    </label>
+                    <Search className="absolute left-2.5 top-[34px] h-4 w-4 text-muted-foreground" />
                     <Input
-                      type="number"
-                      min={1}
-                      max={receivedForSize || undefined}
-                      value={qty}
-                      onChange={(e) => setQty(e.target.value)}
-                      className="h-9 text-sm"
-                      disabled={!size}
+                      list="samples-refs"
+                      value={refQuery}
+                      onChange={(e) => setRefQuery(e.target.value.toUpperCase())}
+                      placeholder="ex : AMPOML_C012"
+                      className="pl-9 h-9 text-sm"
                     />
+                    <datalist id="samples-refs">
+                      {allRefs.map((r) => (
+                        <option key={r} value={r} />
+                      ))}
+                    </datalist>
                   </div>
-                  <div className="lg:col-span-2">
-                    <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
-                      Motif (facultatif)
-                    </label>
-                    <Input
-                      value={notes}
-                      onChange={(e) => setNotes(e.target.value)}
-                      placeholder="ex : contrôle qualité coutures"
-                      className="h-9 text-sm"
-                      disabled={!size}
-                    />
-                  </div>
-                  <div className="flex items-end">
-                    <Button onClick={submit} disabled={!size || saving} className="gap-2 w-full">
-                      <FlaskConical className="h-4 w-4" />
-                      {saving ? "Enregistrement..." : "Mettre de côté"}
+                  {refQuery && (
+                    <Button variant="ghost" size="sm" onClick={() => setRefQuery("")} className="gap-1.5">
+                      <X className="h-4 w-4" />
+                      Effacer
+                    </Button>
+                  )}
+                  <div className="ml-auto flex items-center gap-3">
+                    {changed.length > 0 && (
+                      <span className="text-xs text-muted-foreground">
+                        {changed.length} cellule(s) modifiée(s) · {formatNumber(draftPieces)} pièce(s)
+                      </span>
+                    )}
+                    <Button onClick={saveGrid} disabled={changed.length === 0 || saving} className="gap-2">
+                      <Save className="h-4 w-4" />
+                      {saving ? "Enregistrement..." : "Enregistrer"}
                     </Button>
                   </div>
                 </div>
+
+                {!refQuery ? (
+                  <p className="py-8 text-center text-sm text-muted-foreground">
+                    Saisis une référence pour afficher sa grille ({allRefs.length} référence(s)
+                    reçue(s) cette saison).
+                  </p>
+                ) : gridRows.length === 0 ? (
+                  <p className="py-8 text-center text-sm text-muted-foreground">
+                    Aucune référence reçue ne correspond à «&nbsp;{refQuery}&nbsp;».
+                  </p>
+                ) : (
+                  <div className="overflow-x-auto rounded-md border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="min-w-[180px]">Référence / couleur</TableHead>
+                          <TableHead className="min-w-[140px]">Réception</TableHead>
+                          {gridSizes.map((s) => (
+                            <TableHead key={s} className="text-center min-w-[68px]">
+                              {s}
+                            </TableHead>
+                          ))}
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {gridRows.map((row) => (
+                          <TableRow key={`${row.receptionId}__${row.productId}`}>
+                            <TableCell>
+                              <span className="font-mono text-xs">{row.reference}</span>
+                              <span className="ml-2 text-xs text-muted-foreground">
+                                {row.color}
+                                {row.colorLabel ? ` — ${row.colorLabel}` : ""}
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-xs text-muted-foreground">
+                              {row.supplierName}
+                              <span className="block text-[10px]">cmd {row.orderNumber}</span>
+                            </TableCell>
+                            {gridSizes.map((s) => {
+                              const recv = row.received[s] || 0;
+                              const k = cellKey(row.receptionId, row.productId, s);
+                              const isChanged = changed.some((c) => c.key === k);
+                              if (recv <= 0) {
+                                return (
+                                  <TableCell key={s} className="text-center text-muted-foreground/30">
+                                    —
+                                  </TableCell>
+                                );
+                              }
+                              return (
+                                <TableCell key={s} className="p-1 text-center">
+                                  <input
+                                    inputMode="numeric"
+                                    value={cellValue(k)}
+                                    onChange={(e) => setCell(k, e.target.value)}
+                                    placeholder="0"
+                                    title={`${recv} reçue(s) en ${s}`}
+                                    className={cn(
+                                      "h-8 w-14 rounded border bg-transparent text-center text-sm outline-none focus:border-primary",
+                                      isChanged && "border-amber-500 bg-amber-50",
+                                      (parseInt(cellValue(k) || "0", 10) || 0) > recv &&
+                                        "border-destructive text-destructive"
+                                    )}
+                                  />
+                                  <span className="mt-0.5 block text-[10px] text-muted-foreground">
+                                    /{recv}
+                                  </span>
+                                </TableCell>
+                              );
+                            })}
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+                {gridRows.length > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    Le petit nombre sous chaque case est la quantité <strong>reçue</strong> — tu ne
+                    peux pas prélever au-delà. Laisse vide (ou 0) pour ne rien prélever.
+                  </p>
+                )}
               </CardContent>
             </Card>
 
@@ -362,7 +438,6 @@ export default function SamplesPage() {
                           <TableHead>Couleur</TableHead>
                           <TableHead className="text-center">Taille</TableHead>
                           <TableHead className="text-right">Quantité</TableHead>
-                          <TableHead>Motif</TableHead>
                           <TableHead>Prélevé par</TableHead>
                           <TableHead className="w-10" />
                         </TableRow>
@@ -378,9 +453,6 @@ export default function SamplesPage() {
                             <TableCell className="text-center">{s.size}</TableCell>
                             <TableCell className="text-right font-medium tabular-nums">
                               {s.quantity}
-                            </TableCell>
-                            <TableCell className="text-xs text-muted-foreground">
-                              {s.notes || "—"}
                             </TableCell>
                             <TableCell className="text-xs text-muted-foreground">
                               {s.createdBy || "—"}

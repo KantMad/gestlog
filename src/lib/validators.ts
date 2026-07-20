@@ -89,6 +89,12 @@ export const createSampleSchema = z.object({
   notes: z.string().max(500).optional(),
 });
 
+// Saisie EN LOT des prélèvements (une grille couleur × taille = des dizaines de cellules).
+// quantity 0 → suppression du prélèvement correspondant.
+export const bulkSamplesSchema = z.object({
+  items: z.array(createSampleSchema).min(1).max(2000),
+});
+
 export const allocationAdjustSchema = z.object({
   lineId: z.string().min(1),
   newAllocatedBySize: z.record(z.string(), z.number().int().min(0)),

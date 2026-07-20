@@ -81,8 +81,15 @@ sont gérés par écran (cf. [`05-authentification.md`](05-authentification.md))
   - **Rattachés à une réception précise** (traçabilité + cascade si la réception est
     supprimée/réimportée). On ne peut prélever **que du réellement reçu** : l'API refuse une
     quantité > reçu sur cette taille, et l'écran ne propose que les tailles reçues.
+  - **Saisie EN GRILLE** (`POST /api/samples/bulk`) : on tape une **référence** → toutes ses
+    **couleurs × tailles reçues** s'affichent en tableau, une case par taille (avec la quantité
+    reçue en dessous comme plafond), et **un seul enregistrement** pour toute la grille. Le
+    formulaire ligne à ligne d'origine était inutilisable : plusieurs **dizaines** de pièces à
+    prélever = autant d'allers-retours dans 3 listes déroulantes. *Cas réel* `AMPOML_C012` :
+    7 coloris × 7 tailles = **49 cases** en une saisie. Seules les cellules **modifiées** sont
+    envoyées (delta) ; chaque item reste validé contre le reçu côté serveur.
   - Un prélèvement retiré rend les pièces **immédiatement disponibles** (il faut relancer la
-    simulation). `quantity: 0` en POST = suppression.
+    simulation). `quantity: 0` = suppression (dans `/bulk` comme en POST simple).
   - **Accès** : écran `/samples`, mais l'API accepte aussi le droit `/allocation` (celui qui
     répartit doit voir ce qui est retiré du disponible).
 - **Répartition — ordre d'affichage** : **boutiques ET produits par ordre ALPHABÉTIQUE**, dans
