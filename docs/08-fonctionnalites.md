@@ -97,6 +97,11 @@ sont gérés par écran (cf. [`05-authentification.md`](05-authentification.md))
     (`reçu total − demande clients` — le vrai « libre », en vert si positif) et **vs commande
     fournisseur** (sur-livraison, en gris). Un excédent client positif = prélèvement sans
     pénaliser personne.
+  - **Voir qui détient déjà les pièces** (`GET /api/samples/allocations?seasonId=&productId=`) :
+    chaque ligne de la grille se **déplie** sur le détail par **boutique × taille** de la
+    dernière répartition validée — pour choisir où prélever **avant** de saisir, sans attendre
+    l'alerte de conflit. Chargé **à la demande** (une requête par produit déplié, mise en cache
+    côté écran) : le renvoyer pour toute la saison serait inutilement lourd.
   - **Impact sur une répartition DÉJÀ VALIDÉE** (`POST /api/samples/impact` avant
     l'enregistrement) : si `prélèvements + alloué > reçu` pour un produit+taille, les pièces
     manquantes doivent être **reprises aux boutiques**. L'écran liste alors les boutiques

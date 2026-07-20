@@ -22,7 +22,16 @@ import {
   SelectItem,
   SelectTrigger,
 } from "@/components/ui/select";
-import { FlaskConical, Search, Trash2, Save, X, AlertTriangle } from "lucide-react";
+import {
+  FlaskConical,
+  Search,
+  Trash2,
+  Save,
+  X,
+  AlertTriangle,
+  ChevronDown,
+  ChevronRight,
+} from "lucide-react";
 import { toast } from "sonner";
 import { cn, formatNumber, type SizeQuantities } from "@/lib/utils";
 
@@ -65,6 +74,17 @@ interface Conflict {
   allocated: number;
   needed: number;
   allocations: { lineId: string; clientId: string | null; clientName: string; allocated: number }[];
+}
+
+/** Répartition déjà validée d'un produit : qui détient quoi. */
+interface AllocDetail {
+  sessionDate: string | null;
+  rows: {
+    lineId: string;
+    clientName: string;
+    allocated: SizeQuantities;
+    original: SizeQuantities;
+  }[];
 }
 
 /** Une ligne de la grille : un coloris d'une référence, dans une réception donnée. */
@@ -113,6 +133,10 @@ export default function SamplesPage() {
   const [conflicts, setConflicts] = useState<Conflict[] | null>(null);
   const [removalDraft, setRemovalDraft] = useState<Record<string, string>>({});
   const [checking, setChecking] = useState(false);
+  // Détail « qui a déjà ces pièces » (déplié à la demande, par produit).
+  const [openDetail, setOpenDetail] = useState<string | null>(null);
+  const [detailByProduct, setDetailByProduct] = useState<Record<string, AllocDetail>>({});
+  const [detailLoading, setDetailLoading] = useState<string | null>(null);
 
   const load = useCallback(() => {
     if (!activeSeason) {
@@ -212,6 +236,33 @@ export default function SamplesPage() {
     }
     return out;
   }, [draft, existing]);
+
+  // Charge (une fois) la répartition validée d'un produit, pour choisir où prélever.
+  const toggleDetail = async (productId: string) => {
+    if (openDetail === productId) {
+      setOpenDetail(null);
+      return;
+    }
+    setOpenDetail(productId);
+    if (detailByProduct[productId] || !activeSeason) return;
+    setDetailLoading(productId);
+    try {
+      const res = await fetch(
+        `/api/samples/allocations?seasonId=${activeSeason.id}&productId=${productId}`
+      );
+      const d = await res.json();
+      if (res.ok) {
+        setDetailByProduct((m) => ({
+          ...m,
+          [productId]: { sessionDate: d.session?.sessionDate ?? null, rows: d.rows || [] },
+        }));
+      }
+    } catch {
+      /* silencieux : le détail est une aide, pas un bloquant */
+    } finally {
+      setDetailLoading(null);
+    }
+  };
 
   const draftItems = () =>
     changed.map(({ key, qty }) => {
@@ -479,14 +530,26 @@ export default function SamplesPage() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {gridRows.map((row) => (
+                        {gridRows.flatMap((row) => [
                           <TableRow key={`${row.receptionId}__${row.productId}`}>
                             <TableCell>
-                              <span className="font-mono text-xs">{row.reference}</span>
-                              <span className="ml-2 text-xs text-muted-foreground">
-                                {row.color}
-                                {row.colorLabel ? ` — ${row.colorLabel}` : ""}
-                              </span>
+                              <button
+                                type="button"
+                                onClick={() => toggleDetail(row.productId)}
+                                className="inline-flex items-center gap-1 text-left hover:underline"
+                                title="Voir qui détient déjà ces pièces (répartition validée)"
+                              >
+                                {openDetail === row.productId ? (
+                                  <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                                ) : (
+                                  <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+                                )}
+                                <span className="font-mono text-xs">{row.reference}</span>
+                                <span className="text-xs text-muted-foreground">
+                                  {row.color}
+                                  {row.colorLabel ? ` — ${row.colorLabel}` : ""}
+                                </span>
+                              </button>
                             </TableCell>
                             <TableCell className="text-xs text-muted-foreground">
                               {row.supplierName}
@@ -548,8 +611,79 @@ export default function SamplesPage() {
                                 </TableCell>
                               );
                             })}
-                          </TableRow>
-                        ))}
+                          </TableRow>,
+                          // Détail « qui détient déjà ces pièces » : permet de choisir où
+                          // prélever AVANT de saisir, sans attendre l'alerte de conflit.
+                          ...(openDetail === row.productId
+                            ? [
+                                <TableRow
+                                  key={`d_${row.receptionId}__${row.productId}`}
+                                  className="bg-muted/30 hover:bg-muted/30"
+                                >
+                                  <TableCell colSpan={2 + gridSizes.length} className="py-3">
+                                    {detailLoading === row.productId ? (
+                                      <p className="animate-pulse text-xs text-muted-foreground">
+                                        Chargement de la répartition...
+                                      </p>
+                                    ) : !detailByProduct[row.productId] ||
+                                      detailByProduct[row.productId].rows.length === 0 ? (
+                                      <p className="text-xs text-muted-foreground">
+                                        Aucune répartition validée sur ce produit — tu peux prélever
+                                        librement (dans la limite du reçu).
+                                      </p>
+                                    ) : (
+                                      <div className="space-y-2">
+                                        <p className="text-xs text-muted-foreground">
+                                          Réparti le{" "}
+                                          {detailByProduct[row.productId].sessionDate
+                                            ? new Date(
+                                                detailByProduct[row.productId].sessionDate as string
+                                              ).toLocaleDateString("fr-FR")
+                                            : "—"}{" "}
+                                          entre {detailByProduct[row.productId].rows.length} boutique(s) :
+                                        </p>
+                                        <div className="overflow-x-auto">
+                                          <table className="text-xs">
+                                            <thead>
+                                              <tr className="text-muted-foreground">
+                                                <th className="px-2 py-1 text-left font-medium">Boutique</th>
+                                                {gridSizes.map((sz) => (
+                                                  <th key={sz} className="px-2 py-1 text-center font-medium">
+                                                    {sz}
+                                                  </th>
+                                                ))}
+                                                <th className="px-2 py-1 text-right font-medium">Total</th>
+                                              </tr>
+                                            </thead>
+                                            <tbody>
+                                              {detailByProduct[row.productId].rows.map((r) => {
+                                                const tot = Object.values(r.allocated).reduce((a, b) => a + b, 0);
+                                                return (
+                                                  <tr key={r.lineId} className="border-t">
+                                                    <td className="px-2 py-1">{r.clientName}</td>
+                                                    {gridSizes.map((sz) => (
+                                                      <td key={sz} className="px-2 py-1 text-center tabular-nums">
+                                                        {r.allocated[sz] || (
+                                                          <span className="text-muted-foreground/30">—</span>
+                                                        )}
+                                                      </td>
+                                                    ))}
+                                                    <td className="px-2 py-1 text-right font-medium tabular-nums">
+                                                      {tot}
+                                                    </td>
+                                                  </tr>
+                                                );
+                                              })}
+                                            </tbody>
+                                          </table>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </TableCell>
+                                </TableRow>,
+                              ]
+                            : []),
+                        ])}
                       </TableBody>
                     </Table>
                   </div>
