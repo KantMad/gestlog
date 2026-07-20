@@ -567,13 +567,15 @@ export default function SamplesPage() {
                   </p>
                 ) : (
                   <div className="overflow-x-auto rounded-md border">
-                    <Table>
+                    {/* Colonne « Réception » masquée quand une réception est déjà choisie
+                        (elle serait identique partout) → évite un scroll horizontal inutile. */}
+                    <Table className="w-full">
                       <TableHeader>
                         <TableRow>
-                          <TableHead className="min-w-[180px]">Référence / couleur</TableHead>
-                          <TableHead className="min-w-[140px]">Réception</TableHead>
+                          <TableHead className="w-[200px]">Référence / couleur</TableHead>
+                          {!recFilter && <TableHead className="w-[130px]">Réception</TableHead>}
                           {gridSizes.map((s) => (
-                            <TableHead key={s} className="text-center min-w-[68px]">
+                            <TableHead key={s} className="text-center px-1">
                               {s}
                             </TableHead>
                           ))}
@@ -601,10 +603,12 @@ export default function SamplesPage() {
                                 </span>
                               </button>
                             </TableCell>
-                            <TableCell className="text-xs text-muted-foreground">
-                              {row.supplierName}
-                              <span className="block text-[10px]">cmd {row.orderNumber}</span>
-                            </TableCell>
+                            {!recFilter && (
+                              <TableCell className="text-xs text-muted-foreground">
+                                {row.supplierName}
+                                <span className="block text-[10px]">cmd {row.orderNumber}</span>
+                              </TableCell>
+                            )}
                             {gridSizes.map((s) => {
                               const recv = row.received[s] || 0;
                               const k = cellKey(row.receptionId, row.productId, s);
@@ -641,21 +645,34 @@ export default function SamplesPage() {
                                     const gapC = rt - cd;
                                     const gapS = rt - so;
                                     return (
-                                      <span
-                                        className="mt-0.5 block text-[10px] leading-tight text-muted-foreground"
-                                        title={`Reçu ${recv} sur cette réception · Saison : reçu ${rt}, commandé boutiques ${cd} (écart ${gapC >= 0 ? "+" : ""}${gapC}), commandé fournisseur ${so} (écart ${gapS >= 0 ? "+" : ""}${gapS})`}
-                                      >
-                                        /{recv}
+                                      <>
+                                        {/* Ce qui est DÉJÀ mis de côté sur cette taille (y
+                                            compris les pièces reprises aux boutiques via le
+                                            détail) → la pièce « remonte » ici, visiblement. */}
+                                        {(existing[k] || 0) > 0 && (
+                                          <span
+                                            className="mt-0.5 block rounded bg-violet-100 text-[10px] font-medium leading-tight text-violet-700"
+                                            title={`${existing[k]} pièce(s) mise(s) de côté en ${s}`}
+                                          >
+                                            éch. {existing[k]}
+                                          </span>
+                                        )}
                                         <span
-                                          className={cn(
-                                            "ml-1 font-medium",
-                                            gapC > 0 ? "text-emerald-600" : gapC < 0 ? "text-red-600" : ""
-                                          )}
+                                          className="mt-0.5 block text-[10px] leading-tight text-muted-foreground"
+                                          title={`Reçu ${recv} sur cette réception · Saison : reçu ${rt}, commandé boutiques ${cd} (écart ${gapC >= 0 ? "+" : ""}${gapC}), commandé fournisseur ${so} (écart ${gapS >= 0 ? "+" : ""}${gapS})`}
                                         >
-                                          {gapC > 0 ? `+${gapC}` : gapC}
+                                          /{recv}
+                                          <span
+                                            className={cn(
+                                              "ml-1 font-medium",
+                                              gapC > 0 ? "text-emerald-600" : gapC < 0 ? "text-red-600" : ""
+                                            )}
+                                          >
+                                            {gapC > 0 ? `+${gapC}` : gapC}
+                                          </span>
+                                          <span className="ml-0.5 opacity-60">/{gapS > 0 ? `+${gapS}` : gapS}</span>
                                         </span>
-                                        <span className="ml-0.5 opacity-60">/{gapS > 0 ? `+${gapS}` : gapS}</span>
-                                      </span>
+                                      </>
                                     );
                                   })()}
                                 </TableCell>
@@ -670,7 +687,7 @@ export default function SamplesPage() {
                                   key={`d_${row.receptionId}__${row.productId}`}
                                   className="bg-muted/30 hover:bg-muted/30"
                                 >
-                                  <TableCell colSpan={2 + gridSizes.length} className="py-3">
+                                  <TableCell colSpan={1 + (recFilter ? 0 : 1) + gridSizes.length} className="py-3">
                                     {detailLoading === row.productId ? (
                                       <p className="animate-pulse text-xs text-muted-foreground">
                                         Chargement de la répartition...

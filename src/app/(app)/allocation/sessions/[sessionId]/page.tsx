@@ -244,7 +244,8 @@ export default function AllocationSessionDetailPage({
     try {
       sessionStorage.setItem(
         "gestlog:allocation:reopen",
-        JSON.stringify({ seasonId: session.seasonId, rows })
+        // sessionId : la revalidation mettra à jour CETTE session (pas de doublon).
+        JSON.stringify({ seasonId: session.seasonId, sessionId: session.id, rows })
       );
     } catch {
       toast.error("Impossible de préparer la reprise (stockage indisponible).");

@@ -6,7 +6,10 @@ import { stringifySizeQuantities } from "@/lib/utils";
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { seasonId, lines, notes } = body;
+    // sourceSessionId : présent quand on REVALIDE une session reprise (« Reprendre pour
+    // modifier »). On met alors à jour CETTE session (date rafraîchie, lignes remplacées)
+    // au lieu de créer un doublon.
+    const { seasonId, lines, notes, sourceSessionId } = body;
 
     if (!seasonId || !lines || !Array.isArray(lines)) {
       return NextResponse.json(
@@ -15,39 +18,54 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const session = await prisma.allocationSession.create({
-      data: {
-        seasonId,
-        status: "VALIDATED",
-        notes: notes || null,
-        lines: {
-          create: lines.map(
-            (line: {
-              clientId: string;
-              clientOrderId: string;
-              productId: string;
-              original: Record<string, number>;
-              allocated: Record<string, number>;
-              reduced: Record<string, number>;
-              reductionReason: string;
-              status: string;
-              isManualAdjustment: boolean;
-            }) => ({
-              clientId: line.clientId,
-              clientOrderId: line.clientOrderId,
-              productId: line.productId,
-              originalBySize: stringifySizeQuantities(line.original),
-              allocatedBySize: stringifySizeQuantities(line.allocated),
-              reducedBySize: stringifySizeQuantities(line.reduced),
-              reductionReason: line.reductionReason,
-              status: line.status,
-              isManualAdjustment: line.isManualAdjustment,
-            })
-          ),
-        },
-      },
-      include: { lines: true },
-    });
+    type ValidateLine = {
+      clientId: string;
+      clientOrderId: string;
+      productId: string;
+      original: Record<string, number>;
+      allocated: Record<string, number>;
+      reduced: Record<string, number>;
+      reductionReason: string;
+      status: string;
+      isManualAdjustment: boolean;
+    };
+    const lineData = (lines as ValidateLine[]).map((line) => ({
+      clientId: line.clientId,
+      clientOrderId: line.clientOrderId,
+      productId: line.productId,
+      originalBySize: stringifySizeQuantities(line.original),
+      allocatedBySize: stringifySizeQuantities(line.allocated),
+      reducedBySize: stringifySizeQuantities(line.reduced),
+      reductionReason: line.reductionReason,
+      status: line.status,
+      isManualAdjustment: line.isManualAdjustment,
+    }));
+
+    // Reprise → mise à jour EN PLACE de la session d'origine (pas de doublon).
+    const existing = sourceSessionId
+      ? await prisma.allocationSession.findFirst({
+          where: { id: sourceSessionId, seasonId, status: "VALIDATED" },
+          select: { id: true },
+        })
+      : null;
+
+    const session = existing
+      ? await prisma.$transaction(async (tx) => {
+          await tx.allocationLine.deleteMany({ where: { allocationSessionId: existing.id } });
+          return tx.allocationSession.update({
+            where: { id: existing.id },
+            data: {
+              sessionDate: new Date(), // la répartition d'origine « change de date »
+              notes: notes || null,
+              lines: { create: lineData },
+            },
+            include: { lines: true },
+          });
+        })
+      : await prisma.allocationSession.create({
+          data: { seasonId, status: "VALIDATED", notes: notes || null, lines: { create: lineData } },
+          include: { lines: true },
+        });
 
     const clientSeasons = await prisma.clientSeason.findMany({
       where: { seasonId },

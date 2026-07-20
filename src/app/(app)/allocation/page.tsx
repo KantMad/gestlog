@@ -1049,6 +1049,9 @@ export default function AllocationPage() {
   const restoredRef = useRef(false);
   const seasonIdRef = useRef<string | null>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
+  // Session d'origine quand la simulation vient d'une REPRISE : la validation la met à jour
+  // au lieu de créer un doublon. Persisté avec la simulation (survit à la navigation).
+  const [reopenSourceId, setReopenSourceId] = useState<string | null>(null);
 
   useEffect(() => {
     if (restoredRef.current || !activeSeason) return;
@@ -1068,6 +1071,7 @@ export default function AllocationPage() {
           sessionStorage.removeItem(REOPEN_KEY);
           restoredRef.current = true;
           seasonIdRef.current = activeSeason.id;
+          setReopenSourceId(typeof h.sessionId === "string" ? h.sessionId : null);
           runSimulation(h.rows as ImportedRow[]);
           return;
         }
@@ -1096,6 +1100,7 @@ export default function AllocationPage() {
       setSupplierIdsByProduct(s.supplierIdsByProduct || {});
       setCatalogIdByOrder(s.catalogIdByOrder || {});
       setManualEdits(s.manualEdits || 0);
+      setReopenSourceId(s.reopenSourceId ?? null);
       const f = s.filters || {};
       setSelectedCatalog(f.selectedCatalog ?? "ALL");
       setSelectedClients(f.selectedClients ?? []);
@@ -1132,6 +1137,7 @@ export default function AllocationPage() {
     setValidateCatalogs([]);
     setExportSuppliers([]);
     setExportClients([]);
+    setReopenSourceId(null);
     setManualEdits(0);
     try {
       sessionStorage.removeItem(STORE_KEY);
@@ -1280,6 +1286,8 @@ export default function AllocationPage() {
     if (!activeSeason) return;
     setSimulating(true);
     setManualEdits(0);
+    // Une simulation lancée à la main (pas une reprise) repart sur une nouvelle session.
+    if (!imported) setReopenSourceId(null);
     try {
       const payload: Record<string, unknown> = {
         seasonId: activeSeason.id,
@@ -1336,6 +1344,7 @@ export default function AllocationPage() {
 
   // Reprise d'une répartition depuis son fichier EAN (celui du bouton « Export EAN »).
   const importAllocationFile = async (file: File) => {
+    setReopenSourceId(null); // un fichier importé = nouvelle session, pas une reprise
     try {
       const wb = XLSX.read(await file.arrayBuffer(), { type: "array" });
       const ws = wb.Sheets[wb.SheetNames[0]];
@@ -1506,6 +1515,7 @@ export default function AllocationPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           seasonId: activeSeason.id,
+          ...(reopenSourceId ? { sourceSessionId: reopenSourceId } : {}),
           lines: linesToValidate.map((l) => ({
             clientId: l.clientId,
             clientOrderId: l.clientOrderId,
@@ -1536,6 +1546,7 @@ export default function AllocationPage() {
         setValidateSuppliers([]);
         setValidateCatalogs([]);
       } else {
+        setReopenSourceId(null);
         setLines([]);
         setWarnings([]);
         setClientImpacts([]);
