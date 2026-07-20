@@ -92,7 +92,9 @@ export const createSampleSchema = z.object({
 // Saisie EN LOT des prélèvements (une grille couleur × taille = des dizaines de cellules).
 // quantity 0 → suppression du prélèvement correspondant.
 export const bulkSamplesSchema = z.object({
-  items: z.array(createSampleSchema).min(1).max(2000),
+  // Peut être vide : on peut vouloir UNIQUEMENT retirer des pièces à des boutiques
+  // (depuis le détail de répartition), sans toucher aux prélèvements.
+  items: z.array(createSampleSchema).max(2000).default([]),
   // Retraits décidés par l'utilisateur sur une répartition DÉJÀ VALIDÉE (cf.
   // /api/samples/impact) : quelles pièces enlever, chez quelle boutique, sur quelle taille.
   removals: z
@@ -105,7 +107,10 @@ export const bulkSamplesSchema = z.object({
     )
     .max(2000)
     .optional(),
-});
+})
+  .refine((v) => v.items.length > 0 || (v.removals?.length ?? 0) > 0, {
+    message: "Rien à enregistrer : ni prélèvement, ni retrait.",
+  });
 
 export const allocationAdjustSchema = z.object({
   lineId: z.string().min(1),

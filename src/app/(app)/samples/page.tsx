@@ -137,6 +137,9 @@ export default function SamplesPage() {
   const [openDetail, setOpenDetail] = useState<string | null>(null);
   const [detailByProduct, setDetailByProduct] = useState<Record<string, AllocDetail>>({});
   const [detailLoading, setDetailLoading] = useState<string | null>(null);
+  // Retraits saisis DIRECTEMENT dans le détail (clé `lineId__taille` → quantité).
+  const [pullDraft, setPullDraft] = useState<Record<string, string>>({});
+  const [pulling, setPulling] = useState(false);
 
   const load = useCallback(() => {
     if (!activeSeason) {
@@ -261,6 +264,52 @@ export default function SamplesPage() {
       /* silencieux : le détail est une aide, pas un bloquant */
     } finally {
       setDetailLoading(null);
+    }
+  };
+
+  // Retire des pièces à des boutiques précises, depuis le détail de répartition.
+  // Indépendant de la grille : on peut vouloir juste corriger une répartition.
+  const applyPulls = async (productId: string) => {
+    const removals = Object.entries(pullDraft)
+      .filter(([k]) => k.startsWith(`${productId}::`))
+      .map(([k, v]) => {
+        const [, lineId, size] = k.split("::");
+        return { lineId, size, quantity: parseInt(v || "0", 10) || 0 };
+      })
+      .filter((r) => r.quantity > 0);
+    if (removals.length === 0) return;
+    setPulling(true);
+    try {
+      const res = await fetch("/api/samples/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items: [], removals }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || "Erreur");
+      toast.success(`${d.pulled} pièce(s) retirée(s) de la répartition`, {
+        description: "Les boutiques concernées ont été mises à jour.",
+      });
+      // Recharge le détail du produit (les quantités ont changé).
+      setPullDraft((m) => {
+        const n = { ...m };
+        for (const k of Object.keys(n)) if (k.startsWith(`${productId}::`)) delete n[k];
+        return n;
+      });
+      setDetailByProduct((m) => {
+        const n = { ...m };
+        delete n[productId];
+        return n;
+      });
+      setOpenDetail(null);
+      await toggleDetail(productId);
+      load();
+    } catch (e) {
+      toast.error("Retrait impossible", {
+        description: String(e instanceof Error ? e.message : e),
+      });
+    } finally {
+      setPulling(false);
     }
   };
 
@@ -661,13 +710,43 @@ export default function SamplesPage() {
                                                 return (
                                                   <tr key={r.lineId} className="border-t">
                                                     <td className="px-2 py-1">{r.clientName}</td>
-                                                    {gridSizes.map((sz) => (
-                                                      <td key={sz} className="px-2 py-1 text-center tabular-nums">
-                                                        {r.allocated[sz] || (
-                                                          <span className="text-muted-foreground/30">—</span>
-                                                        )}
-                                                      </td>
-                                                    ))}
+                                                    {gridSizes.map((sz) => {
+                                                      const has = r.allocated[sz] || 0;
+                                                      const pk = `${row.productId}::${r.lineId}::${sz}`;
+                                                      if (has <= 0) {
+                                                        return (
+                                                          <td key={sz} className="px-2 py-1 text-center">
+                                                            <span className="text-muted-foreground/30">—</span>
+                                                          </td>
+                                                        );
+                                                      }
+                                                      const asked = parseInt(pullDraft[pk] || "0", 10) || 0;
+                                                      return (
+                                                        <td key={sz} className="px-1 py-1 text-center">
+                                                          <div className="flex flex-col items-center">
+                                                            <span className="tabular-nums">{has}</span>
+                                                            {/* Saisir ici = retirer ces pièces À CETTE BOUTIQUE. */}
+                                                            <input
+                                                              inputMode="numeric"
+                                                              value={pullDraft[pk] ?? ""}
+                                                              onChange={(e) =>
+                                                                setPullDraft((m) => ({
+                                                                  ...m,
+                                                                  [pk]: e.target.value.replace(/[^0-9]/g, ""),
+                                                                }))
+                                                              }
+                                                              placeholder="−0"
+                                                              title={`Retirer des pièces à ${r.clientName} en ${sz} (max ${has})`}
+                                                              className={cn(
+                                                                "mt-0.5 h-6 w-12 rounded border bg-transparent text-center text-[11px] outline-none focus:border-primary",
+                                                                asked > 0 && "border-amber-500 bg-amber-50",
+                                                                asked > has && "border-destructive text-destructive"
+                                                              )}
+                                                            />
+                                                          </div>
+                                                        </td>
+                                                      );
+                                                    })}
                                                     <td className="px-2 py-1 text-right font-medium tabular-nums">
                                                       {tot}
                                                     </td>
@@ -677,6 +756,51 @@ export default function SamplesPage() {
                                             </tbody>
                                           </table>
                                         </div>
+                                        {(() => {
+                                          const pulls = Object.entries(pullDraft).filter(
+                                            ([k, v]) =>
+                                              k.startsWith(`${row.productId}::`) &&
+                                              (parseInt(v || "0", 10) || 0) > 0
+                                          );
+                                          const nb = pulls.reduce(
+                                            (a, [, v]) => a + (parseInt(v || "0", 10) || 0),
+                                            0
+                                          );
+                                          const over = detailByProduct[row.productId].rows.some((r) =>
+                                            gridSizes.some(
+                                              (sz) =>
+                                                (parseInt(
+                                                  pullDraft[`${row.productId}::${r.lineId}::${sz}`] || "0",
+                                                  10
+                                                ) || 0) > (r.allocated[sz] || 0)
+                                            )
+                                          );
+                                          return (
+                                            <div className="flex items-center justify-between gap-3 pt-1">
+                                              <p className="text-[11px] text-muted-foreground">
+                                                Saisis sous une quantité pour <strong>retirer</strong> ces
+                                                pièces à cette boutique.
+                                              </p>
+                                              <div className="flex items-center gap-2">
+                                                {nb > 0 && (
+                                                  <span className="text-[11px] text-muted-foreground">
+                                                    {nb} pièce(s) à retirer
+                                                  </span>
+                                                )}
+                                                <Button
+                                                  size="sm"
+                                                  variant="outline"
+                                                  disabled={nb === 0 || over || pulling}
+                                                  onClick={() => applyPulls(row.productId)}
+                                                  className="h-7 gap-1.5 text-xs"
+                                                >
+                                                  <Trash2 className="h-3.5 w-3.5" />
+                                                  {pulling ? "Retrait..." : "Retirer de la répartition"}
+                                                </Button>
+                                              </div>
+                                            </div>
+                                          );
+                                        })()}
                                       </div>
                                     )}
                                   </TableCell>

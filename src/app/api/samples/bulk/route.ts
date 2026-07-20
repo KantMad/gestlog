@@ -70,13 +70,30 @@ export async function POST(request: NextRequest) {
           where: { id: { in: [...new Set(removals.map((r) => r.lineId))] } },
           select: {
             id: true,
+            clientId: true,
             allocationSessionId: true,
             originalBySize: true,
             allocatedBySize: true,
+            status: true,
+            allocationSession: { select: { seasonId: true } },
           },
         })
       : [];
     const removalById = new Map(removalLines.map((l) => [l.id, l]));
+
+    // Seuil minimum de livraison par boutique : sans lui, une ligne EN_ATTENTE (sous le
+    // seuil) repasserait à tort en LIVRABLE au moindre retrait.
+    const thresholds = new Map<string, number>();
+    if (removalLines.length > 0) {
+      const cs = await prisma.clientSeason.findMany({
+        where: {
+          clientId: { in: [...new Set(removalLines.map((l) => l.clientId).filter(Boolean))] as string[] },
+          seasonId: { in: [...new Set(removalLines.map((l) => l.allocationSession.seasonId))] },
+        },
+        select: { clientId: true, seasonId: true, minDeliveryThreshold: true },
+      });
+      for (const c of cs) thresholds.set(`${c.clientId}__${c.seasonId}`, c.minDeliveryThreshold);
+    }
 
     let saved = 0;
     let deleted = 0;
@@ -97,13 +114,15 @@ export async function POST(request: NextRequest) {
           if (gap > 0) reduced[size] = gap;
         }
         const total = Object.values(alloc).reduce((s, n) => s + n, 0);
+        const min = thresholds.get(`${line.clientId}__${line.allocationSession.seasonId}`) ?? 0;
         await tx.allocationLine.update({
           where: { id: line.id },
           data: {
             allocatedBySize: stringifySizeQuantities(alloc),
             reducedBySize: stringifySizeQuantities(reduced),
             reductionReason: Object.keys(reduced).length > 0 ? "ALLOCATION" : "NONE",
-            status: total === 0 ? "ANNULE" : "LIVRABLE",
+            // Même règle qu'à la répartition : 0 → ANNULE, sous le seuil → EN_ATTENTE.
+            status: total === 0 ? "ANNULE" : total < min ? "EN_ATTENTE" : "LIVRABLE",
           },
         });
         pulled += take;

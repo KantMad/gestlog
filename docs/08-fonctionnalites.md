@@ -102,6 +102,13 @@ sont gérés par écran (cf. [`05-authentification.md`](05-authentification.md))
     dernière répartition validée — pour choisir où prélever **avant** de saisir, sans attendre
     l'alerte de conflit. Chargé **à la demande** (une requête par produit déplié, mise en cache
     côté écran) : le renvoyer pour toute la saison serait inutilement lourd.
+  - **Retirer directement des pièces à une boutique** : dans le détail déplié, chaque
+    quantité allouée porte une case de saisie → on indique combien retirer **à cette boutique
+    sur cette taille**, puis « Retirer de la répartition ». Indépendant de la grille de
+    prélèvement (`/bulk` accepte `items: []` avec seulement des `removals`) : sert aussi à
+    corriger une répartition. Le **statut** est recalculé avec le **seuil minimum de livraison**
+    de la boutique (0 → `ANNULE`, sous le seuil → `EN_ATTENTE`) — sinon une ligne `EN_ATTENTE`
+    repasserait à tort en `LIVRABLE`.
   - **Impact sur une répartition DÉJÀ VALIDÉE** (`POST /api/samples/impact` avant
     l'enregistrement) : si `prélèvements + alloué > reçu` pour un produit+taille, les pièces
     manquantes doivent être **reprises aux boutiques**. L'écran liste alors les boutiques
