@@ -39,6 +39,20 @@ sur cet endpoint). Le total réel est **recalculé côté GestLog** à partir de
 
 Donc : **ne pas se fier à `total_spent` de Woo** ; utiliser le total recalculé par GestLog.
 
+## Doublons de lignes de commande ⚠️
+
+- **Bug historique** : n8n peut pousser, dans **un même payload**, des `line_items` **en double**
+  (même variation répétée — jusqu'à 23×). GestLog les insérait tels quels → **quantités vendues
+  gonflées** (best-sellers, size-distribution, export produits, « produits vendus »). ⚠️ Le **CA
+  n'était PAS touché** (il vient de `BtocOrder.total`, niveau commande). *Cas réel QMVEST_L001 :
+  137 vendus affichés pour 34 réels ; globalement **14 051 lignes en double sur 21 341**
+  (2 717 groupes, TOUS créés dans le même envoi — jamais étalés dans le temps).*
+- **Correctif** (`src/app/api/sync/btoc/orders/route.ts`) : les `line_items` sont **dédoublonnés
+  par `(variation_id/product_id + sku)`** (on garde la 1re occurrence) **avant** l'insert ET le
+  calcul d'`itemCount`. WooCommerce n'ayant qu'**une ligne par variation**, c'est sans risque.
+  **Validé** : après dédup, la somme des quantités = `itemCount` WooCommerce sur **4055/4056**
+  commandes. ⚠️ Ne PAS sommer les doublons (ce serait la quantité gonflée) — on en garde UN.
+
 ## Dates & montants (rapprochement WooCommerce) ⚠️
 
 - **Fuseau des périodes = Europe/Paris** (comme WooCommerce Analytics). `BtocOrder.orderDate`

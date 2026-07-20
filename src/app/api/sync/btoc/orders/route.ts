@@ -47,9 +47,35 @@ export async function POST(request: NextRequest) {
           .filter(Boolean)
           .join(" ") || null;
 
-        const itemCount = Array.isArray(o.line_items)
-          ? o.line_items.reduce((s: number, li: { quantity?: number }) => s + (Number(li.quantity) || 0), 0)
-          : 0;
+        // n8n pousse parfois des line_items EN DOUBLE (même variation répétée jusqu'à 23×)
+        // dans un même payload → GestLog les stockait tels quels et gonflait les quantités
+        // vendues. WooCommerce n'a qu'UNE ligne par variation → on dédoublonne par
+        // (variation_id/product_id + sku), en gardant la 1re. Validé : après dédup, la somme
+        // des quantités = itemCount WooCommerce sur 4055/4056 commandes. `itemCount` ET les
+        // lignes utilisent la MÊME liste dédupliquée → cohérence garantie.
+        const seenLine = new Set<string>();
+        const lineItems: Array<{
+          variation_id?: number;
+          product_id?: number;
+          sku?: string;
+          name?: string;
+          quantity?: number;
+          price?: string;
+          total?: string;
+          meta_data?: { key?: string; value?: unknown }[];
+        }> = Array.isArray(o.line_items)
+          ? o.line_items.filter((li: { variation_id?: number; product_id?: number; sku?: string }) => {
+              const key = `${li.variation_id || li.product_id || 0}|${li.sku || ""}`;
+              if (seenLine.has(key)) return false;
+              seenLine.add(key);
+              return true;
+            })
+          : [];
+
+        const itemCount = lineItems.reduce(
+          (s: number, li: { quantity?: number }) => s + (Number(li.quantity) || 0),
+          0
+        );
 
         const couponCodes = Array.isArray(o.coupon_lines) && o.coupon_lines.length > 0
           ? JSON.stringify(o.coupon_lines.map((c: { code?: string }) => c.code))
@@ -113,8 +139,8 @@ export async function POST(request: NextRequest) {
             : 0
         );
 
-        // Upsert order lines (pré-chargement produits + bulk insert)
-        if (Array.isArray(o.line_items) && o.line_items.length > 0) {
+        // Upsert order lines (pré-chargement produits + bulk insert) — sur la liste DÉDUP.
+        if (lineItems.length > 0) {
           const orderRows = await prisma.$queryRawUnsafe<{ id: string }[]>(
             `SELECT id FROM "BtocOrder" WHERE "wooId" = $1 LIMIT 1`,
             wooId
@@ -132,7 +158,7 @@ export async function POST(request: NextRequest) {
             // au lieu de 2 SELECT par ligne.
             const wooIds = [
               ...new Set(
-                o.line_items
+                lineItems
                   .map((li: { variation_id?: number; product_id?: number }) =>
                     Number(li.variation_id || li.product_id)
                   )
@@ -141,7 +167,7 @@ export async function POST(request: NextRequest) {
             ];
             const skuPrefixes = [
               ...new Set(
-                o.line_items
+                lineItems
                   .map((li: { sku?: string }) =>
                     li.sku ? String(li.sku).split("-")[0] : null
                   )
@@ -165,7 +191,7 @@ export async function POST(request: NextRequest) {
               for (const r of rows) bySku.set(r.sku, r.id);
             }
 
-            const valueRows = o.line_items.map(
+            const valueRows = lineItems.map(
               (li: {
                 variation_id?: number;
                 product_id?: number;
