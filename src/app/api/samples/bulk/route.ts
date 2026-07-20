@@ -3,7 +3,7 @@ import { handleApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { verifySession } from "@/lib/session";
 import { bulkSamplesSchema } from "@/lib/validators";
-import { parseSizeQuantities } from "@/lib/utils";
+import { parseSizeQuantities, stringifySizeQuantities } from "@/lib/utils";
 
 // POST — enregistre EN UNE FOIS toutes les cellules d'une grille de prélèvements.
 // Le formulaire ligne à ligne était inutilisable pour plusieurs dizaines de pièces.
@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-    const { items } = parsed.data;
+    const { items, removals } = parsed.data;
 
     // Quantités reçues des lignes concernées, en UNE requête (et non une par cellule).
     const pairs = [...new Set(items.map((i) => `${i.supplierReceptionId}__${i.productId}`))];
@@ -62,9 +62,63 @@ export async function POST(request: NextRequest) {
       toUpsert.push(it);
     }
 
+    // Retraits sur une répartition DÉJÀ VALIDÉE, décidés par l'utilisateur (écran de
+    // confirmation). On modifie `allocatedBySize` et on recalcule `reducedBySize` /
+    // `status` pour que la session reste cohérente, avec une trace dans ses notes.
+    const removalLines = removals?.length
+      ? await prisma.allocationLine.findMany({
+          where: { id: { in: [...new Set(removals.map((r) => r.lineId))] } },
+          select: {
+            id: true,
+            allocationSessionId: true,
+            originalBySize: true,
+            allocatedBySize: true,
+          },
+        })
+      : [];
+    const removalById = new Map(removalLines.map((l) => [l.id, l]));
+
     let saved = 0;
     let deleted = 0;
+    let pulled = 0;
     await prisma.$transaction(async (tx) => {
+      for (const r of removals || []) {
+        const line = removalById.get(r.lineId);
+        if (!line) continue;
+        const alloc = parseSizeQuantities(line.allocatedBySize);
+        const take = Math.min(r.quantity, alloc[r.size] || 0);
+        if (take <= 0) continue;
+        alloc[r.size] = (alloc[r.size] || 0) - take;
+        if (alloc[r.size] <= 0) delete alloc[r.size];
+        const original = parseSizeQuantities(line.originalBySize);
+        const reduced: Record<string, number> = {};
+        for (const [size, req] of Object.entries(original)) {
+          const gap = req - (alloc[size] || 0);
+          if (gap > 0) reduced[size] = gap;
+        }
+        const total = Object.values(alloc).reduce((s, n) => s + n, 0);
+        await tx.allocationLine.update({
+          where: { id: line.id },
+          data: {
+            allocatedBySize: stringifySizeQuantities(alloc),
+            reducedBySize: stringifySizeQuantities(reduced),
+            reductionReason: Object.keys(reduced).length > 0 ? "ALLOCATION" : "NONE",
+            status: total === 0 ? "ANNULE" : "LIVRABLE",
+          },
+        });
+        pulled += take;
+      }
+      // Trace d'audit sur la session touchée (une session validée est un instantané :
+      // toute modification doit rester visible).
+      const touched = [...new Set((removals || []).map((r) => removalById.get(r.lineId)?.allocationSessionId).filter(Boolean))] as string[];
+      for (const sid of touched) {
+        const s = await tx.allocationSession.findUnique({ where: { id: sid }, select: { notes: true } });
+        const stamp = `${pulled} pièce(s) retirée(s) pour échantillons (contrôle qualité)`;
+        await tx.allocationSession.update({
+          where: { id: sid },
+          data: { notes: s?.notes ? `${s.notes} · ${stamp}` : stamp },
+        });
+      }
       for (const it of toDelete) {
         const r = await tx.shipmentSample.deleteMany({
           where: {
@@ -98,7 +152,7 @@ export async function POST(request: NextRequest) {
     });
 
     const pieces = toUpsert.reduce((s, i) => s + i.quantity, 0);
-    return NextResponse.json({ saved, deleted, pieces, errors });
+    return NextResponse.json({ saved, deleted, pieces, pulled, errors });
   } catch (e) {
     return handleApiError(e, "api/samples/bulk");
   }

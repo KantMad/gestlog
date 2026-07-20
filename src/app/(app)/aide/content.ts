@@ -331,10 +331,19 @@ export const HELP_THEMES: HelpTheme[] = [
               "L'écran **Échantillons** sert à mettre de côté des pièces que le **siège récupère pour contrôler la qualité**. Elles ne partiront jamais en boutique.",
               "Deux façons de travailler : choisis une **réception** pour voir **tous les produits** de cette livraison, ou tape une **référence** pour voir ses coloris (toutes réceptions confondues). Tu peux combiner les deux.",
               "Dans les deux cas tu obtiens un **tableau couleurs × tailles** : tu saisis les quantités dans les cases, puis tu cliques **Enregistrer** une seule fois.",
-              "Le petit nombre sous chaque case est la quantité **reçue** : tu ne peux pas prélever au-delà. Laisse vide pour ne rien prendre.",
+              "Sous chaque case : la quantité **reçue** (tu ne peux pas prélever au-delà), puis l'**excédent** — en vert s'il y a plus de pièces que les boutiques n'en ont commandé. **C'est là qu'il faut prélever** : ça ne pénalise personne. Le second chiffre, en gris, est l'écart avec la commande fournisseur.",
               "Ces pièces sont aussitôt **retirées du disponible à la répartition** : elles ne seront donc jamais attribuées à une boutique.",
             ],
             tip: "La **réception n'est pas modifiée** : elle garde ce que le fournisseur a livré. C'est normal de voir « Reçu 117 » avec la mention « dont 2 éch. » — seules 115 pièces sont réparties. 👌",
+          },
+          {
+            h: "Si les pièces sont déjà attribuées à des boutiques",
+            lines: [
+              "Quand tu prélèves des pièces qu'une **répartition validée** a déjà distribuées, l'outil t'arrête et affiche les boutiques concernées.",
+              "Tu choisis **chez qui reprendre** les pièces (une proposition est pré-remplie, en commençant par les boutiques les mieux servies), puis tu confirmes. **Rien n'est enregistré avant ta confirmation.**",
+              "La répartition validée est alors corrigée, et une trace est ajoutée dans ses notes.",
+            ],
+            tip: "⚠️ Si tu as **déjà généré les livraisons** de cette répartition, elles ne se mettront pas à jour : reprends plutôt des pièces là où il y a de l'excédent (chiffre vert).",
           },
           {
             h: "Changer d'avis",

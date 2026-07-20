@@ -22,7 +22,7 @@ import {
   SelectItem,
   SelectTrigger,
 } from "@/components/ui/select";
-import { FlaskConical, Search, Trash2, Save, X } from "lucide-react";
+import { FlaskConical, Search, Trash2, Save, X, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { cn, formatNumber, type SizeQuantities } from "@/lib/utils";
 
@@ -51,6 +51,20 @@ interface SampleEntry {
   createdBy: string | null;
   createdAt: string;
   product: { id: string; reference: string; color: string; colorLabel: string | null };
+}
+
+/** Un prélèvement qui empiète sur une répartition déjà validée. */
+interface Conflict {
+  productId: string;
+  reference: string;
+  color: string;
+  colorLabel: string | null;
+  size: string;
+  received: number;
+  samples: number;
+  allocated: number;
+  needed: number;
+  allocations: { lineId: string; clientId: string | null; clientName: string; allocated: number }[];
 }
 
 /** Une ligne de la grille : un coloris d'une référence, dans une réception donnée. */
@@ -91,6 +105,14 @@ export default function SamplesPage() {
   // départ naturel. Vide = toutes réceptions (on cherche alors par référence).
   const [recFilter, setRecFilter] = useState("");
   const [draft, setDraft] = useState<Record<string, string>>({});
+  // Repères d'excédent (par produit/taille, sur toute la saison).
+  const [receivedTotal, setReceivedTotal] = useState<Record<string, SizeQuantities>>({});
+  const [clientDemand, setClientDemand] = useState<Record<string, SizeQuantities>>({});
+  const [supplierOrdered, setSupplierOrdered] = useState<Record<string, SizeQuantities>>({});
+  // Conflits avec une répartition déjà validée → l'utilisateur choisit où retirer.
+  const [conflicts, setConflicts] = useState<Conflict[] | null>(null);
+  const [removalDraft, setRemovalDraft] = useState<Record<string, string>>({});
+  const [checking, setChecking] = useState(false);
 
   const load = useCallback(() => {
     if (!activeSeason) {
@@ -104,6 +126,9 @@ export default function SamplesPage() {
       .then((d) => {
         setReceptions(d?.receptions || []);
         setSamples(d?.samples || []);
+        setReceivedTotal(d?.receivedTotal || {});
+        setClientDemand(d?.clientDemand || {});
+        setSupplierOrdered(d?.supplierOrdered || {});
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -188,24 +213,67 @@ export default function SamplesPage() {
     return out;
   }, [draft, existing]);
 
-  const saveGrid = async () => {
+  const draftItems = () =>
+    changed.map(({ key, qty }) => {
+      const [supplierReceptionId, productId, size] = key.split("__");
+      return { supplierReceptionId, productId, size, quantity: qty };
+    });
+
+  // Étape 1 : le prélèvement empiète-t-il sur une répartition DÉJÀ VALIDÉE ?
+  // Si oui, on n'enregistre rien tant que l'utilisateur n'a pas choisi où retirer.
+  const checkThenSave = async () => {
+    if (changed.length === 0) return;
+    setChecking(true);
+    try {
+      const res = await fetch("/api/samples/impact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items: draftItems() }),
+      });
+      const d = await res.json();
+      if (res.ok && d.conflicts?.length > 0) {
+        // Pré-remplissage : on propose de retirer chez les boutiques les MIEUX servies
+        // d'abord (elles sont les moins pénalisées par un retrait).
+        const pre: Record<string, string> = {};
+        for (const c of d.conflicts as Conflict[]) {
+          let left = c.needed;
+          for (const a of c.allocations) {
+            if (left <= 0) break;
+            const take = Math.min(left, a.allocated);
+            if (take > 0) pre[`${c.productId}__${c.size}__${a.lineId}`] = String(take);
+            left -= take;
+          }
+        }
+        setRemovalDraft(pre);
+        setConflicts(d.conflicts);
+        return;
+      }
+      await saveGrid([]);
+    } catch (e) {
+      toast.error("Vérification impossible", {
+        description: String(e instanceof Error ? e.message : e),
+      });
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  const saveGrid = async (removals: { lineId: string; size: string; quantity: number }[]) => {
     if (changed.length === 0) return;
     setSaving(true);
     try {
-      const items = changed.map(({ key, qty }) => {
-        const [supplierReceptionId, productId, size] = key.split("__");
-        return { supplierReceptionId, productId, size, quantity: qty };
-      });
+      const items = draftItems();
       const res = await fetch("/api/samples/bulk", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items }),
+        body: JSON.stringify({ items, ...(removals.length ? { removals } : {}) }),
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || "Erreur");
       const bits: string[] = [];
       if (d.saved) bits.push(`${d.saved} ligne(s) enregistrée(s)`);
       if (d.deleted) bits.push(`${d.deleted} retirée(s)`);
+      if (d.pulled) bits.push(`${d.pulled} pièce(s) reprise(s) sur la répartition validée`);
       toast.success("Prélèvements enregistrés", {
         description: `${bits.join(" · ")} — retirés du disponible à la répartition.`,
       });
@@ -213,6 +281,8 @@ export default function SamplesPage() {
         toast.warning(`${d.errors.length} cellule(s) ignorée(s)`, { description: d.errors[0] });
       }
       setDraft({});
+      setConflicts(null);
+      setRemovalDraft({});
       load();
     } catch (e) {
       toast.error("Enregistrement impossible", {
@@ -253,6 +323,21 @@ export default function SamplesPage() {
         sizeRank(a.size) - sizeRank(b.size)
     );
   }, [samples, search]);
+
+  // Confirmation possible seulement si CHAQUE conflit a son compte de pièces réparti.
+  const conflictsFullyAssigned = useMemo(() => {
+    if (!conflicts) return false;
+    return conflicts.every((c) => {
+      const assigned = c.allocations.reduce(
+        (sum, a) => sum + (parseInt(removalDraft[`${c.productId}__${c.size}__${a.lineId}`] || "0", 10) || 0),
+        0
+      );
+      const overflow = c.allocations.some(
+        (a) => (parseInt(removalDraft[`${c.productId}__${c.size}__${a.lineId}`] || "0", 10) || 0) > a.allocated
+      );
+      return assigned === c.needed && !overflow;
+    });
+  }, [conflicts, removalDraft]);
 
   const recLabel = (r: ReceptionEntry) =>
     `${r.supplierName} — cmd ${r.orderNumber} (${new Date(r.receptionDate).toLocaleDateString("fr-FR")})`;
@@ -357,9 +442,13 @@ export default function SamplesPage() {
                         {changed.length} cellule(s) modifiée(s) · {formatNumber(draftPieces)} pièce(s)
                       </span>
                     )}
-                    <Button onClick={saveGrid} disabled={changed.length === 0 || saving} className="gap-2">
+                    <Button
+                      onClick={checkThenSave}
+                      disabled={changed.length === 0 || saving || checking}
+                      className="gap-2"
+                    >
                       <Save className="h-4 w-4" />
-                      {saving ? "Enregistrement..." : "Enregistrer"}
+                      {checking ? "Vérification..." : saving ? "Enregistrement..." : "Enregistrer"}
                     </Button>
                   </div>
                 </div>
@@ -429,9 +518,33 @@ export default function SamplesPage() {
                                         "border-destructive text-destructive"
                                     )}
                                   />
-                                  <span className="mt-0.5 block text-[10px] text-muted-foreground">
-                                    /{recv}
-                                  </span>
+                                  {(() => {
+                                    // Deux repères pour choisir OÙ prélever :
+                                    //  • client = reçu total − commandé boutiques (le vrai libre)
+                                    //  • fourn. = reçu total − commandé au fournisseur
+                                    const rt = receivedTotal[row.productId]?.[s] || 0;
+                                    const cd = clientDemand[row.productId]?.[s] || 0;
+                                    const so = supplierOrdered[row.productId]?.[s] || 0;
+                                    const gapC = rt - cd;
+                                    const gapS = rt - so;
+                                    return (
+                                      <span
+                                        className="mt-0.5 block text-[10px] leading-tight text-muted-foreground"
+                                        title={`Reçu ${recv} sur cette réception · Saison : reçu ${rt}, commandé boutiques ${cd} (écart ${gapC >= 0 ? "+" : ""}${gapC}), commandé fournisseur ${so} (écart ${gapS >= 0 ? "+" : ""}${gapS})`}
+                                      >
+                                        /{recv}
+                                        <span
+                                          className={cn(
+                                            "ml-1 font-medium",
+                                            gapC > 0 ? "text-emerald-600" : gapC < 0 ? "text-red-600" : ""
+                                          )}
+                                        >
+                                          {gapC > 0 ? `+${gapC}` : gapC}
+                                        </span>
+                                        <span className="ml-0.5 opacity-60">/{gapS > 0 ? `+${gapS}` : gapS}</span>
+                                      </span>
+                                    );
+                                  })()}
                                 </TableCell>
                               );
                             })}
@@ -443,12 +556,123 @@ export default function SamplesPage() {
                 )}
                 {gridRows.length > 0 && (
                   <p className="text-xs text-muted-foreground">
-                    Le petit nombre sous chaque case est la quantité <strong>reçue</strong> — tu ne
-                    peux pas prélever au-delà. Laisse vide (ou 0) pour ne rien prélever.
+                    Sous chaque case : <strong>/reçu</strong> sur cette réception, puis l&apos;excédent{" "}
+                    <span className="font-medium text-emerald-600">vs commandes boutiques</span> et{" "}
+                    <span className="opacity-60">vs commande fournisseur</span>. Un excédent{" "}
+                    <span className="font-medium text-emerald-600">positif</span> = tu peux prélever
+                    sans pénaliser une boutique.
                   </p>
                 )}
               </CardContent>
             </Card>
+
+            {conflicts && conflicts.length > 0 && (
+              <Card className="border-amber-400">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-base text-amber-700">
+                    <AlertTriangle className="h-4 w-4" />
+                    Ces pièces sont déjà attribuées à des boutiques
+                  </CardTitle>
+                  <p className="text-sm text-muted-foreground">
+                    La répartition validée les a déjà distribuées. Choisis chez quelle(s)
+                    boutique(s) les reprendre, puis confirme. Rien n&apos;est enregistré tant que tu
+                    n&apos;as pas confirmé.
+                  </p>
+                </CardHeader>
+                <CardContent className="space-y-5">
+                  {conflicts.map((c) => {
+                    const assigned = c.allocations.reduce(
+                      (sum, a) => sum + (parseInt(removalDraft[`${c.productId}__${c.size}__${a.lineId}`] || "0", 10) || 0),
+                      0
+                    );
+                    return (
+                      <div key={`${c.productId}__${c.size}`} className="rounded-md border p-3">
+                        <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+                          <span className="font-mono">{c.reference}</span>
+                          <span className="text-muted-foreground">
+                            {c.color}
+                            {c.colorLabel ? ` — ${c.colorLabel}` : ""}
+                          </span>
+                          <Badge variant="outline">taille {c.size}</Badge>
+                          <span className="text-xs text-muted-foreground">
+                            reçu {c.received} · alloué {c.allocated} · prélèvement {c.samples}
+                          </span>
+                          <span
+                            className={cn(
+                              "ml-auto text-xs font-medium",
+                              assigned === c.needed ? "text-emerald-600" : "text-amber-700"
+                            )}
+                          >
+                            {assigned}/{c.needed} pièce(s) à reprendre
+                          </span>
+                        </div>
+                        <div className="space-y-1.5">
+                          {c.allocations.map((a) => {
+                            const k = `${c.productId}__${c.size}__${a.lineId}`;
+                            return (
+                              <div key={a.lineId} className="flex items-center gap-3 text-sm">
+                                <span className="flex-1 truncate">{a.clientName}</span>
+                                <span className="text-xs text-muted-foreground">
+                                  {a.allocated} attribuée(s)
+                                </span>
+                                <input
+                                  inputMode="numeric"
+                                  value={removalDraft[k] ?? ""}
+                                  onChange={(e) =>
+                                    setRemovalDraft((d) => ({
+                                      ...d,
+                                      [k]: e.target.value.replace(/[^0-9]/g, ""),
+                                    }))
+                                  }
+                                  placeholder="0"
+                                  className={cn(
+                                    "h-8 w-16 rounded border bg-transparent text-center text-sm outline-none focus:border-primary",
+                                    (parseInt(removalDraft[k] || "0", 10) || 0) > a.allocated &&
+                                      "border-destructive text-destructive"
+                                  )}
+                                />
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  <div className="flex items-center justify-end gap-2">
+                    <Button
+                      variant="ghost"
+                      onClick={() => {
+                        setConflicts(null);
+                        setRemovalDraft({});
+                      }}
+                    >
+                      Annuler
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        const removals = Object.entries(removalDraft)
+                          .map(([k, v]) => {
+                            const [, size, lineId] = k.split("__");
+                            return { lineId, size, quantity: parseInt(v || "0", 10) || 0 };
+                          })
+                          .filter((r) => r.quantity > 0);
+                        saveGrid(removals);
+                      }}
+                      disabled={saving || !conflictsFullyAssigned}
+                      className="gap-2"
+                    >
+                      <Save className="h-4 w-4" />
+                      {saving ? "Enregistrement..." : "Confirmer et enregistrer"}
+                    </Button>
+                  </div>
+                  {!conflictsFullyAssigned && (
+                    <p className="text-right text-xs text-amber-700">
+                      Répartis toutes les pièces à reprendre pour pouvoir confirmer.
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
             <Card>
               <CardHeader>

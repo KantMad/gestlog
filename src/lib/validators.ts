@@ -93,6 +93,18 @@ export const createSampleSchema = z.object({
 // quantity 0 → suppression du prélèvement correspondant.
 export const bulkSamplesSchema = z.object({
   items: z.array(createSampleSchema).min(1).max(2000),
+  // Retraits décidés par l'utilisateur sur une répartition DÉJÀ VALIDÉE (cf.
+  // /api/samples/impact) : quelles pièces enlever, chez quelle boutique, sur quelle taille.
+  removals: z
+    .array(
+      z.object({
+        lineId: z.string().min(1),
+        size: z.string().min(1).max(10),
+        quantity: z.number().int().min(1).max(100000),
+      })
+    )
+    .max(2000)
+    .optional(),
 });
 
 export const allocationAdjustSchema = z.object({

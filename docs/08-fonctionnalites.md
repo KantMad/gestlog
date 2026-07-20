@@ -92,6 +92,23 @@ sont gérés par écran (cf. [`05-authentification.md`](05-authentification.md))
     prélever = autant d'allers-retours dans 3 listes déroulantes. *Cas réel* `AMPOML_C012` :
     7 coloris × 7 tailles = **49 cases** en une saisie. Seules les cellules **modifiées** sont
     envoyées (delta) ; chaque item reste validé contre le reçu côté serveur.
+  - **Où prélever ?** Chaque case affiche `/reçu` (plafond sur CETTE réception) puis **deux
+    excédents**, calculés par produit+taille sur TOUTE la saison : **vs commandes boutiques**
+    (`reçu total − demande clients` — le vrai « libre », en vert si positif) et **vs commande
+    fournisseur** (sur-livraison, en gris). Un excédent client positif = prélèvement sans
+    pénaliser personne.
+  - **Impact sur une répartition DÉJÀ VALIDÉE** (`POST /api/samples/impact` avant
+    l'enregistrement) : si `prélèvements + alloué > reçu` pour un produit+taille, les pièces
+    manquantes doivent être **reprises aux boutiques**. L'écran liste alors les boutiques
+    concernées avec leurs quantités et **l'utilisateur choisit chez qui reprendre** (pré-rempli
+    en commençant par les mieux servies) ; **rien n'est enregistré tant qu'il n'a pas
+    confirmé**, et le total repris doit correspondre exactement au besoin.
+    - Seule la **dernière session VALIDÉE** de la saison est concernée.
+    - `/bulk` applique les retraits : `allocatedBySize` mis à jour, `reducedBySize`,
+      `reductionReason` et `status` **recalculés**, et une **trace** est ajoutée aux `notes` de
+      la session (un instantané validé ne doit jamais être modifié silencieusement).
+    - ⚠️ Si des **livraisons ont déjà été générées** depuis cette session, elles ne sont **pas**
+      mises à jour — reprendre des pièces après préparation désynchronise l'aval (caisse).
   - Un prélèvement retiré rend les pièces **immédiatement disponibles** (il faut relancer la
     simulation). `quantity: 0` = suppression (dans `/bulk` comme en POST simple).
   - **Accès** : écran `/samples`, mais l'API accepte aussi le droit `/allocation` (celui qui

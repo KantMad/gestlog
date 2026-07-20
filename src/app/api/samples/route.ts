@@ -3,7 +3,8 @@ import { handleApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { verifySession } from "@/lib/session";
 import { createSampleSchema } from "@/lib/validators";
-import { parseSizeQuantities } from "@/lib/utils";
+import { parseSizeQuantities, type SizeQuantities } from "@/lib/utils";
+import { resolveOrderSource } from "@/lib/order-source";
 
 // ─── Échantillons « shipment sample » ────────────────────────────────────────────────
 // Pièces prélevées sur une réception pour le contrôle qualité du siège. Elles ne seront
@@ -67,7 +68,53 @@ export async function GET(request: NextRequest) {
       })),
     }));
 
-    return NextResponse.json({ receptions: data, samples });
+    // ── Où peut-on prélever sans pénaliser une boutique ? ─────────────────────────────
+    // Deux repères, par produit ET par taille (agrégés sur TOUTE la saison, car un produit
+    // peut arriver en plusieurs réceptions) :
+    //   • écart CLIENT     = reçu total − commandé par les boutiques  (le vrai « libre »)
+    //   • écart FOURNISSEUR = reçu total − commandé au fournisseur    (sur-livraison)
+    const receivedTotal: Record<string, SizeQuantities> = {};
+    for (const r of receptions) {
+      for (const l of r.lines) {
+        const m = (receivedTotal[l.product.id] ||= {});
+        for (const [size, n] of Object.entries(parseSizeQuantities(l.quantitiesBySize))) {
+          m[size] = (m[size] || 0) + n;
+        }
+      }
+    }
+
+    const orderSource = await resolveOrderSource(seasonId);
+    const clientLines = await prisma.clientOrderLine.findMany({
+      where: { clientOrder: { seasonId, source: orderSource, orderType: "COMMANDE" } },
+      select: { productId: true, quantitiesBySize: true },
+    });
+    const clientDemand: Record<string, SizeQuantities> = {};
+    for (const l of clientLines) {
+      const m = (clientDemand[l.productId] ||= {});
+      for (const [size, n] of Object.entries(parseSizeQuantities(l.quantitiesBySize))) {
+        m[size] = (m[size] || 0) + n;
+      }
+    }
+
+    const supplierLines = await prisma.supplierOrderLine.findMany({
+      where: { supplierOrder: { seasonId } },
+      select: { productId: true, quantitiesBySize: true },
+    });
+    const supplierOrdered: Record<string, SizeQuantities> = {};
+    for (const l of supplierLines) {
+      const m = (supplierOrdered[l.productId] ||= {});
+      for (const [size, n] of Object.entries(parseSizeQuantities(l.quantitiesBySize))) {
+        m[size] = (m[size] || 0) + n;
+      }
+    }
+
+    return NextResponse.json({
+      receptions: data,
+      samples,
+      receivedTotal,
+      clientDemand,
+      supplierOrdered,
+    });
   } catch (e) {
     return handleApiError(e, "api/samples#GET");
   }
