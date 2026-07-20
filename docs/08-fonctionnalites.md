@@ -102,6 +102,11 @@ sont gérés par écran (cf. [`05-authentification.md`](05-authentification.md))
     dernière répartition validée — pour choisir où prélever **avant** de saisir, sans attendre
     l'alerte de conflit. Chargé **à la demande** (une requête par produit déplié, mise en cache
     côté écran) : le renvoyer pour toute la saison serait inutilement lourd.
+  - **Repérer les AJOUTS** : dans le détail, une case dont l'alloué **dépasse la commande** de
+    la boutique (surplus réparti) est **surlignée en vert avec `+N`**, la boutique porte un badge
+    du total de ses ajouts, et un résumé annonce le total pour le produit. Ce sont les pièces
+    que la boutique n'avait **pas demandées** → les prélever là est le moins pénalisant.
+    *Mesuré sur AH26* : **399 pièces** au-delà des commandes réparties chez **43 boutiques**.
   - **Retirer directement des pièces à une boutique** : dans le détail déplié, chaque
     quantité allouée porte une case de saisie → on indique combien retirer **à cette boutique
     sur cette taille**, puis « Retirer de la répartition ». Indépendant de la grille de

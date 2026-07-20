@@ -682,15 +682,42 @@ export default function SamplesPage() {
                                       </p>
                                     ) : (
                                       <div className="space-y-2">
-                                        <p className="text-xs text-muted-foreground">
-                                          Réparti le{" "}
-                                          {detailByProduct[row.productId].sessionDate
-                                            ? new Date(
-                                                detailByProduct[row.productId].sessionDate as string
-                                              ).toLocaleDateString("fr-FR")
-                                            : "—"}{" "}
-                                          entre {detailByProduct[row.productId].rows.length} boutique(s) :
-                                        </p>
+                                        {(() => {
+                                          // Total des pièces données au-delà des commandes sur
+                                          // CE produit : le gisement le plus sûr pour prélever.
+                                          const extraAll = detailByProduct[row.productId].rows.reduce(
+                                            (a, r) =>
+                                              a +
+                                              Object.entries(r.allocated).reduce(
+                                                (b, [sz, n]) => b + Math.max(0, n - (r.original[sz] || 0)),
+                                                0
+                                              ),
+                                            0
+                                          );
+                                          return (
+                                            <p className="text-xs text-muted-foreground">
+                                              Réparti le{" "}
+                                              {detailByProduct[row.productId].sessionDate
+                                                ? new Date(
+                                                    detailByProduct[row.productId].sessionDate as string
+                                                  ).toLocaleDateString("fr-FR")
+                                                : "—"}{" "}
+                                              entre {detailByProduct[row.productId].rows.length} boutique(s)
+                                              {extraAll > 0 ? (
+                                                <>
+                                                  {" — dont "}
+                                                  <span className="font-medium text-emerald-700">
+                                                    {extraAll} pièce(s) au-delà des commandes
+                                                  </span>
+                                                  {" (en vert ci-dessous)"}
+                                                </>
+                                              ) : (
+                                                " — aucune pièce au-delà des commandes"
+                                              )}{" "}
+                                              :
+                                            </p>
+                                          );
+                                        })()}
                                         <div className="overflow-x-auto">
                                           <table className="text-xs">
                                             <thead>
@@ -707,11 +734,31 @@ export default function SamplesPage() {
                                             <tbody>
                                               {detailByProduct[row.productId].rows.map((r) => {
                                                 const tot = Object.values(r.allocated).reduce((a, b) => a + b, 0);
+                                                // Total des pièces reçues au-delà de la commande.
+                                                const extraTot = Object.entries(r.allocated).reduce(
+                                                  (a, [sz, n]) => a + Math.max(0, n - (r.original[sz] || 0)),
+                                                  0
+                                                );
                                                 return (
                                                   <tr key={r.lineId} className="border-t">
-                                                    <td className="px-2 py-1">{r.clientName}</td>
+                                                    <td className="px-2 py-1">
+                                                      {r.clientName}
+                                                      {extraTot > 0 && (
+                                                        <span
+                                                          className="ml-1.5 rounded bg-emerald-100 px-1 text-[10px] font-medium text-emerald-700"
+                                                          title="Pièces attribuées au-delà de sa commande"
+                                                        >
+                                                          +{extraTot}
+                                                        </span>
+                                                      )}
+                                                    </td>
                                                     {gridSizes.map((sz) => {
                                                       const has = r.allocated[sz] || 0;
+                                                      const ord = r.original[sz] || 0;
+                                                      // Pièces données AU-DELÀ de la commande de
+                                                      // la boutique (surplus réparti) : c'est là
+                                                      // qu'il est le moins gênant de prélever.
+                                                      const extra = has - ord;
                                                       const pk = `${row.productId}::${r.lineId}::${sz}`;
                                                       if (has <= 0) {
                                                         return (
@@ -722,9 +769,25 @@ export default function SamplesPage() {
                                                       }
                                                       const asked = parseInt(pullDraft[pk] || "0", 10) || 0;
                                                       return (
-                                                        <td key={sz} className="px-1 py-1 text-center">
+                                                        <td
+                                                          key={sz}
+                                                          className={cn(
+                                                            "px-1 py-1 text-center",
+                                                            extra > 0 && "bg-emerald-50"
+                                                          )}
+                                                        >
                                                           <div className="flex flex-col items-center">
-                                                            <span className="tabular-nums">{has}</span>
+                                                            <span className="tabular-nums">
+                                                              {has}
+                                                              {extra > 0 && (
+                                                                <span
+                                                                  className="ml-0.5 font-medium text-emerald-700"
+                                                                  title={`${extra} pièce(s) au-delà de sa commande (${ord} commandée(s)) — prélever ici en priorité`}
+                                                                >
+                                                                  +{extra}
+                                                                </span>
+                                                              )}
+                                                            </span>
                                                             {/* Saisir ici = retirer ces pièces À CETTE BOUTIQUE. */}
                                                             <input
                                                               inputMode="numeric"
@@ -779,7 +842,12 @@ export default function SamplesPage() {
                                             <div className="flex items-center justify-between gap-3 pt-1">
                                               <p className="text-[11px] text-muted-foreground">
                                                 Saisis sous une quantité pour <strong>retirer</strong> ces
-                                                pièces à cette boutique.
+                                                pièces à cette boutique. Les cases{" "}
+                                                <span className="rounded bg-emerald-50 px-1 text-emerald-700">
+                                                  vertes +N
+                                                </span>{" "}
+                                                sont des pièces données <strong>au-delà</strong> de ce que la
+                                                boutique avait commandé — à prélever en priorité.
                                               </p>
                                               <div className="flex items-center gap-2">
                                                 {nb > 0 && (

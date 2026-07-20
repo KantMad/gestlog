@@ -340,6 +340,7 @@ export const HELP_THEMES: HelpTheme[] = [
             h: "Si les pièces sont déjà attribuées à des boutiques",
             lines: [
               "**Avant même de saisir**, clique sur une **référence** dans la grille : le détail se déplie et te montre **quelle boutique a déjà quelles tailles**.",
+              "Les cases **vertes avec un +N** signalent des pièces que la répartition a données **au-delà de ce que la boutique avait commandé** (du surplus). C'est là qu'il faut prélever en priorité : la boutique ne les avait pas demandées.",
               "Sous chaque quantité, une petite case te permet de **retirer directement des pièces à cette boutique précise** : tu saisis le nombre, puis **Retirer de la répartition**. C'est le moyen de choisir toi-même chez qui prendre.",
               "Quand tu prélèves des pièces qu'une **répartition validée** a déjà distribuées, l'outil t'arrête et affiche les boutiques concernées.",
               "Tu choisis **chez qui reprendre** les pièces (une proposition est pré-remplie, en commençant par les boutiques les mieux servies), puis tu confirmes. **Rien n'est enregistré avant ta confirmation.**",
