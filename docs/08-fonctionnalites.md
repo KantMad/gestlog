@@ -107,13 +107,18 @@ sont gérés par écran (cf. [`05-authentification.md`](05-authentification.md))
     du total de ses ajouts, et un résumé annonce le total pour le produit. Ce sont les pièces
     que la boutique n'avait **pas demandées** → les prélever là est le moins pénalisant.
     *Mesuré sur AH26* : **399 pièces** au-delà des commandes réparties chez **43 boutiques**.
-  - **Retirer directement des pièces à une boutique** : dans le détail déplié, chaque
-    quantité allouée porte une case de saisie → on indique combien retirer **à cette boutique
-    sur cette taille**, puis « Retirer de la répartition ». Indépendant de la grille de
-    prélèvement (`/bulk` accepte `items: []` avec seulement des `removals`) : sert aussi à
-    corriger une répartition. Le **statut** est recalculé avec le **seuil minimum de livraison**
-    de la boutique (0 → `ANNULE`, sous le seuil → `EN_ATTENTE`) — sinon une ligne `EN_ATTENTE`
-    repasserait à tort en `LIVRABLE`.
+  - **Mettre de côté une pièce déjà attribuée = UN SEUL mouvement** (`POST /api/samples/pull`,
+    atomique) : dans le détail déplié, on saisit sous une quantité combien **reprendre à cette
+    boutique sur cette taille**, puis « Mettre de côté (échantillon) ». Ce geste, indissociable :
+    1. **réduit l'allocation** de la boutique (`reducedBySize` / `status` recalculés, avec le
+       **seuil min de livraison** : 0 → `ANNULE`, sous le seuil → `EN_ATTENTE`) ;
+    2. **crée/incrémente le ShipmentSample** correspondant → la pièce apparaît dans la liste
+       « Pièces mises de côté » **et** est retirée du **disponible** fournisseur (cf. `simulate`).
+    - Rattaché à la **réception du détail affiché** (`row.receptionId`) ; plafonné au **reçu de
+      cette réception** sur la taille. Validation **tout-ou-rien** : un pick invalide annule le
+      lot entier (jamais d'allocation réduite sans échantillon créé, ni l'inverse).
+    - La **réception physique** (`ReceptionLine`) n'est **pas** modifiée (fait fournisseur) ;
+      une **trace** est ajoutée aux notes de la/les session(s) touchée(s).
   - **Impact sur une répartition DÉJÀ VALIDÉE** (`POST /api/samples/impact` avant
     l'enregistrement) : si `prélèvements + alloué > reçu` pour un produit+taille, les pièces
     manquantes doivent être **reprises aux boutiques**. L'écran liste alors les boutiques

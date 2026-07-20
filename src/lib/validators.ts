@@ -112,6 +112,23 @@ export const bulkSamplesSchema = z.object({
     message: "Rien à enregistrer : ni prélèvement, ni retrait.",
   });
 
+// Mouvement « mettre de côté » depuis le détail de répartition : chaque pick prend des
+// pièces attribuées à une boutique (lineId) sur une taille, et les rattache à la réception
+// d'où elles proviennent (supplierReceptionId) → allocation réduite ET échantillon créé.
+export const pullSamplesSchema = z.object({
+  picks: z
+    .array(
+      z.object({
+        lineId: z.string().min(1),
+        supplierReceptionId: z.string().min(1),
+        size: z.string().min(1).max(10),
+        quantity: z.number().int().min(1).max(100000),
+      })
+    )
+    .min(1)
+    .max(2000),
+});
+
 export const allocationAdjustSchema = z.object({
   lineId: z.string().min(1),
   newAllocatedBySize: z.record(z.string(), z.number().int().min(0)),

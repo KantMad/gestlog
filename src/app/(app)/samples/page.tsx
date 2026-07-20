@@ -267,28 +267,29 @@ export default function SamplesPage() {
     }
   };
 
-  // Retire des pièces à des boutiques précises, depuis le détail de répartition.
-  // Indépendant de la grille : on peut vouloir juste corriger une répartition.
-  const applyPulls = async (productId: string) => {
-    const removals = Object.entries(pullDraft)
+  // LE mouvement « mettre de côté » depuis le détail : les pièces choisies chez une
+  // boutique sortent de sa commande ET entrent en échantillon (donc retirées du disponible
+  // fournisseur). `receptionId` = la réception d'où viennent les pièces (celle du détail).
+  const applyPulls = async (productId: string, receptionId: string) => {
+    const picks = Object.entries(pullDraft)
       .filter(([k]) => k.startsWith(`${productId}::`))
       .map(([k, v]) => {
         const [, lineId, size] = k.split("::");
-        return { lineId, size, quantity: parseInt(v || "0", 10) || 0 };
+        return { lineId, supplierReceptionId: receptionId, size, quantity: parseInt(v || "0", 10) || 0 };
       })
       .filter((r) => r.quantity > 0);
-    if (removals.length === 0) return;
+    if (picks.length === 0) return;
     setPulling(true);
     try {
-      const res = await fetch("/api/samples/bulk", {
+      const res = await fetch("/api/samples/pull", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items: [], removals }),
+        body: JSON.stringify({ picks }),
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || "Erreur");
-      toast.success(`${d.pulled} pièce(s) retirée(s) de la répartition`, {
-        description: "Les boutiques concernées ont été mises à jour.",
+      toast.success(`${d.pulled} pièce(s) mise(s) de côté pour échantillon`, {
+        description: "Retirées de la boutique ET du disponible fournisseur.",
       });
       // Recharge le détail du produit (les quantités ont changé).
       setPullDraft((m) => {
@@ -841,8 +842,9 @@ export default function SamplesPage() {
                                           return (
                                             <div className="flex items-center justify-between gap-3 pt-1">
                                               <p className="text-[11px] text-muted-foreground">
-                                                Saisis sous une quantité pour <strong>retirer</strong> ces
-                                                pièces à cette boutique. Les cases{" "}
+                                                Saisis sous une quantité pour <strong>mettre de côté</strong>{" "}
+                                                ces pièces : elles sortent de la boutique ET du disponible
+                                                fournisseur, et entrent en échantillon. Les cases{" "}
                                                 <span className="rounded bg-emerald-50 px-1 text-emerald-700">
                                                   vertes +N
                                                 </span>{" "}
@@ -859,11 +861,11 @@ export default function SamplesPage() {
                                                   size="sm"
                                                   variant="outline"
                                                   disabled={nb === 0 || over || pulling}
-                                                  onClick={() => applyPulls(row.productId)}
+                                                  onClick={() => applyPulls(row.productId, row.receptionId)}
                                                   className="h-7 gap-1.5 text-xs"
                                                 >
-                                                  <Trash2 className="h-3.5 w-3.5" />
-                                                  {pulling ? "Retrait..." : "Retirer de la répartition"}
+                                                  <FlaskConical className="h-3.5 w-3.5" />
+                                                  {pulling ? "Mise de côté..." : "Mettre de côté (échantillon)"}
                                                 </Button>
                                               </div>
                                             </div>
