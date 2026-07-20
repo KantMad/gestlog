@@ -18,7 +18,33 @@ export async function GET(request: NextRequest) {
       orderBy: { sessionDate: "desc" },
     });
 
-    return NextResponse.json({ data: sessions });
+    // Fournisseur(s) concerné(s) par chaque session : via les produits répartis, rattachés
+    // aux commandes fournisseur de LA MÊME saison. Une seule requête pour toutes les
+    // sessions (le faire session par session ferait N requêtes).
+    const rows = await prisma.$queryRaw<{ sessionId: string; name: string }[]>`
+      SELECT DISTINCT al."allocationSessionId" AS "sessionId", s.name AS name
+      FROM "AllocationLine" al
+      JOIN "AllocationSession" a ON a.id = al."allocationSessionId"
+      JOIN "SupplierOrderLine" sol ON sol."productId" = al."productId"
+      JOIN "SupplierOrder" so ON so.id = sol."supplierOrderId" AND so."seasonId" = a."seasonId"
+      JOIN "Supplier" s ON s.id = so."supplierId"
+      WHERE a."seasonId" = ${seasonId}
+    `;
+    const suppliersBySession = new Map<string, string[]>();
+    for (const r of rows) {
+      const l = suppliersBySession.get(r.sessionId) || [];
+      l.push(r.name);
+      suppliersBySession.set(r.sessionId, l);
+    }
+
+    const data = sessions.map((s) => ({
+      ...s,
+      suppliers: (suppliersBySession.get(s.id) || []).sort((a, b) =>
+        a.localeCompare(b, "fr", { sensitivity: "base" })
+      ),
+    }));
+
+    return NextResponse.json({ data });
   } catch (e) {
     return handleApiError(e, "api/allocation/sessions");
   }

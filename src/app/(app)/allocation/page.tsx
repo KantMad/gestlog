@@ -37,6 +37,7 @@ import {
   Download,
   Barcode,
   Upload,
+  Truck,
   History,
   Pencil,
   X,
@@ -102,6 +103,8 @@ interface SessionEntry {
   sessionDate: string;
   notes: string | null;
   _count: { lines: number };
+  /** Fournisseur(s) des produits répartis — pour repérer une session d'un coup d'œil. */
+  suppliers?: string[];
 }
 
 interface CatalogEntry {
@@ -1873,6 +1876,23 @@ export default function AllocationPage() {
                           <span className="text-xs text-muted-foreground ml-2">
                             {session._count.lines} lignes
                           </span>
+                          {/* Fournisseur(s) concerné(s) : repère principal pour retrouver
+                              une session (une saison en compte vite plusieurs). */}
+                          {session.suppliers && session.suppliers.length > 0 && (
+                            <div className="mt-1 flex flex-wrap items-center gap-1">
+                              <Truck className="h-3 w-3 text-muted-foreground" />
+                              {session.suppliers.slice(0, 4).map((s) => (
+                                <Badge key={s} variant="outline" className="text-[10px] font-normal">
+                                  {s}
+                                </Badge>
+                              ))}
+                              {session.suppliers.length > 4 && (
+                                <span className="text-[10px] text-muted-foreground">
+                                  +{session.suppliers.length - 4}
+                                </span>
+                              )}
+                            </div>
+                          )}
                         </div>
                       </div>
                       <div className="flex items-center gap-3">

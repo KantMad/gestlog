@@ -124,6 +124,7 @@ export default function AllocationSessionDetailPage({
   // touche donc jamais au calcul de la répartition. Vide = tout.
   const [exportSuppliers, setExportSuppliers] = useState<string[]>([]);
   const [exportClients, setExportClients] = useState<string[]>([]);
+  const [viewMode, setViewMode] = useState<"client" | "product">("client");
 
   useEffect(() => {
     setLoading(true);
@@ -165,6 +166,29 @@ export default function AllocationSessionDetailPage({
         cmp(a.productColor, b.productColor)
     );
   }, [lines, search]);
+
+  // Regroupement (même logique que l'écran Répartition) : par boutique ou par produit.
+  // Les groupes ET les lignes internes sont triés par ordre alphabétique.
+  const groups = useMemo(() => {
+    const cmp = (a: string, b: string) =>
+      a.localeCompare(b, "fr", { sensitivity: "base", numeric: true });
+    const m = new Map<string, { label: string; sub: string; lines: SessionLine[] }>();
+    for (const l of filtered) {
+      const key = viewMode === "client" ? l.clientId || l.clientName : l.productId;
+      const label = viewMode === "client" ? l.clientName : l.productReference;
+      const sub = viewMode === "client" ? l.clientCode : l.productColor;
+      if (!m.has(key)) m.set(key, { label, sub, lines: [] });
+      m.get(key)!.lines.push(l);
+    }
+    for (const g of m.values()) {
+      g.lines.sort((a, b) =>
+        viewMode === "client"
+          ? cmp(a.productReference, b.productReference) || cmp(a.productColor, b.productColor)
+          : cmp(a.clientName, b.clientName)
+      );
+    }
+    return [...m.values()].sort((a, b) => cmp(a.label, b.label) || cmp(a.sub, b.sub));
+  }, [filtered, viewMode]);
 
   const totals = useMemo(() => {
     const original = lines.reduce((s, l) => s + sumQuantities(l.original), 0);
@@ -528,14 +552,40 @@ export default function AllocationSessionDetailPage({
               </CardContent>
             </Card>
 
-            <div className="relative max-w-sm">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Rechercher une boutique, une référence..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-9 h-9 text-sm"
-              />
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="relative max-w-sm flex-1 min-w-[220px]">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Rechercher une boutique, une référence..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="pl-9 h-9 text-sm"
+                />
+              </div>
+              {/* Même bascule que l'écran Répartition. */}
+              <div className="inline-flex rounded-md border p-0.5">
+                {(
+                  [
+                    { v: "client", label: "Par boutique", icon: Users },
+                    { v: "product", label: "Par produit", icon: Package },
+                  ] as const
+                ).map((o) => (
+                  <button
+                    key={o.v}
+                    type="button"
+                    onClick={() => setViewMode(o.v)}
+                    className={cn(
+                      "inline-flex items-center gap-1.5 rounded px-2.5 py-1 text-xs transition-colors",
+                      viewMode === o.v
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:bg-accent"
+                    )}
+                  >
+                    <o.icon className="h-3.5 w-3.5" />
+                    {o.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="rounded-md border">
@@ -560,15 +610,61 @@ export default function AllocationSessionDetailPage({
                       </TableCell>
                     </TableRow>
                   ) : (
-                    filtered.map((line) => {
-                      const orig = sumQuantities(line.original);
-                      const alloc = sumQuantities(line.allocated);
-                      const d = alloc - orig;
-                      return (
+                    groups.flatMap((g) => {
+                      const gOrig = g.lines.reduce((s, l) => s + sumQuantities(l.original), 0);
+                      const gAlloc = g.lines.reduce((s, l) => s + sumQuantities(l.allocated), 0);
+                      const gDelta = gAlloc - gOrig;
+                      return [
+                        // En-tête de groupe : totaux de la boutique (ou du produit).
+                        <TableRow key={`h_${g.label}_${g.sub}`} className="bg-muted/40 hover:bg-muted/40">
+                          <TableCell colSpan={4} className="font-semibold">
+                            {viewMode === "client" ? (
+                              <span className="inline-flex items-center gap-2">
+                                <Users className="h-3.5 w-3.5 text-muted-foreground" />
+                                {g.label}
+                                {g.sub && (
+                                  <span className="font-normal text-xs text-muted-foreground">{g.sub}</span>
+                                )}
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-2">
+                                <Package className="h-3.5 w-3.5 text-muted-foreground" />
+                                <span className="font-mono">{g.label}</span>
+                                <span className="font-normal text-xs text-muted-foreground">{g.sub}</span>
+                              </span>
+                            )}
+                            <span className="ml-2 text-xs font-normal text-muted-foreground">
+                              {g.lines.length} ligne{g.lines.length > 1 ? "s" : ""}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums font-semibold">{gOrig}</TableCell>
+                          <TableCell className="text-right tabular-nums font-semibold">{gAlloc}</TableCell>
+                          <TableCell
+                            className={cn(
+                              "text-right tabular-nums font-semibold",
+                              gDelta < 0 && "text-red-600",
+                              gDelta > 0 && "text-emerald-600"
+                            )}
+                          >
+                            {gDelta === 0 ? "—" : `${gDelta > 0 ? "+" : ""}${gDelta}`}
+                          </TableCell>
+                          <TableCell />
+                        </TableRow>,
+                        ...g.lines.map((line) => {
+                          const orig = sumQuantities(line.original);
+                          const alloc = sumQuantities(line.allocated);
+                          const d = alloc - orig;
+                          return (
                         <TableRow key={line.id}>
-                          <TableCell className="font-medium">
+                          {/* En vue « par boutique », le nom est déjà dans l'en-tête de groupe
+                              → on ne le répète pas sur chaque ligne. */}
+                          <TableCell className={cn(viewMode === "client" ? "pl-8" : "font-medium")}>
                             <span className="inline-flex items-center gap-1.5">
-                              {line.clientName}
+                              {viewMode === "client" ? (
+                                <span className="text-xs text-muted-foreground">↳</span>
+                              ) : (
+                                line.clientName
+                              )}
                               {line.isManualAdjustment && (
                                 <Pencil className="h-3 w-3 text-blue-600" aria-label="Ajusté à la main" />
                               )}
@@ -596,7 +692,9 @@ export default function AllocationSessionDetailPage({
                             </Badge>
                           </TableCell>
                         </TableRow>
-                      );
+                          );
+                        }),
+                      ];
                     })
                   )}
                 </TableBody>

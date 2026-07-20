@@ -99,8 +99,12 @@ sont gérés par écran (cf. [`05-authentification.md`](05-authentification.md))
   (`status=VALIDATED`) + une `AllocationLine` par ligne (boutique × produit) avec les quantités
   commandées / allouées / retirées. C'est **persisté en base** (à ne pas confondre avec la
   simulation, qui vit en `sessionStorage`). Le bouton **Historique** liste les sessions de la
-  saison ; chaque carte ouvre **`/allocation/sessions/[sessionId]`** (totaux, recherche
-  boutique/référence/couleur, détail taille par taille, ajustements manuels marqués).
+  saison **avec le(s) fournisseur(s) concerné(s)** (déduits des produits répartis via les
+  commandes fournisseur de la saison — une requête unique pour toutes les sessions) ; chaque
+  carte ouvre **`/allocation/sessions/[sessionId]`** (totaux, recherche
+  boutique/référence/couleur, bascule **par boutique / par produit** avec sous-totaux par
+  groupe — même logique que l'écran Répartition —, détail taille par taille, ajustements
+  manuels marqués).
   - **Accès** : les sessions sont rattachées à la **saison**, pas à l'utilisateur — tout le monde
     voit celles de tout le monde. Le middleware mappe `/allocation/*` **et** `/api/allocation/*`
     sur l'écran **Répartition** (`screenForPath` matche par préfixe → la sous-route est protégée
