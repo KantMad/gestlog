@@ -483,8 +483,13 @@ Les fichiers réels MCS ne sont pas des tableaux plats → l'import les **auto-d
   `sizeScale` déduit de la gamme). La synchro TIO (`ON CONFLICT (reference,color)`) l'enrichit
   ensuite (catégorie, prix, EAN…). La réponse d'import remonte le nombre de produits créés.
 - **« Packing List » (réception)** : format **tolérant** — colonne référence reconnue par
-  plusieurs libellés (`FULL MCS PRODUCT REF`, `REFERENCE`, `REF`, `CODE PRODUIT FINI`…),
-  couleur par `COLOR CODE`/`COLOR`/`COULEUR`/`COLORIS`. **Deux dispositions** reconnues :
+  plusieurs libellés (`FULL MCS PRODUCT REF`, `REFERENCE …`, `REF`, `CODE PRODUIT FINI`…),
+  couleur par `COLOR CODE`/`COLOR`/`COULEUR`/`COLORIS`. La référence accepte aussi le libellé
+  **français** `REFERENCE produit fini` (tout en-tête commençant par `REFERENCE`/`RÉFÉRENCE`,
+  avec ou sans suffixe) — *template IMDER* : titre + ligne `COMMANDE FOURNISSEUR` au-dessus,
+  **le vrai en-tête est celui qui porte les tailles** `S,M,L,XL,2XL,3XL,4XL`, et une colonne
+  `Coloris produit fini` distincte du `COLOR CODE` (le libellé couleur est repris comme nom).
+  **Deux dispositions** reconnues :
   - **large** : **une colonne par taille**, repérée par son nom (`S,M,L,XL,2XL…` OU numériques
     `36,38,40…`, **ordre indifférent**) ;
   - **longue** : **une ligne par taille** — la taille et la quantité sont des *valeurs*, dans
@@ -515,7 +520,12 @@ Les fichiers réels MCS ne sont pas des tableaux plats → l'import les **auto-d
   un produit fantôme à partir d'une faute de frappe fournisseur.
   **N° de commande fournisseur facultatif** : laissé vide → **rattachement automatique** à
   la commande fournisseur de la même saison qui contient le plus de produits reçus ; sinon
-  le n° saisi force une commande précise.
+  le n° saisi force une commande précise. Quand le **fichier de réception ne porte pas le
+  n° de commande**, le champ est une **liste cherchable** (`<datalist>`) : il propose les
+  commandes fournisseur **déjà importées dans la saison** (n° + fournisseur + nb de réf.),
+  alimentée par `GET /api/import/supplier-orders?seasonId=` — on choisit la bonne au lieu de
+  la taper. Le champ reste libre (on peut saisir un n° absent de la liste) et vide reste
+  possible (rattachement auto).
 - **« StatGen » (commande client)** : détecté par `Fiche client` + `Fiche produit fini` (et
   PAS `Fiche fournisseur`). `N° commande client` + nom client (`Raison sociale`), couleur par
   code, `Q.N` décodé par produit. **Optimisé gros volume** (8000+ lignes / 200+ commandes) :

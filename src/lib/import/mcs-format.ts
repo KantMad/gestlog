@@ -60,10 +60,14 @@ const isSizeHeader = (h: string): boolean => {
   return SIZE_LETTERS.has(u) || /^\d{2}$/.test(u) || /^\d{2}[-/]\d{2}$/.test(u);
 };
 // Colonne « référence » d'une réception : plusieurs libellés possibles selon l'export.
+// Accepte aussi « REFERENCE produit fini » (template IMDER) — tout en-tête commençant par
+// REFERENCE/RÉFÉRENCE, avec ou sans suffixe (« … produit fini »).
 const isRefHeader = (h: string): boolean =>
   h === "FULL MCS PRODUCT REF" ||
-  h === "REFERENCE" || h === "RÉFÉRENCE" || h === "REF" ||
-  h === "CODE PRODUIT FINI" || h.includes("PRODUCT REF");
+  h === "REF" ||
+  h === "CODE PRODUIT FINI" ||
+  h.includes("PRODUCT REF") ||
+  /^R[EÉ]F[EÉ]RENCE\b/.test(h);
 // Colonnes du format « LONG » : une ligne PAR TAILLE (la taille et la quantité sont des
 // VALEURS, pas des colonnes). Ex. : REFERENCE | COULEUR | … | Taille | Quantité.
 const isSizeColHeader = (h: string): boolean => h === "TAILLE" || h === "SIZE";
@@ -460,7 +464,12 @@ export function parseMcsPackingList(buffer: ArrayBuffer): McsReceptionLine[] {
       cCode = header.findIndex(
         (s) => (s.includes("COLOR") || s.includes("COULEUR") || s.includes("COLORIS")) && !s.includes("DESCR")
       );
-    const cName = header.findIndex((s) => s.includes("DESCR") && s.includes("COLOR"));
+    let cName = header.findIndex((s) => s.includes("DESCR") && s.includes("COLOR"));
+    // Sinon, une colonne de LIBELLÉ couleur distincte du code (« Coloris produit fini »).
+    if (cName < 0)
+      cName = header.findIndex(
+        (s, i) => i !== cCode && (s.includes("COLORIS") || (s.includes("COULEUR") && !s.includes("CODE")))
+      );
 
     // Lignes de détail : jusqu'au récapitulatif (2e en-tête) ; hors lignes TOTAL.
     const rows: Cell[][] = [];

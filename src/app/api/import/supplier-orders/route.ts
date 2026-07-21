@@ -69,3 +69,36 @@ export async function POST(request: NextRequest) {
     return handleApiError(e, "api/import/supplier-orders");
   }
 }
+
+// GET ?seasonId= — liste les commandes fournisseur d'une saison, pour rattacher une réception
+// dont le fichier ne porte pas le n° de commande (sélecteur cherchable de l'écran Import réceptions).
+export async function GET(request: NextRequest) {
+  try {
+    const seasonId = request.nextUrl.searchParams.get("seasonId");
+    if (!seasonId) return NextResponse.json({ error: "seasonId requis" }, { status: 400 });
+
+    const orders = await prisma.supplierOrder.findMany({
+      where: { seasonId },
+      select: {
+        orderNumber: true,
+        status: true,
+        supplier: { select: { name: true, code: true } },
+        _count: { select: { lines: true, receptions: true } },
+      },
+      orderBy: [{ supplier: { name: "asc" } }, { orderNumber: "asc" }],
+    });
+
+    return NextResponse.json({
+      data: orders.map((o) => ({
+        orderNumber: o.orderNumber,
+        status: o.status,
+        supplierName: o.supplier.name,
+        supplierCode: o.supplier.code,
+        lineCount: o._count.lines,
+        receptionCount: o._count.receptions,
+      })),
+    });
+  } catch (e) {
+    return handleApiError(e, "api/import/supplier-orders");
+  }
+}

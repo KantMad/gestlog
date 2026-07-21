@@ -458,6 +458,24 @@ function ImportTab({
   // Onglet Texas (ERP) : parsing dédié (le fichier Texas ne passe PAS par detectMcsFormat).
   const isTexas = tab.id === "texas-orders";
   const [texasCount, setTexasCount] = useState<number | null>(null);
+  // Réceptions : commandes fournisseur déjà importées dans la saison, pour choisir celle à
+  // rattacher quand le fichier de réception ne porte pas le n° de commande (datalist cherchable).
+  const [seasonOrders, setSeasonOrders] = useState<
+    { orderNumber: string; supplierName: string; lineCount: number; receptionCount: number }[]
+  >([]);
+  useEffect(() => {
+    if (tab.id !== "receptions" || !seasonId) return;
+    let cancelled = false;
+    fetch(`/api/import/supplier-orders?seasonId=${encodeURIComponent(seasonId)}`)
+      .then((r) => (r.ok ? r.json() : { data: [] }))
+      .then((json) => {
+        if (!cancelled) setSeasonOrders(json.data ?? []);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [tab.id, seasonId]);
 
   // Format MCS attendu pour cet onglet (les autres onglets restent en mapping générique).
   // « client-order » (StatGen client TIO) n'a plus d'onglet : ce format n'est plus importé
@@ -720,20 +738,45 @@ function ImportTab({
           {mcsFormat === "packing-list" && (
             <div className="space-y-1.5">
               <label htmlFor="supplierOrderNumber" className="text-sm font-medium">
-                N° de commande fournisseur{" "}
+                Commande fournisseur à rattacher{" "}
                 <span className="font-normal text-muted-foreground">(facultatif)</span>
               </label>
               <Input
                 id="supplierOrderNumber"
+                list="season-supplier-orders"
                 value={supplierOrderNumber}
                 onChange={(e) => setSupplierOrderNumber(e.target.value)}
-                placeholder="laisser vide = rattachement automatique"
+                placeholder={
+                  seasonOrders.length > 0
+                    ? "chercher une commande de la saison — ou laisser vide"
+                    : "laisser vide = rattachement automatique"
+                }
                 disabled={importing}
               />
+              <datalist id="season-supplier-orders">
+                {seasonOrders.map((o) => (
+                  <option key={o.orderNumber} value={o.orderNumber}>
+                    {o.supplierName} — {o.lineCount} réf.
+                    {o.receptionCount > 0 ? ` · ${o.receptionCount} récept.` : ""}
+                  </option>
+                ))}
+              </datalist>
               <p className="text-xs text-muted-foreground">
-                Laissé vide, la réception est <strong>rattachée automatiquement</strong> à la
-                commande fournisseur de la saison qui contient ces produits. Renseigne-le pour
-                forcer une commande précise.
+                {seasonOrders.length > 0 ? (
+                  <>
+                    Si le fichier ne porte pas le n° de commande, choisis-la parmi les{" "}
+                    <strong>{seasonOrders.length}</strong> commandes fournisseur déjà importées de{" "}
+                    {seasonLabel}. Laissé vide, la réception est{" "}
+                    <strong>rattachée automatiquement</strong> à la commande de la saison qui
+                    contient ces produits.
+                  </>
+                ) : (
+                  <>
+                    Laissé vide, la réception est <strong>rattachée automatiquement</strong> à la
+                    commande fournisseur de la saison qui contient ces produits. Renseigne-le pour
+                    forcer une commande précise.
+                  </>
+                )}
               </p>
             </div>
           )}

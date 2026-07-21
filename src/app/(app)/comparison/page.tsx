@@ -56,8 +56,23 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
+const fmtRecDate = (iso: string) =>
+  new Date(iso).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "2-digit" });
+
 function SupplierSection({ summary }: { summary: ComparisonSummary }) {
   const [expanded, setExpanded] = useState(summary.anomalyCount > 0);
+
+  const receptions = summary.receptions;
+  // On ne « déplie » les colonnes par réception que s'il y en a au moins deux : avec une seule
+  // réception, la colonne « Reçu » EST déjà son total → inutile de la dupliquer.
+  const showRecCols = receptions.length >= 2;
+
+  // Totaux affichés (recalculés sur les lignes réellement visibles, cf. filtre réception).
+  const footOrdered = summary.rows.reduce((s, r) => s + r.totalOrdered, 0);
+  const footReceived = summary.rows.reduce((s, r) => s + r.totalReceived, 0);
+  const footGap = footOrdered - footReceived;
+  const footByReception = (id: string) =>
+    summary.rows.reduce((s, r) => s + (r.receivedByReception[id] || 0), 0);
 
   return (
     <Card>
@@ -109,7 +124,28 @@ function SupplierSection({ summary }: { summary: ComparisonSummary }) {
         </div>
       </CardHeader>
       {expanded && (
-        <CardContent>
+        <CardContent className="space-y-3">
+          {/* Légende des réceptions : chaque réception avec sa date et SON total de pièces. */}
+          {receptions.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-medium text-muted-foreground">
+                {receptions.length} réception{receptions.length > 1 ? "s" : ""} :
+              </span>
+              {receptions.map((rec, i) => (
+                <Badge
+                  key={rec.id}
+                  variant="outline"
+                  className="gap-1 font-normal"
+                  title={`Réception ${rec.receptionNumber} — commande ${rec.orderNumber}`}
+                >
+                  <span className="font-semibold">R{i + 1}</span>
+                  <span className="text-muted-foreground">· {fmtRecDate(rec.receptionDate)} ·</span>
+                  <span className="font-semibold">{rec.totalReceived}</span>
+                  <span className="text-muted-foreground">pcs</span>
+                </Badge>
+              ))}
+            </div>
+          )}
           <ScrollArea>
             <Table>
               <TableHeader>
@@ -117,6 +153,19 @@ function SupplierSection({ summary }: { summary: ComparisonSummary }) {
                   <TableHead>Référence</TableHead>
                   <TableHead>Couleur</TableHead>
                   <TableHead className="text-right">Commandé</TableHead>
+                  {showRecCols &&
+                    receptions.map((rec, i) => (
+                      <TableHead
+                        key={rec.id}
+                        className="text-right whitespace-nowrap"
+                        title={`Réception ${rec.receptionNumber} — commande ${rec.orderNumber}`}
+                      >
+                        R{i + 1}
+                        <span className="block text-[10px] font-normal text-muted-foreground">
+                          {fmtRecDate(rec.receptionDate)}
+                        </span>
+                      </TableHead>
+                    ))}
                   <TableHead className="text-right">Reçu</TableHead>
                   <TableHead className="text-right">Écart</TableHead>
                   <TableHead className="text-right">%</TableHead>
@@ -139,6 +188,21 @@ function SupplierSection({ summary }: { summary: ComparisonSummary }) {
                     <TableCell className="text-right font-medium">
                       {row.totalOrdered}
                     </TableCell>
+                    {showRecCols &&
+                      receptions.map((rec) => {
+                        const q = row.receivedByReception[rec.id] || 0;
+                        return (
+                          <TableCell
+                            key={rec.id}
+                            className={cn(
+                              "text-right tabular-nums",
+                              q === 0 && "text-muted-foreground/40"
+                            )}
+                          >
+                            {q === 0 ? "—" : q}
+                          </TableCell>
+                        );
+                      })}
                     <TableCell className="text-right font-medium">
                       {row.totalReceived}
                     </TableCell>
@@ -166,6 +230,28 @@ function SupplierSection({ summary }: { summary: ComparisonSummary }) {
                     </TableCell>
                   </TableRow>
                 ))}
+                {/* Ligne de totaux : total commandé, total de CHAQUE réception, total reçu, écart. */}
+                <TableRow className="border-t-2 font-semibold hover:bg-transparent">
+                  <TableCell colSpan={2}>Total</TableCell>
+                  <TableCell className="text-right">{footOrdered}</TableCell>
+                  {showRecCols &&
+                    receptions.map((rec) => (
+                      <TableCell key={rec.id} className="text-right tabular-nums">
+                        {footByReception(rec.id)}
+                      </TableCell>
+                    ))}
+                  <TableCell className="text-right">{footReceived}</TableCell>
+                  <TableCell
+                    className={cn(
+                      "text-right",
+                      footGap > 0 ? "text-red-600" : footGap < 0 ? "text-blue-600" : ""
+                    )}
+                  >
+                    {footGap > 0 ? `-${footGap}` : footGap < 0 ? `+${Math.abs(footGap)}` : "0"}
+                  </TableCell>
+                  <TableCell />
+                  <TableCell />
+                </TableRow>
               </TableBody>
             </Table>
           </ScrollArea>
@@ -233,6 +319,15 @@ export default function ComparisonPage() {
         Référence: r.reference,
         Couleur: r.color,
         Commandé: r.totalOrdered,
+        // Détail par réception : « R1 12/07: 30 | R2 20/07: 12 » (réceptions ayant livré ce produit).
+        Réceptions: s.receptions
+          .map((rec, i) =>
+            (r.receivedByReception[rec.id] || 0) > 0
+              ? `R${i + 1} ${fmtRecDate(rec.receptionDate)}: ${r.receivedByReception[rec.id]}`
+              : null
+          )
+          .filter(Boolean)
+          .join(" | "),
         Reçu: r.totalReceived,
         Écart: r.totalGap,
         "Écart %": r.gapPercent,

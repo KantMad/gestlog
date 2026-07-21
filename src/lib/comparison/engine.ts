@@ -7,6 +7,16 @@ import {
   type SizeQuantities,
 } from "@/lib/utils";
 
+// Une réception physique du fournisseur (un colisage importé), pour afficher les
+// réceptions séparément dans l'écran Comparaison (au lieu d'un « Reçu » global agrégé).
+export interface ComparisonReception {
+  id: string;
+  receptionNumber: string;
+  receptionDate: string; // ISO
+  orderNumber: string;
+  totalReceived: number; // total de pièces reçues dans CETTE réception
+}
+
 export interface ComparisonRow {
   productId: string;
   reference: string;
@@ -20,6 +30,8 @@ export interface ComparisonRow {
   totalGap: number;
   gapPercent: number;
   status: "conforme" | "ecart_mineur" | "ecart_majeur";
+  // Quantité reçue de ce produit dans chaque réception (clé = ComparisonReception.id).
+  receivedByReception: Record<string, number>;
 }
 
 export interface ComparisonSummary {
@@ -31,6 +43,8 @@ export interface ComparisonSummary {
   conformityRate: number;
   lineCount: number;
   anomalyCount: number;
+  // Réceptions du fournisseur (toutes commandes confondues), triées par date croissante.
+  receptions: ComparisonReception[];
   rows: ComparisonRow[];
 }
 
@@ -64,23 +78,44 @@ export async function computeComparison(
         conformityRate: 0,
         lineCount: 0,
         anomalyCount: 0,
+        receptions: [],
         rows: [],
       });
     }
 
     const summary = summaryBySupplier.get(supplier.id)!;
 
+    // Réceptions du fournisseur (une par colisage) — enregistrées une seule fois, avec leur
+    // total de pièces, pour être affichées SÉPARÉMENT dans la comparaison.
+    for (const reception of order.receptions) {
+      if (summary.receptions.some((r) => r.id === reception.id)) continue;
+      const totalReceived = reception.lines.reduce(
+        (s, l) => s + sumQuantities(parseSizeQuantities(l.quantitiesBySize)),
+        0
+      );
+      summary.receptions.push({
+        id: reception.id,
+        receptionNumber: reception.receptionNumber,
+        receptionDate: reception.receptionDate.toISOString(),
+        orderNumber: order.orderNumber,
+        totalReceived,
+      });
+    }
+
     for (const line of order.lines) {
       const ordered = parseSizeQuantities(line.quantitiesBySize);
       const sizeScale = parseSizeScale(line.product.sizeScale);
 
       const received: SizeQuantities = {};
+      const receivedByReception: Record<string, number> = {};
       for (const reception of order.receptions) {
         for (const recLine of reception.lines) {
           if (recLine.productId === line.productId) {
             const recQty = parseSizeQuantities(recLine.quantitiesBySize);
             for (const [size, qty] of Object.entries(recQty)) {
               received[size] = (received[size] || 0) + qty;
+              receivedByReception[reception.id] =
+                (receivedByReception[reception.id] || 0) + qty;
             }
           }
         }
@@ -113,6 +148,7 @@ export async function computeComparison(
         totalGap,
         gapPercent,
         status,
+        receivedByReception,
       });
 
       summary.totalOrdered += totalOrdered;
@@ -127,6 +163,8 @@ export async function computeComparison(
       summary.totalOrdered > 0
         ? Math.round((summary.totalReceived / summary.totalOrdered) * 100)
         : 0;
+    // Réceptions triées par date croissante (R1 = la plus ancienne).
+    summary.receptions.sort((a, b) => a.receptionDate.localeCompare(b.receptionDate));
   }
 
   // Fournisseurs toujours triés par ordre alphabétique (nom), insensible à la casse/accents.

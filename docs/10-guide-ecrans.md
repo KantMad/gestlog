@@ -170,6 +170,14 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
   **Indépendant de TIO/Texas et du CA.**
 - **Fonctionnalités** : recherche fournisseur + **filtre réception** (Tout/Réceptionné/Non) ;
   fournisseurs triés **alphabétiquement** ; export Excel ; lien « Corriger une réception ».
+- **Réceptions séparées** : quand un fournisseur a **plusieurs réceptions**, chacune apparaît en
+  **colonne distincte** (`R1`, `R2`… + date) au lieu d'un « Reçu » global agrégé, et une
+  **ligne de totaux** donne le total commandé, **le total de chaque réception**, le total reçu et
+  l'écart. Une **légende** liste les réceptions (`R1 · date · N pcs`). Les colonnes par réception
+  ne s'affichent qu'à partir de **2 réceptions** (avec une seule, la colonne « Reçu » EST son
+  total). Le moteur renvoie `receptions[]` (par fournisseur, triées par date) et
+  `receivedByReception` (par ligne). L'export Excel ajoute une colonne **« Réceptions »**
+  (`R1 date: qté | R2 date: qté`).
 - **Pièges** : l'export Excel exporte **tout** (ignore recherche/filtre affichés) ; statut ligne :
   conforme (écart nul), mineur (≤10 %), majeur (>10 %).
 
