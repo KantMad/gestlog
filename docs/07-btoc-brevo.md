@@ -52,6 +52,13 @@ Donc : **ne pas se fier à `total_spent` de Woo** ; utiliser le total recalculé
   calcul d'`itemCount`. WooCommerce n'ayant qu'**une ligne par variation**, c'est sans risque.
   **Validé** : après dédup, la somme des quantités = `itemCount` WooCommerce sur **4055/4056**
   commandes. ⚠️ Ne PAS sommer les doublons (ce serait la quantité gonflée) — on en garde UN.
+- **Garde-fou base** : contrainte **`@@unique([orderId, wooProductId, sku])`** sur
+  `BtocOrderLine` + insert en **`ON CONFLICT DO NOTHING`** → un doublon devient physiquement
+  impossible (le second est ignoré, la synchro ne plante pas). (sku `NULL` non contraint —
+  Postgres traite les NULL comme distincts — couvert par le dédoublonnage applicatif.)
+- **Nettoyage ponctuel effectué** (21/07/2026) : **14 238 lignes en double supprimées**
+  (`BtocOrderLine` 21 550 → 7 312), en gardant une ligne par `(commande, variation, sku)`.
+  Backup préalable `AVANT-DEDUP-BTOC-*.dump`. *QMVEST_L001 : 137 → 34.*
 
 ## Dates & montants (rapprochement WooCommerce) ⚠️
 

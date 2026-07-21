@@ -250,7 +250,10 @@ export async function POST(request: NextRequest) {
                 return `(${ph.join(",")}, NOW())`;
               });
               await prisma.$executeRawUnsafe(
-                `INSERT INTO "BtocOrderLine" ${COLS} VALUES ${tuples.join(",")}`,
+                // ON CONFLICT DO NOTHING : filet de sécurité avec la contrainte unique
+                // (orderId, wooProductId, sku) — un doublon éventuel est ignoré au lieu de
+                // faire échouer la synchro. Gère aussi les doublons AU SEIN d'un même INSERT.
+                `INSERT INTO "BtocOrderLine" ${COLS} VALUES ${tuples.join(",")} ON CONFLICT DO NOTHING`,
                 ...flat
               );
             }

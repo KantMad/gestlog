@@ -616,6 +616,11 @@ model BtocOrderLine {
   order   BtocOrder    @relation(fields: [orderId], references: [id], onDelete: Cascade)
   product BtocProduct? @relation(fields: [productId], references: [id])
 
+  // Garde-fou anti-doublon : WooCommerce n'a qu'UNE ligne par variation dans une commande.
+  // Empêche physiquement la réinsertion en double (cf. sync btoc/orders + code de dédup).
+  // (sku NULL n'est pas contraint — Postgres traite les NULL comme distincts — mais le
+  // dédoublonnage applicatif couvre ces rares lignes sans sku.)
+  @@unique([orderId, wooProductId, sku])
   @@index([orderId])
   @@index([productId])
 }
