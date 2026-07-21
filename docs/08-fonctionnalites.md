@@ -217,7 +217,8 @@ sont gérés par écran (cf. [`05-authentification.md`](05-authentification.md))
     dans `warnings`.
   - **Ajouter un produit reçu (explicite)** : un produit **reçu après** la répartition (ex. ligne
     **ajoutée en corrigeant une réception**) ne réapparaît **pas** tout seul — l'utilisateur le
-    **choisit** dans le sélecteur « **+ Ajouter un produit reçu** » (affiché en reprise). Le moteur
+    **cherche** dans un **champ de recherche à suggestions** (datalist « + Ajouter un produit
+    reçu », affiché en reprise). Le moteur
     renvoie `addableProducts` (produits **reçus + demandés + même(s) fournisseur(s)** que la
     répartition, absents du fichier) ; le choix est passé en `addProductIds` → simulate rejoue le
     fichier **et** répartit normalement ces produits, fusionnés au résultat (résumé/impacts

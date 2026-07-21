@@ -1028,6 +1028,7 @@ export default function AllocationPage() {
   const [addableProducts, setAddableProducts] = useState<AddableProduct[]>([]);
   const [importedRows, setImportedRows] = useState<ImportedRow[] | null>(null);
   const [addedProductIds, setAddedProductIds] = useState<string[]>([]);
+  const [addSearch, setAddSearch] = useState(""); // saisie du champ « Ajouter un produit reçu »
   const [validateSuppliers, setValidateSuppliers] = useState<string[]>([]);
   const [validateCatalogs, setValidateCatalogs] = useState<string[]>([]);
   // Périmètre de l'EXPORT EAN — distinct de celui de la validation (mêmes règles que sur
@@ -1394,8 +1395,13 @@ export default function AllocationPage() {
       )
     )
       return;
+    setAddSearch("");
     runSimulation(importedRows, [...addedProductIds, productId]);
   };
+
+  // Libellé lisible d'un produit ajoutable (sert de valeur au champ de recherche/datalist).
+  const addableLabel = (p: AddableProduct) =>
+    `${p.reference} / ${p.colorLabel || p.color} · ${p.totalReceived} reçu`;
 
   // Reprise d'une répartition depuis son fichier EAN (celui du bouton « Export EAN »).
   const importAllocationFile = async (file: File) => {
@@ -2423,23 +2429,28 @@ export default function AllocationPage() {
                   <div className="flex flex-wrap items-center gap-2 rounded-lg border border-dashed bg-muted/30 px-3 py-2">
                     <PackagePlus className="h-4 w-4 text-muted-foreground" />
                     <span className="text-sm text-muted-foreground">
-                      Produit reçu depuis cette répartition ? Ajoute-le pour le répartir :
+                      Produit reçu depuis cette répartition ? Cherche-le pour le répartir :
                     </span>
-                    <div className="w-72">
-                      <Select value="" onValueChange={(v: string | null) => v && addReceivedProduct(v)}>
-                        <SelectTrigger className="h-9 text-sm">
-                          <span className="text-sm text-muted-foreground">
-                            + Ajouter un produit reçu…
-                          </span>
-                        </SelectTrigger>
-                        <SelectContent>
-                          {addableProducts.map((p) => (
-                            <SelectItem key={p.productId} value={p.productId}>
-                              {p.reference} / {p.colorLabel || p.color} · {p.totalReceived} reçu
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                    <div className="relative w-80">
+                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        list="addable-products"
+                        value={addSearch}
+                        placeholder={`Rechercher parmi ${addableProducts.length} produit${addableProducts.length > 1 ? "s" : ""} reçu${addableProducts.length > 1 ? "s" : ""}…`}
+                        className="pl-9 h-9 text-sm"
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setAddSearch(v);
+                          // Choix d'une suggestion → la valeur = un libellé exact → on ajoute.
+                          const match = addableProducts.find((p) => addableLabel(p) === v);
+                          if (match) addReceivedProduct(match.productId);
+                        }}
+                      />
+                      <datalist id="addable-products">
+                        {addableProducts.map((p) => (
+                          <option key={p.productId} value={addableLabel(p)} />
+                        ))}
+                      </datalist>
                     </div>
                     {addedProductIds.length > 0 && (
                       <Badge variant="secondary">
