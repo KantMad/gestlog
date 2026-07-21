@@ -30,7 +30,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import type { ComparisonSummary } from "@/lib/comparison/engine";
+import type { ComparisonSummary, ComparisonRow } from "@/lib/comparison/engine";
 import * as XLSX from "xlsx";
 
 function StatusBadge({ status }: { status: string }) {
@@ -59,20 +59,175 @@ function StatusBadge({ status }: { status: string }) {
 const fmtRecDate = (iso: string) =>
   new Date(iso).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "2-digit" });
 
+// Écart / statut d'une ligne DANS un bloc réception (commandé vs reçu de cette réception).
+function deriveGap(ordered: number, received: number) {
+  const gap = ordered - received;
+  const gapPercent = ordered > 0 ? Math.round((Math.abs(gap) / ordered) * 100) : 0;
+  const status: ComparisonRow["status"] =
+    gap === 0 ? "conforme" : gapPercent <= 10 ? "ecart_mineur" : "ecart_majeur";
+  return { gap, gapPercent, status };
+}
+
+type BlockRow = {
+  row: ComparisonRow;
+  received: number;
+  gap: number;
+  gapPercent: number;
+  status: ComparisonRow["status"];
+};
+type Block = {
+  key: string;
+  title: string; // « R1 » ou « Non réceptionné »
+  subtitle?: string; // date
+  missing?: boolean;
+  rows: BlockRow[];
+  totalOrdered: number;
+  totalReceived: number; // pièces reçues sur des références COMMANDÉES (somme des lignes du bloc)
+  // Total PHYSIQUE de la réception (toutes lignes, y compris références non commandées) — c'est
+  // « le total de la réception ». Peut dépasser totalReceived si le fournisseur a livré des
+  // références absentes de la commande.
+  receptionTotal?: number;
+};
+
+function GapCell({ gap }: { gap: number }) {
+  // Écart = commandé − reçu : positif = manquant (rouge), négatif = surplus (bleu).
+  return (
+    <TableCell
+      className={cn(
+        "text-right font-medium",
+        gap > 0 ? "text-red-600" : gap < 0 ? "text-blue-600" : ""
+      )}
+    >
+      {gap > 0 ? `-${gap}` : gap < 0 ? `+${Math.abs(gap)}` : "0"}
+    </TableCell>
+  );
+}
+
+// Un bloc = UNE réception (ou le bloc « Non réceptionné »), avec son propre tableau et SON total.
+function ReceptionBlock({ block }: { block: Block }) {
+  const footGap = block.totalOrdered - block.totalReceived;
+  // Pièces livrées sur des références HORS commande (total physique − reçu sur commandé).
+  const offOrder = block.receptionTotal ? block.receptionTotal - block.totalReceived : 0;
+  return (
+    <div className="rounded-lg border">
+      <div
+        className={cn(
+          "flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b px-3 py-2",
+          block.missing ? "bg-red-50/60" : "bg-muted/40"
+        )}
+      >
+        <div className="flex items-center gap-2 text-sm font-semibold">
+          {block.missing ? (
+            <XCircle className="h-4 w-4 text-red-600" />
+          ) : (
+            <span className="rounded bg-background px-1.5 py-0.5 text-xs shadow-sm">
+              {block.title}
+            </span>
+          )}
+          <span>{block.missing ? "Non réceptionné" : "Réception"}</span>
+          {block.subtitle && (
+            <span className="font-normal text-muted-foreground">· {block.subtitle}</span>
+          )}
+        </div>
+        <div className="text-sm">
+          <span className="text-muted-foreground">Total réception : </span>
+          <span className="font-semibold">{block.receptionTotal ?? block.totalReceived}</span>
+          <span className="text-muted-foreground"> pcs</span>
+          {offOrder > 0 && (
+            <span className="ml-1 text-xs text-amber-600">
+              (dont {offOrder} hors commande)
+            </span>
+          )}
+        </div>
+      </div>
+      <ScrollArea>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Référence</TableHead>
+              <TableHead>Couleur</TableHead>
+              <TableHead className="text-right">Commandé</TableHead>
+              <TableHead className="text-right">Reçu</TableHead>
+              <TableHead className="text-right">Écart</TableHead>
+              <TableHead className="text-right">%</TableHead>
+              <TableHead>Statut</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {block.rows.map((b, idx) => (
+              <TableRow
+                key={`${b.row.productId}-${idx}`}
+                className={cn(
+                  b.status === "ecart_majeur" && "bg-red-50/50",
+                  b.status === "ecart_mineur" && "bg-amber-50/50"
+                )}
+              >
+                <TableCell className="font-mono text-sm">{b.row.reference}</TableCell>
+                <TableCell>{b.row.color}</TableCell>
+                <TableCell className="text-right font-medium">{b.row.totalOrdered}</TableCell>
+                <TableCell className="text-right font-medium">{b.received}</TableCell>
+                <GapCell gap={b.gap} />
+                <TableCell className="text-right text-sm text-muted-foreground">
+                  {b.gapPercent}%
+                </TableCell>
+                <TableCell>
+                  <StatusBadge status={b.status} />
+                </TableCell>
+              </TableRow>
+            ))}
+            {/* Total DU BLOC (de cette réception). */}
+            <TableRow className="border-t-2 font-semibold hover:bg-transparent">
+              <TableCell colSpan={2}>Total {block.missing ? "" : block.title}</TableCell>
+              <TableCell className="text-right">{block.totalOrdered}</TableCell>
+              <TableCell className="text-right">{block.totalReceived}</TableCell>
+              <GapCell gap={footGap} />
+              <TableCell />
+              <TableCell />
+            </TableRow>
+          </TableBody>
+        </Table>
+      </ScrollArea>
+    </div>
+  );
+}
+
 function SupplierSection({ summary }: { summary: ComparisonSummary }) {
   const [expanded, setExpanded] = useState(summary.anomalyCount > 0);
 
-  const receptions = summary.receptions;
-  // On ne « déplie » les colonnes par réception que s'il y en a au moins deux : avec une seule
-  // réception, la colonne « Reçu » EST déjà son total → inutile de la dupliquer.
-  const showRecCols = receptions.length >= 2;
-
-  // Totaux affichés (recalculés sur les lignes réellement visibles, cf. filtre réception).
-  const footOrdered = summary.rows.reduce((s, r) => s + r.totalOrdered, 0);
-  const footReceived = summary.rows.reduce((s, r) => s + r.totalReceived, 0);
-  const footGap = footOrdered - footReceived;
-  const footByReception = (id: string) =>
-    summary.rows.reduce((s, r) => s + (r.receivedByReception[id] || 0), 0);
+  // Un bloc par réception : les lignes reçues DANS cette réception, avec écart et total du bloc.
+  // Les lignes commandées mais reçues nulle part vont dans un bloc « Non réceptionné ».
+  const blocks: Block[] = [];
+  summary.receptions.forEach((rec, i) => {
+    const rows: BlockRow[] = summary.rows
+      .filter((r) => (r.receivedByReception[rec.id] || 0) > 0)
+      .map((r) => {
+        const received = r.receivedByReception[rec.id] || 0;
+        return { row: r, received, ...deriveGap(r.totalOrdered, received) };
+      });
+    if (rows.length === 0) return;
+    blocks.push({
+      key: rec.id,
+      title: `R${i + 1}`,
+      subtitle: fmtRecDate(rec.receptionDate),
+      rows,
+      totalOrdered: rows.reduce((s, b) => s + b.row.totalOrdered, 0),
+      totalReceived: rows.reduce((s, b) => s + b.received, 0),
+      receptionTotal: rec.totalReceived,
+    });
+  });
+  const missingRows: BlockRow[] = summary.rows
+    .filter((r) => r.totalReceived === 0)
+    .map((r) => ({ row: r, received: 0, ...deriveGap(r.totalOrdered, 0) }));
+  if (missingRows.length > 0) {
+    blocks.push({
+      key: "__missing__",
+      title: "Non réceptionné",
+      missing: true,
+      rows: missingRows,
+      totalOrdered: missingRows.reduce((s, b) => s + b.row.totalOrdered, 0),
+      totalReceived: 0,
+    });
+  }
 
   return (
     <Card>
@@ -124,137 +279,10 @@ function SupplierSection({ summary }: { summary: ComparisonSummary }) {
         </div>
       </CardHeader>
       {expanded && (
-        <CardContent className="space-y-3">
-          {/* Légende des réceptions : chaque réception avec sa date et SON total de pièces. */}
-          {receptions.length > 0 && (
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs font-medium text-muted-foreground">
-                {receptions.length} réception{receptions.length > 1 ? "s" : ""} :
-              </span>
-              {receptions.map((rec, i) => (
-                <Badge
-                  key={rec.id}
-                  variant="outline"
-                  className="gap-1 font-normal"
-                  title={`Réception ${rec.receptionNumber} — commande ${rec.orderNumber}`}
-                >
-                  <span className="font-semibold">R{i + 1}</span>
-                  <span className="text-muted-foreground">· {fmtRecDate(rec.receptionDate)} ·</span>
-                  <span className="font-semibold">{rec.totalReceived}</span>
-                  <span className="text-muted-foreground">pcs</span>
-                </Badge>
-              ))}
-            </div>
-          )}
-          <ScrollArea>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Référence</TableHead>
-                  <TableHead>Couleur</TableHead>
-                  <TableHead className="text-right">Commandé</TableHead>
-                  {showRecCols &&
-                    receptions.map((rec, i) => (
-                      <TableHead
-                        key={rec.id}
-                        className="text-right whitespace-nowrap"
-                        title={`Réception ${rec.receptionNumber} — commande ${rec.orderNumber}`}
-                      >
-                        R{i + 1}
-                        <span className="block text-[10px] font-normal text-muted-foreground">
-                          {fmtRecDate(rec.receptionDate)}
-                        </span>
-                      </TableHead>
-                    ))}
-                  <TableHead className="text-right">Reçu</TableHead>
-                  <TableHead className="text-right">Écart</TableHead>
-                  <TableHead className="text-right">%</TableHead>
-                  <TableHead>Statut</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {summary.rows.map((row) => (
-                  <TableRow
-                    key={row.productId}
-                    className={cn(
-                      row.status === "ecart_majeur" && "bg-red-50/50",
-                      row.status === "ecart_mineur" && "bg-amber-50/50"
-                    )}
-                  >
-                    <TableCell className="font-mono text-sm">
-                      {row.reference}
-                    </TableCell>
-                    <TableCell>{row.color}</TableCell>
-                    <TableCell className="text-right font-medium">
-                      {row.totalOrdered}
-                    </TableCell>
-                    {showRecCols &&
-                      receptions.map((rec) => {
-                        const q = row.receivedByReception[rec.id] || 0;
-                        return (
-                          <TableCell
-                            key={rec.id}
-                            className={cn(
-                              "text-right tabular-nums",
-                              q === 0 && "text-muted-foreground/40"
-                            )}
-                          >
-                            {q === 0 ? "—" : q}
-                          </TableCell>
-                        );
-                      })}
-                    <TableCell className="text-right font-medium">
-                      {row.totalReceived}
-                    </TableCell>
-                    <TableCell
-                      className={cn(
-                        "text-right font-medium",
-                        row.totalGap > 0
-                          ? "text-red-600"
-                          : row.totalGap < 0
-                            ? "text-blue-600"
-                            : ""
-                      )}
-                    >
-                      {row.totalGap > 0
-                        ? `-${row.totalGap}`
-                        : row.totalGap < 0
-                          ? `+${Math.abs(row.totalGap)}`
-                          : "0"}
-                    </TableCell>
-                    <TableCell className="text-right text-sm text-muted-foreground">
-                      {row.gapPercent}%
-                    </TableCell>
-                    <TableCell>
-                      <StatusBadge status={row.status} />
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {/* Ligne de totaux : total commandé, total de CHAQUE réception, total reçu, écart. */}
-                <TableRow className="border-t-2 font-semibold hover:bg-transparent">
-                  <TableCell colSpan={2}>Total</TableCell>
-                  <TableCell className="text-right">{footOrdered}</TableCell>
-                  {showRecCols &&
-                    receptions.map((rec) => (
-                      <TableCell key={rec.id} className="text-right tabular-nums">
-                        {footByReception(rec.id)}
-                      </TableCell>
-                    ))}
-                  <TableCell className="text-right">{footReceived}</TableCell>
-                  <TableCell
-                    className={cn(
-                      "text-right",
-                      footGap > 0 ? "text-red-600" : footGap < 0 ? "text-blue-600" : ""
-                    )}
-                  >
-                    {footGap > 0 ? `-${footGap}` : footGap < 0 ? `+${Math.abs(footGap)}` : "0"}
-                  </TableCell>
-                  <TableCell />
-                  <TableCell />
-                </TableRow>
-              </TableBody>
-            </Table>
-          </ScrollArea>
+        <CardContent className="space-y-4">
+          {blocks.map((block) => (
+            <ReceptionBlock key={block.key} block={block} />
+          ))}
         </CardContent>
       )}
     </Card>
