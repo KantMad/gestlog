@@ -82,7 +82,10 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
   (changer la couleur d'une ligne, éditer les quantités par taille, ajouter/supprimer,
   **total dynamique** en pied), journalisé (`lastEditedBy`/`lastEditedAt`).
 - **Impacts** : recalcule les écarts commande/réception **et** le stock disponible pour la
-  répartition (lecture live des `ReceptionLine`). Refuse deux lignes sur le même produit.
+  répartition (lecture live des `ReceptionLine`). Deux lignes qui retombent sur le **même produit**
+  (réf + code couleur) sont **fusionnées à l'enregistrement** (quantités additionnées par taille) —
+  une réception ne stocke qu'une ligne par produit, et le fichier source peut légitimement porter
+  un produit sur plusieurs colis (`api/import/receptions/[id]` PATCH).
 
 ## Répartition (`/allocation`)
 - **Rôle** : répartir les quantités **reçues** entre boutiques quand le stock ne suffit pas,

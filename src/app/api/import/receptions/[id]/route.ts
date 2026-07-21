@@ -120,10 +120,12 @@ export async function PATCH(
     const body = (await request.json()) as { lines?: PatchLine[] };
     const inputLines = Array.isArray(body.lines) ? body.lines : [];
 
-    // Résolution + nettoyage : quantités > 0 uniquement, produit reconnu, sans doublon.
-    const resolved: { productId: string; quantities: Record<string, number>; total: number }[] = [];
+    // Résolution + nettoyage : quantités > 0 uniquement, produit reconnu.
+    // Deux lignes qui retombent sur le MÊME produit sont FUSIONNÉES (quantités additionnées
+    // par taille) : le fichier source peut légitimement porter un produit sur plusieurs colis,
+    // et une réception ne stocke qu'une ligne par produit.
+    const byProduct = new Map<string, Record<string, number>>();
     const notFound: string[] = [];
-    const seen = new Set<string>();
     for (const l of inputLines) {
       const reference = String(l.reference || "").trim();
       const color = String(l.color || "").trim();
@@ -139,15 +141,17 @@ export async function PATCH(
         notFound.push(`${reference} / ${color}`);
         continue;
       }
-      if (seen.has(product.id)) {
-        return NextResponse.json(
-          { error: `Deux lignes pointent le même produit (${reference} / ${color}). Fusionnez-les ou corrigez la couleur.` },
-          { status: 400 }
-        );
+      const merged = byProduct.get(product.id) ?? {};
+      for (const [size, n] of Object.entries(quantities)) {
+        merged[size] = (merged[size] || 0) + n;
       }
-      seen.add(product.id);
-      resolved.push({ productId: product.id, quantities, total: sumQuantities(quantities) });
+      byProduct.set(product.id, merged);
     }
+    const resolved = [...byProduct.entries()].map(([productId, quantities]) => ({
+      productId,
+      quantities,
+      total: sumQuantities(quantities),
+    }));
 
     if (notFound.length > 0) {
       return NextResponse.json(
