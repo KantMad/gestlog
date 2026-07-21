@@ -269,7 +269,36 @@ export async function POST(request: NextRequest) {
 
       // La répartition importée ne doit contenir QUE ce qui est dans le fichier.
       const importedDemands = restrictDemandsToImported(demands, allocatedByKey);
-      result = applyImportedAllocation({ demands: importedDemands, allocatedByKey, clientConfigs });
+      const importedResult = applyImportedAllocation({ demands: importedDemands, allocatedByKey, clientConfigs });
+
+      // Produits REÇUS APRÈS coup (ex. ligne ajoutée en corrigeant une réception) : ils ont
+      // du stock et une demande client mais sont ABSENTS du fichier repris → on les répartit
+      // normalement et on les AJOUTE, pour qu'ils soient distribuables/éditables dans la
+      // reprise. On borne au(x) MÊME(S) fournisseur(s) que les produits déjà répartis, pour
+      // ne pas faire ressurgir tous les produits de la saison.
+      const fileProductIds = new Set([...allocatedByKey.keys()].map((k) => k.split("__")[1]));
+      const fileSuppliers = new Set<string>();
+      for (const pid of fileProductIds)
+        for (const sid of supplierIdsByProduct[pid] || []) fileSuppliers.add(sid);
+      const isNewInStock = (pid: string) =>
+        !fileProductIds.has(pid) &&
+        sumQuantities(available.get(pid) || {}) > 0 &&
+        (supplierIdsByProduct[pid] || []).some((sid) => fileSuppliers.has(sid));
+      const newDemands = demands.filter((d) => isNewInStock(d.productId));
+
+      if (newDemands.length > 0) {
+        const extra = runAllocation({ ...input, demands: newDemands });
+        const newProductCount = new Set(newDemands.map((d) => d.productId)).size;
+        importWarnings.push(
+          `${newProductCount} produit(s) reçu(s) depuis cette répartition ont été ajoutés et répartis automatiquement — vérifiez-les avant de valider.`
+        );
+        result = {
+          lines: [...importedResult.lines, ...extra.lines],
+          warnings: [...importedResult.warnings, ...extra.warnings],
+        };
+      } else {
+        result = importedResult;
+      }
     } else {
       result = runAllocation(input);
     }
@@ -376,7 +405,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       lines: enrichedLines,
-      warnings: result.warnings,
+      // Avertissements du moteur + ceux de la reprise de fichier (boutiques/produits inconnus,
+      // produits reçus depuis la répartition et ajoutés automatiquement).
+      warnings: [...result.warnings, ...importWarnings],
       clientImpacts: Array.from(clientImpacts.values()),
       receivedByProduct: receivedOut,
       rankingByClient,
