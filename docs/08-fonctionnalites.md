@@ -211,13 +211,9 @@ sont gérés par écran (cf. [`05-authentification.md`](05-authentification.md))
     de la saison ressortaient (cas réel AH26 : **8353 lignes** affichées au lieu des **262** du
     fichier, les produits hors fichier apparaissant à 0 alloué avec un écart complet). Pur + testé
     (`imported.test.ts`).
-  - **Exception — produits reçus APRÈS la répartition** : un produit **en stock + demandé** mais
-    **absent du fichier** (ex. une ligne **ajoutée en corrigeant une réception**) est **réparti
-    normalement et ajouté** à la reprise, pour qu'il soit distribuable/éditable. Borné aux **mêmes
-    fournisseur(s)** que les produits déjà répartis (via `supplierIdsByProduct`) pour ne pas faire
-    ressurgir toute la saison. Un **avertissement** liste le nombre de produits ajoutés (« … à
-    vérifier avant de valider »). À la validation, ces lignes sont enregistrées dans la session.
-    Les `importWarnings` (boutiques/produits inconnus, produits ajoutés) sont désormais **renvoyés**
+  - La reprise **reproduit exactement** la répartition sauvegardée (mêmes boutiques, mêmes
+    produits) — elle ne réintroduit **pas** d'autres produits de la saison/du fournisseur, même
+    reçus depuis. Les `importWarnings` (boutiques/produits inconnus du fichier) sont **renvoyés**
     dans `warnings`.
 - **Répartition — périmètre de validation** (fournisseurs **et** catalogues, multi-sélection) :
   la simulation est **toujours calculée sur toute la demande** (la restreindre fausserait les
