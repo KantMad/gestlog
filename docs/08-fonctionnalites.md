@@ -215,6 +215,15 @@ sont gérés par écran (cf. [`05-authentification.md`](05-authentification.md))
     produits) — elle ne réintroduit **pas** d'autres produits de la saison/du fournisseur, même
     reçus depuis. Les `importWarnings` (boutiques/produits inconnus du fichier) sont **renvoyés**
     dans `warnings`.
+  - **Ajouter un produit reçu (explicite)** : un produit **reçu après** la répartition (ex. ligne
+    **ajoutée en corrigeant une réception**) ne réapparaît **pas** tout seul — l'utilisateur le
+    **choisit** dans le sélecteur « **+ Ajouter un produit reçu** » (affiché en reprise). Le moteur
+    renvoie `addableProducts` (produits **reçus + demandés + même(s) fournisseur(s)** que la
+    répartition, absents du fichier) ; le choix est passé en `addProductIds` → simulate rejoue le
+    fichier **et** répartit normalement ces produits, fusionnés au résultat (résumé/impacts
+    recalculés en cohérence). À la validation ils sont enregistrés dans la session. ⚠️ L'ajout
+    **relance** la répartition (les ajustements manuels faits depuis la reprise sont perdus →
+    confirmation demandée si `manualEdits > 0`).
 - **Répartition — périmètre de validation** (fournisseurs **et** catalogues, multi-sélection) :
   la simulation est **toujours calculée sur toute la demande** (la restreindre fausserait les
   coupes : le stock reçu serait réparti sur un sous-ensemble de boutiques), mais on ne **valide**

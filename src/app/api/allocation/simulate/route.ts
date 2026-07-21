@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { seasonId, catalogId, clientIds, supplierIds, productReferences, orderType, importedAllocation } = parsed.data;
+    const { seasonId, catalogId, clientIds, supplierIds, productReferences, orderType, importedAllocation, addProductIds } = parsed.data;
 
     // Source B2B active pour la saison (Texas prioritaire, repli TIO).
     const orderSource = await resolveOrderSource(seasonId);
@@ -224,6 +224,15 @@ export async function POST(request: NextRequest) {
     // reste (commandes, reçus, EAN, rangs…) est chargé normalement ci-dessus → la réponse a
     // exactement la même forme qu'une simulation et l'écran ne fait aucune différence.
     const importWarnings: string[] = [];
+    // Produits qu'on PEUT ajouter à une reprise (reçus + demandés + même fournisseur, absents
+    // du fichier) → alimente le sélecteur « + Ajouter un produit reçu ». Vide hors reprise.
+    let addableProducts: {
+      productId: string;
+      reference: string;
+      color: string;
+      colorLabel: string | null;
+      totalReceived: number;
+    }[] = [];
     let result: AllocationResult;
     if (importedAllocation && importedAllocation.length > 0) {
       // Résolution boutique (par CODE) et produit (référence + couleur, avec équivalences).
@@ -270,7 +279,49 @@ export async function POST(request: NextRequest) {
       // La répartition importée ne doit contenir QUE ce qui est dans le fichier — la reprise
       // reproduit EXACTEMENT la répartition sauvegardée (mêmes boutiques, mêmes produits).
       const importedDemands = restrictDemandsToImported(demands, allocatedByKey);
-      result = applyImportedAllocation({ demands: importedDemands, allocatedByKey, clientConfigs });
+      const importedResult = applyImportedAllocation({ demands: importedDemands, allocatedByKey, clientConfigs });
+
+      // Produits déjà dans le fichier + fournisseur(s) de la répartition.
+      const fileProductIds = new Set([...allocatedByKey.keys()].map((k) => k.split("__")[1]));
+      const fileSuppliers = new Set<string>();
+      for (const pid of fileProductIds)
+        for (const sid of supplierIdsByProduct[pid] || []) fileSuppliers.add(sid);
+
+      // Un produit est AJOUTABLE s'il est reçu (stock > 0), demandé (dans productMap), du/des
+      // même(s) fournisseur(s) que la répartition, et pas déjà dans le fichier. On ne l'ajoute
+      // JAMAIS tout seul : c'est l'utilisateur qui le choisit (addProductIds).
+      const isAddable = (pid: string) =>
+        !fileProductIds.has(pid) &&
+        sumQuantities(available.get(pid) || {}) > 0 &&
+        productMap.has(pid) &&
+        (supplierIdsByProduct[pid] || []).some((sid) => fileSuppliers.has(sid));
+
+      const addSet = new Set((addProductIds || []).filter(isAddable));
+      const addDemands = demands.filter((d) => addSet.has(d.productId));
+      if (addDemands.length > 0) {
+        const extra = runAllocation({ ...input, demands: addDemands });
+        result = {
+          lines: [...importedResult.lines, ...extra.lines],
+          warnings: [...importedResult.warnings, ...extra.warnings],
+        };
+      } else {
+        result = importedResult;
+      }
+
+      // Produits encore ajoutables (hors ceux déjà ajoutés) → sélecteur de l'écran.
+      addableProducts = [...new Set(demands.map((d) => d.productId))]
+        .filter((pid) => !addSet.has(pid) && isAddable(pid))
+        .map((pid) => {
+          const p = productMap.get(pid)!;
+          return {
+            productId: pid,
+            reference: p.reference,
+            color: p.color,
+            colorLabel: p.colorLabel,
+            totalReceived: sumQuantities(available.get(pid) || {}),
+          };
+        })
+        .sort((a, b) => `${a.reference}${a.color}`.localeCompare(`${b.reference}${b.color}`));
     } else {
       result = runAllocation(input);
     }
@@ -387,6 +438,7 @@ export async function POST(request: NextRequest) {
       sampledByProduct,
       eansByProduct,
       supplierIdsByProduct,
+      addableProducts,
       catalogIdByOrder,
       summary: {
         totalDemands: demands.length,

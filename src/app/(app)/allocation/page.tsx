@@ -44,6 +44,7 @@ import {
   Filter,
   Store,
   Search,
+  PackagePlus,
 } from "lucide-react";
 import { cn, sumQuantities, formatNumber, type SizeQuantities } from "@/lib/utils";
 import { distributeSurplus as distributeSurplusRule } from "@/lib/allocation/surplus";
@@ -58,6 +59,15 @@ interface ImportedRow {
   color: string;
   size: string;
   qty: number;
+}
+
+// Produit reçu ajoutable à une répartition en cours de modification (reprise).
+interface AddableProduct {
+  productId: string;
+  reference: string;
+  color: string;
+  colorLabel: string | null;
+  totalReceived: number;
 }
 
 interface SimulationLine {
@@ -1013,6 +1023,11 @@ export default function AllocationPage() {
   // fournisseurs / catalogues choisis. Vide = tout.
   const [supplierIdsByProduct, setSupplierIdsByProduct] = useState<Record<string, string[]>>({});
   const [catalogIdByOrder, setCatalogIdByOrder] = useState<Record<string, string | null>>({});
+  // Reprise d'une répartition : produits reçus après coup, ajoutables à la répartition.
+  // `importedRows` = fichier rejoué (conservé pour pouvoir relancer avec un produit en plus).
+  const [addableProducts, setAddableProducts] = useState<AddableProduct[]>([]);
+  const [importedRows, setImportedRows] = useState<ImportedRow[] | null>(null);
+  const [addedProductIds, setAddedProductIds] = useState<string[]>([]);
   const [validateSuppliers, setValidateSuppliers] = useState<string[]>([]);
   const [validateCatalogs, setValidateCatalogs] = useState<string[]>([]);
   // Périmètre de l'EXPORT EAN — distinct de celui de la validation (mêmes règles que sur
@@ -1101,6 +1116,9 @@ export default function AllocationPage() {
       setCatalogIdByOrder(s.catalogIdByOrder || {});
       setManualEdits(s.manualEdits || 0);
       setReopenSourceId(s.reopenSourceId ?? null);
+      setImportedRows(s.importedRows ?? null);
+      setAddedProductIds(s.addedProductIds ?? []);
+      setAddableProducts(s.addableProducts ?? []);
       const f = s.filters || {};
       setSelectedCatalog(f.selectedCatalog ?? "ALL");
       setSelectedClients(f.selectedClients ?? []);
@@ -1138,6 +1156,9 @@ export default function AllocationPage() {
     setExportSuppliers([]);
     setExportClients([]);
     setReopenSourceId(null);
+    setImportedRows(null);
+    setAddedProductIds([]);
+    setAddableProducts([]);
     setManualEdits(0);
     try {
       sessionStorage.removeItem(STORE_KEY);
@@ -1170,6 +1191,10 @@ export default function AllocationPage() {
           supplierIdsByProduct,
           catalogIdByOrder,
           manualEdits,
+          reopenSourceId,
+          importedRows,
+          addedProductIds,
+          addableProducts,
           filters: {
             selectedCatalog,
             selectedClients,
@@ -1202,6 +1227,10 @@ export default function AllocationPage() {
     supplierIdsByProduct,
     catalogIdByOrder,
     manualEdits,
+    reopenSourceId,
+    importedRows,
+    addedProductIds,
+    addableProducts,
     selectedCatalog,
     selectedClients,
     selectedSuppliers,
@@ -1282,12 +1311,21 @@ export default function AllocationPage() {
   // `imported` = lignes d'un fichier EAN à rejouer. Dans ce cas les filtres de l'écran ne
   // sont PAS appliqués : ils restreindraient la demande et écarteraient des lignes du
   // fichier. Le fichier définit la répartition, il doit pouvoir se poser en entier.
-  const runSimulation = async (imported?: ImportedRow[]) => {
+  const runSimulation = async (imported?: ImportedRow[], addIds?: string[]) => {
     if (!activeSeason) return;
     setSimulating(true);
     setManualEdits(0);
     // Une simulation lancée à la main (pas une reprise) repart sur une nouvelle session.
-    if (!imported) setReopenSourceId(null);
+    if (!imported) {
+      setReopenSourceId(null);
+      setImportedRows(null);
+      setAddedProductIds([]);
+      setAddableProducts([]);
+    } else {
+      // Reprise : on garde le fichier + les produits ajoutés pour pouvoir relancer.
+      setImportedRows(imported);
+      setAddedProductIds(addIds ?? []);
+    }
     try {
       const payload: Record<string, unknown> = {
         seasonId: activeSeason.id,
@@ -1295,6 +1333,7 @@ export default function AllocationPage() {
       };
       if (imported) {
         payload.importedAllocation = imported;
+        if (addIds && addIds.length > 0) payload.addProductIds = addIds;
       } else {
         if (selectedCatalog !== "ALL") payload.catalogId = selectedCatalog;
         if (selectedClients.length > 0) payload.clientIds = selectedClients;
@@ -1324,6 +1363,7 @@ export default function AllocationPage() {
       setReceivedByProduct(data.receivedByProduct || {});
       setEansByProduct(data.eansByProduct || {});
       setSupplierIdsByProduct(data.supplierIdsByProduct || {});
+      setAddableProducts(data.addableProducts || []);
       setCatalogIdByOrder(data.catalogIdByOrder || {});
       setRankingByClient(data.rankingByClient || {});
       setExcludedSizesByClient(data.excludedSizesByClient || {});
@@ -1340,6 +1380,21 @@ export default function AllocationPage() {
     } finally {
       setSimulating(false);
     }
+  };
+
+  // Reprise : ajoute un produit reçu (après la répartition) et relance en le répartissant.
+  // Relancer recalcule les lignes du fichier → un garde-fou prévient si des ajustements
+  // manuels ont été faits depuis la reprise (ils seraient perdus).
+  const addReceivedProduct = (productId: string) => {
+    if (!importedRows || !productId) return;
+    if (
+      manualEdits > 0 &&
+      !window.confirm(
+        "Ajouter ce produit relance la répartition et annulera les ajustements manuels faits depuis la reprise. Continuer ?"
+      )
+    )
+      return;
+    runSimulation(importedRows, [...addedProductIds, productId]);
   };
 
   // Reprise d'une répartition depuis son fichier EAN (celui du bouton « Export EAN »).
@@ -2361,6 +2416,38 @@ export default function AllocationPage() {
                     </Button>
                   </div>
                 </div>
+
+                {/* Reprise : ajouter un produit reçu après coup (ex. ligne ajoutée en corrigeant
+                    une réception) pour le répartir dans cette répartition. */}
+                {reopenSourceId && addableProducts.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-2 rounded-lg border border-dashed bg-muted/30 px-3 py-2">
+                    <PackagePlus className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">
+                      Produit reçu depuis cette répartition ? Ajoute-le pour le répartir :
+                    </span>
+                    <div className="w-72">
+                      <Select value="" onValueChange={(v: string | null) => v && addReceivedProduct(v)}>
+                        <SelectTrigger className="h-9 text-sm">
+                          <span className="text-sm text-muted-foreground">
+                            + Ajouter un produit reçu…
+                          </span>
+                        </SelectTrigger>
+                        <SelectContent>
+                          {addableProducts.map((p) => (
+                            <SelectItem key={p.productId} value={p.productId}>
+                              {p.reference} / {p.colorLabel || p.color} · {p.totalReceived} reçu
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {addedProductIds.length > 0 && (
+                      <Badge variant="secondary">
+                        {addedProductIds.length} ajouté{addedProductIds.length > 1 ? "s" : ""}
+                      </Badge>
+                    )}
+                  </div>
+                )}
 
                 {/* Client view */}
                 {viewMode === "client" && (
