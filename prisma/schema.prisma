@@ -571,9 +571,20 @@ model BtocOrder {
   customerId      String?
   customerEmail   String?
   customerName    String?
+  // Facturation (billing) — nom/prénom/adresse depuis WooCommerce billing.*
+  billingFirstName String?
+  billingLastName  String?
+  billingAddress1  String?
+  billingPostcode  String?
   billingCity     String?
   billingCountry  String?   // code pays ISO (FR, BE…) depuis WooCommerce billing.country
+  // Livraison (shipping) — nom/prénom/adresse depuis WooCommerce shipping.*
+  shippingFirstName String?
+  shippingLastName  String?
+  shippingAddress1  String?
+  shippingPostcode  String?
   shippingCity    String?
+  shippingCountry String?   // code pays ISO depuis WooCommerce shipping.country
   total           Float
   totalRefunded   Float    @default(0) // montant remboursé (partiel ou total) — déduit du CA
   subtotal        Float?

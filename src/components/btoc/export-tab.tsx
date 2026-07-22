@@ -15,6 +15,7 @@ import {
   Crown,
   Download,
   Loader2,
+  MapPin,
   Package,
   ShoppingCart,
   TrendingUp,
@@ -58,6 +59,33 @@ interface OrderRow {
   totalQuantity: number;
   totalRevenue: number;
   quantities: Record<number, number>; // position → quantity
+}
+
+interface SalesDetailRow {
+  orderNumber: string;
+  orderDate: string;
+  status: string;
+  total: number;
+  totalTax: number;
+  shippingTotal: number;
+  totalRefunded: number;
+  currency: string;
+  paymentTitle: string;
+  paymentMethod: string;
+  customerEmail: string;
+  billingFirstName: string;
+  billingLastName: string;
+  billingAddress1: string;
+  billingPostcode: string;
+  billingCity: string;
+  billingCountry: string;
+  shippingFirstName: string;
+  shippingLastName: string;
+  shippingAddress1: string;
+  shippingPostcode: string;
+  shippingCity: string;
+  shippingCountry: string;
+  shippingSameAsBilling: boolean;
 }
 
 interface CustomerRow {
@@ -133,6 +161,11 @@ export function BtocExportTab() {
   const [exportingCustomers, setExportingCustomers] = useState(false);
   const [exportingTopClients, setExportingTopClients] = useState(false);
   const [exportingBestSellers, setExportingBestSellers] = useState(false);
+  const [exportingSalesDetails, setExportingSalesDetails] = useState(false);
+
+  // Export « Ventes détaillées » (adresses facturation/livraison + paiement) — plage de dates.
+  const [sdDateFrom, setSdDateFrom] = useState("");
+  const [sdDateTo, setSdDateTo] = useState("");
 
   // Top Clients / Best Sellers date filters (live + historique)
   const [tcDateFrom, setTcDateFrom] = useState("");
@@ -311,6 +344,63 @@ export function BtocExportTab() {
       console.error("Erreur export ventes:", e);
     } finally {
       setExportingOrders(false);
+    }
+  };
+
+  // ─── Export Ventes détaillées (adresses + paiement, 1 ligne / commande) ──
+  const handleExportSalesDetails = async () => {
+    setExportingSalesDetails(true);
+    try {
+      const params = new URLSearchParams();
+      if (sdDateFrom) params.set("dateFrom", sdDateFrom);
+      if (sdDateTo) params.set("dateTo", sdDateTo);
+      if (statusesParam()) params.set("statuses", statusesParam());
+
+      const res = await fetch(`/api/btoc/export/sales-details?${params}`);
+      const data = await res.json();
+      const orders: SalesDetailRow[] = data.orders || [];
+
+      const headers = [
+        "N° commande", "Date", "Statut", "Email", "Paiement", "Code paiement",
+        "Facturation - Prénom", "Facturation - Nom", "Facturation - Adresse",
+        "Facturation - CP", "Facturation - Ville", "Facturation - Pays",
+        "Livraison - Prénom", "Livraison - Nom", "Livraison - Adresse",
+        "Livraison - CP", "Livraison - Ville", "Livraison - Pays", "Livraison = facturation",
+        "Total TTC", "TVA", "Frais de port", "Remboursé", "Devise",
+      ];
+
+      const rows = orders.map((o) => ({
+        "N° commande": o.orderNumber,
+        "Date": o.orderDate ? o.orderDate.slice(0, 10) : "",
+        "Statut": o.status,
+        "Email": o.customerEmail,
+        "Paiement": o.paymentTitle,
+        "Code paiement": o.paymentMethod,
+        "Facturation - Prénom": o.billingFirstName,
+        "Facturation - Nom": o.billingLastName,
+        "Facturation - Adresse": o.billingAddress1,
+        "Facturation - CP": o.billingPostcode,
+        "Facturation - Ville": o.billingCity,
+        "Facturation - Pays": o.billingCountry,
+        "Livraison - Prénom": o.shippingFirstName,
+        "Livraison - Nom": o.shippingLastName,
+        "Livraison - Adresse": o.shippingAddress1,
+        "Livraison - CP": o.shippingPostcode,
+        "Livraison - Ville": o.shippingCity,
+        "Livraison - Pays": o.shippingCountry,
+        "Livraison = facturation": o.shippingSameAsBilling ? "Oui" : "Non",
+        "Total TTC": o.total,
+        "TVA": o.totalTax,
+        "Frais de port": o.shippingTotal,
+        "Remboursé": o.totalRefunded,
+        "Devise": o.currency,
+      }));
+
+      downloadXLSX(rows, "Ventes détaillées", `ventes-details-btoc-${today()}.xlsx`, headers);
+    } catch (e) {
+      console.error("Erreur export ventes détaillées:", e);
+    } finally {
+      setExportingSalesDetails(false);
     }
   };
 
@@ -733,6 +823,68 @@ export function BtocExportTab() {
               {orderColor && <Badge variant="secondary">Couleur : {orderColor}</Badge>}
               {orderSize && <Badge variant="secondary">Taille : {orderSize}</Badge>}
               {orderCustomer && <Badge variant="secondary">Client : {orderCustomer}</Badge>}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ─── Export Ventes détaillées (adresses + paiement) ───── */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-sky-50">
+              <MapPin className="h-5 w-5 text-sky-600" />
+            </div>
+            <div>
+              <CardTitle className="text-base">Export Ventes détaillées</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Une ligne par commande : coordonnées de facturation et de livraison (nom, prénom,
+                adresse, ville, pays) + moyen de paiement. Respecte les statuts sélectionnés.
+              </p>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="space-y-1">
+              <label className="block text-xs font-medium text-muted-foreground">
+                Date début
+              </label>
+              <Input
+                type="date"
+                value={sdDateFrom}
+                onChange={(e) => setSdDateFrom(e.target.value)}
+                className="w-40 h-9"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="block text-xs font-medium text-muted-foreground">
+                Date fin
+              </label>
+              <Input
+                type="date"
+                value={sdDateTo}
+                onChange={(e) => setSdDateTo(e.target.value)}
+                className="w-40 h-9"
+              />
+            </div>
+            <Button
+              onClick={handleExportSalesDetails}
+              disabled={exportingSalesDetails}
+              className="gap-2 h-9"
+            >
+              {exportingSalesDetails ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="h-4 w-4" />
+              )}
+              Exporter Ventes détaillées
+            </Button>
+          </div>
+          {(sdDateFrom || sdDateTo) && (
+            <div className="mt-3 flex items-center gap-2 flex-wrap">
+              {sdDateFrom && <Badge variant="secondary">Depuis : {sdDateFrom}</Badge>}
+              {sdDateTo && <Badge variant="secondary">{"Jusqu'au"} : {sdDateTo}</Badge>}
             </div>
           )}
         </CardContent>

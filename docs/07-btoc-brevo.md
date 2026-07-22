@@ -12,7 +12,7 @@ produits, commandes, stock, remboursements) + **gestion VIP via Brevo**.
   `vip-recompute`. (Auth `x-api-key=SYNC_API_KEY` comme les autres `/api/sync`.)
 - Écran : **`/btoc`** (onglets clients, produits, commandes, stats…). API de lecture/exports
   sous `/api/btoc/*` : `customers`, `stats`, `size-distribution`,
-  `export/{orders,products,best-sellers,top-clients}`, `settings`.
+  `export/{orders,products,best-sellers,top-clients,sales-details}`, `settings`.
 
 ## Stats BtoC — Top 15 produits
 
@@ -78,6 +78,18 @@ Donc : **ne pas se fier à `total_spent` de Woo** ; utiliser le total recalculé
   **personnalisés** WooCommerce (`lpc_transit`, `mp-warning`…). Défaut = **Ventes** (tous sauf
   `cancelled`/`refunded`/`failed`). Param `statuses=` (CSV) → `o.status = ANY($n)` dans les 3
   routes ; absent = comportement d'origine de chaque route.
+- **Export « Ventes détaillées »** (`/api/btoc/export/sales-details`) : **une ligne par
+  commande** avec les coordonnées de **facturation** ET de **livraison** (prénom, nom, adresse,
+  code postal, ville, pays) + le **moyen de paiement** (`paymentTitle` : PayPal, Monetico… avec
+  repli sur `paymentMethod`). Filtre plage de dates (bornes Paris) + statuts (multi-sélecteur
+  partagé). Si la livraison est vide (Woo « expédier à l'adresse de facturation »), les colonnes
+  livraison **retombent sur la facturation** (colonne « Livraison = facturation » = Oui).
+  - ⚠️ **Nouvelles colonnes `BtocOrder`** : `billingFirstName/LastName/Address1/Postcode` et
+    `shippingFirstName/LastName/Address1/Postcode/Country` (billing/shipping `City`+`Country`
+    existaient déjà). Alimentées par la synchro n8n (`/api/sync/btoc/orders`, upsert) depuis les
+    objets `billing`/`shipping` du payload WooCommerce. **Les commandes déjà en base sont NULL
+    tant qu'elles ne sont pas re-synchronisées** → relancer la synchro n8n des commandes sur la
+    période voulue pour remplir l'historique (le `COALESCE` de l'upsert remplit les champs vides).
 - **Deux montants affichés** (tuile CA de l'onglet Stats) :
   - **CA TTC encaissé** = `SUM(total − totalRefunded)` — TVA et frais de port **inclus**
     (montant réellement encaissé).

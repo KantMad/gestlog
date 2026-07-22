@@ -81,14 +81,19 @@ export async function POST(request: NextRequest) {
           ? JSON.stringify(o.coupon_lines.map((c: { code?: string }) => c.code))
           : null;
 
-        // Upsert order
+        // Upsert order — inclut désormais les nom/prénom/adresse de FACTURATION et de
+        // LIVRAISON (WooCommerce billing.*/shipping.*) pour l'export « Ventes détaillées ».
         await prisma.$executeRawUnsafe(
           `INSERT INTO "BtocOrder" (id, "wooId", "orderNumber", status, "customerId",
             "customerEmail", "customerName", "billingCity", "shippingCity",
             total, subtotal, "totalTax", "shippingTotal", "discountTotal",
             "paymentMethod", "paymentTitle", currency, "itemCount",
-            "couponCodes", "customerNote", "orderDate", "completedAt", "billingCountry", "totalRefunded", "createdAt", "updatedAt")
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, NOW(), NOW())
+            "couponCodes", "customerNote", "orderDate", "completedAt", "billingCountry", "totalRefunded",
+            "billingFirstName", "billingLastName", "billingAddress1", "billingPostcode",
+            "shippingFirstName", "shippingLastName", "shippingAddress1", "shippingPostcode", "shippingCountry",
+            "createdAt", "updatedAt")
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24,
+             $25, $26, $27, $28, $29, $30, $31, $32, $33, NOW(), NOW())
            ON CONFLICT ("wooId")
            DO UPDATE SET
              status = $4,
@@ -97,6 +102,8 @@ export async function POST(request: NextRequest) {
              "customerId" = COALESCE($5, "BtocOrder"."customerId"),
              "customerEmail" = COALESCE($6, "BtocOrder"."customerEmail"),
              "customerName" = COALESCE($7, "BtocOrder"."customerName"),
+             "billingCity" = COALESCE($8, "BtocOrder"."billingCity"),
+             "shippingCity" = COALESCE($9, "BtocOrder"."shippingCity"),
              total = $10,
              subtotal = $11,
              "totalTax" = $12,
@@ -107,6 +114,15 @@ export async function POST(request: NextRequest) {
              "itemCount" = $18,
              "couponCodes" = COALESCE($19, "BtocOrder"."couponCodes"),
              "completedAt" = $22,
+             "billingFirstName" = COALESCE($25, "BtocOrder"."billingFirstName"),
+             "billingLastName" = COALESCE($26, "BtocOrder"."billingLastName"),
+             "billingAddress1" = COALESCE($27, "BtocOrder"."billingAddress1"),
+             "billingPostcode" = COALESCE($28, "BtocOrder"."billingPostcode"),
+             "shippingFirstName" = COALESCE($29, "BtocOrder"."shippingFirstName"),
+             "shippingLastName" = COALESCE($30, "BtocOrder"."shippingLastName"),
+             "shippingAddress1" = COALESCE($31, "BtocOrder"."shippingAddress1"),
+             "shippingPostcode" = COALESCE($32, "BtocOrder"."shippingPostcode"),
+             "shippingCountry" = COALESCE($33, "BtocOrder"."shippingCountry"),
              "updatedAt" = NOW()`,
           genId(),
           wooId,
@@ -136,7 +152,16 @@ export async function POST(request: NextRequest) {
                 (s: number, r: { total?: string }) => s + Math.abs(parseFloat(r.total || "0") || 0),
                 0
               )
-            : 0
+            : 0,
+          o.billing?.first_name || null,
+          o.billing?.last_name || null,
+          o.billing?.address_1 || null,
+          o.billing?.postcode || null,
+          o.shipping?.first_name || null,
+          o.shipping?.last_name || null,
+          o.shipping?.address_1 || null,
+          o.shipping?.postcode || null,
+          (o.shipping?.country || "").toUpperCase() || null
         );
 
         // Upsert order lines (pré-chargement produits + bulk insert) — sur la liste DÉDUP.
