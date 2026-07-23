@@ -256,6 +256,12 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
   d'intégration client** (14 colonnes) — **un fichier par n° de document** (plusieurs → zip).
 - **Source** : fichier `.xlsx` uploadé. Logique pure `src/lib/integration-cc.ts` (testée) ;
   colonnes repérées **par NOM** (l'ordre de l'export peut varier). Lignes à quantité ≤ 0 ignorées.
+- ⚠️ **Un export Texas empile parfois PLUSIEURS BL** dans le même fichier (cas réel : *ean
+  roubaix bl 140272* contenait le doc **143161** en lignes 2→73 et le **140272** en 74→207, avec
+  **deux clients différents**). L'écran liste donc chaque document avec une **case à cocher**
+  (toutes cochées par défaut) et un avertissement dès qu'il y en a plus d'un → on ne génère que
+  les documents choisis. Ce n'est **pas** un reliquat de l'import précédent : l'état est
+  entièrement réinitialisé à chaque dépôt de fichier.
 - **Marque** : seules les lignes de marque **MCS** sont reprises ; l'écran indique combien de
   lignes ont été écartées (constante `BRANDS` dans la page).
   ⚠️ **C'est volontaire et confirmé** — ne pas « corriger » en Country Classic : l'écran

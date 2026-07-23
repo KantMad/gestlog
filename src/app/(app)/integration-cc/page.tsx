@@ -45,6 +45,9 @@ export default function IntegrationCcPage() {
   const [docs, setDocs] = useState<IntegrationDocument[]>([]);
   // Date d'import du fichier d'origine (figée au dépôt, pas à la génération) → nom du fichier.
   const [importDate, setImportDate] = useState("");
+  // Documents cochés : un export Texas embarque parfois PLUSIEURS n° de document (et donc
+  // plusieurs clients) — on laisse choisir ceux à générer. Tous cochés par défaut.
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [clients, setClients] = useState<Map<string, ClientRow>>(new Map());
   const [busy, setBusy] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -76,6 +79,7 @@ export default function IntegrationCcPage() {
     setLines([]);
     setDocs([]);
     setImportDate("");
+    setSelected(new Set());
     if (inputRef.current) inputRef.current.value = "";
   };
 
@@ -94,8 +98,10 @@ export default function IntegrationCcPage() {
         reset();
         return;
       }
+      const built = buildIntegrationDocuments(parsed, BRANDS);
       setLines(parsed);
-      setDocs(buildIntegrationDocuments(parsed, BRANDS));
+      setDocs(built);
+      setSelected(new Set(built.map((d) => d.documentNumber)));
     } catch {
       toast.error("Impossible de lire le fichier");
       reset();
@@ -127,12 +133,13 @@ export default function IntegrationCcPage() {
   };
 
   const handleExport = async () => {
-    if (docs.length === 0) return;
+    const chosen = docs.filter((d) => selected.has(d.documentNumber));
+    if (chosen.length === 0) return;
     setBusy(true);
     try {
       // Un seul document → fichier direct ; plusieurs → zip (un fichier par n° de document).
-      if (docs.length === 1) {
-        const doc = docs[0];
+      if (chosen.length === 1) {
+        const doc = chosen[0];
         const out = XLSX.write(sheetFor(doc), { type: "array", bookType: "xlsx" });
         download(
           new Blob([out], { type: "application/octet-stream" }),
@@ -140,20 +147,20 @@ export default function IntegrationCcPage() {
         );
       } else {
         const zip = new JSZip();
-        for (const doc of docs) {
+        for (const doc of chosen) {
           const out = XLSX.write(sheetFor(doc), { type: "array", bookType: "xlsx" });
           zip.file(integrationFileName(doc.documentNumber, cityFor(doc.clientCode), importDate), out);
         }
         const blob = await zip.generateAsync({ type: "blob" });
-        const city = cityFor(docs[0].clientCode);
+        const city = cityFor(chosen[0].clientCode);
         download(
           blob,
-          `Fichiers intégration ${city} ${docs.map((d) => d.documentNumber).join("-")} ${importDate}.zip`
+          `Fichiers intégration ${city} ${chosen.map((d) => d.documentNumber).join("-")} ${importDate}.zip`
             .replace(/\s+/g, " ")
             .trim()
         );
       }
-      toast.success(`${docs.length} fichier(s) généré(s)`);
+      toast.success(`${chosen.length} fichier(s) généré(s)`);
     } catch (e) {
       toast.error("Erreur à la génération", { description: String(e) });
     } finally {
@@ -162,7 +169,15 @@ export default function IntegrationCcPage() {
   };
 
   const excluded = lines.length - docs.reduce((s, d) => s + d.rows.length, 0);
-  const missingCity = docs.filter((d) => !cityFor(d.clientCode));
+  const chosenDocs = docs.filter((d) => selected.has(d.documentNumber));
+  const missingCity = chosenDocs.filter((d) => !cityFor(d.clientCode));
+  const toggleDoc = (n: string) =>
+    setSelected((cur) => {
+      const next = new Set(cur);
+      if (next.has(n)) next.delete(n);
+      else next.add(n);
+      return next;
+    });
 
   return (
     <div>
@@ -178,9 +193,14 @@ export default function IntegrationCcPage() {
                   <X className="h-4 w-4" />
                   Réinitialiser
                 </Button>
-                <Button onClick={handleExport} disabled={busy} className="gap-2">
+                <Button
+                  onClick={handleExport}
+                  disabled={busy || chosenDocs.length === 0}
+                  className="gap-2"
+                >
                   <Download className="h-4 w-4" />
-                  Générer {docs.length > 1 ? `${docs.length} fichiers (zip)` : "le fichier"}
+                  Générer{" "}
+                  {chosenDocs.length > 1 ? `${chosenDocs.length} fichiers (zip)` : "le fichier"}
                 </Button>
               </div>
             ) : undefined
@@ -237,14 +257,22 @@ export default function IntegrationCcPage() {
             <div className="grid gap-4 sm:grid-cols-3">
               <Card>
                 <CardContent className="pt-6">
-                  <div className="text-2xl font-bold">{docs.length}</div>
-                  <p className="text-sm text-muted-foreground">Documents</p>
+                  <div className="text-2xl font-bold">
+                    {chosenDocs.length}
+                    {docs.length !== chosenDocs.length && (
+                      <span className="text-base font-normal text-muted-foreground">
+                        {" "}
+                        / {docs.length}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-sm text-muted-foreground">Documents sélectionnés</p>
                 </CardContent>
               </Card>
               <Card>
                 <CardContent className="pt-6">
                   <div className="text-2xl font-bold">
-                    {docs.reduce((s, d) => s + d.rows.length, 0)}
+                    {chosenDocs.reduce((s, d) => s + d.rows.length, 0)}
                   </div>
                   <p className="text-sm text-muted-foreground">Lignes retenues</p>
                 </CardContent>
@@ -252,16 +280,27 @@ export default function IntegrationCcPage() {
               <Card>
                 <CardContent className="pt-6">
                   <div className="text-2xl font-bold">
-                    {docs.reduce((s, d) => s + d.totalQuantity, 0)}
+                    {chosenDocs.reduce((s, d) => s + d.totalQuantity, 0)}
                   </div>
                   <p className="text-sm text-muted-foreground">Pièces</p>
                 </CardContent>
               </Card>
             </div>
 
-            {(excluded > 0 || missingCity.length > 0) && (
+            {(excluded > 0 || missingCity.length > 0 || docs.length > 1) && (
               <Card className="border-amber-200 bg-amber-50/50">
                 <CardContent className="space-y-1 pt-6 text-sm">
+                  {docs.length > 1 && (
+                    <p className="flex items-start gap-2 text-amber-800">
+                      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                      <span>
+                        Ce fichier contient <strong>{docs.length} numéros de document</strong> (
+                        {docs.map((d) => `${d.documentNumber} — ${d.clientName}`).join(" · ")}). Un
+                        export Texas empile parfois plusieurs BL : <strong>décochez</strong> ceux
+                        que vous ne voulez pas générer.
+                      </span>
+                    </p>
+                  )}
                   {excluded > 0 && (
                     <p className="flex items-start gap-2 text-amber-800">
                       <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
@@ -290,19 +329,31 @@ export default function IntegrationCcPage() {
             {docs.map((doc) => {
               const city = cityFor(doc.clientCode);
               return (
-                <Card key={doc.documentNumber}>
+                <Card
+                  key={doc.documentNumber}
+                  className={cn(!selected.has(doc.documentNumber) && "opacity-60")}
+                >
                   <CardHeader className="pb-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div>
-                        <CardTitle className="text-base">
-                          Document {doc.documentNumber}
-                          <span className="ml-2 text-sm font-normal text-muted-foreground">
-                            {doc.clientName} ({doc.clientCode})
-                          </span>
-                        </CardTitle>
-                        <p className="mt-1 font-mono text-xs text-muted-foreground">
-                          {integrationFileName(doc.documentNumber, city, importDate)}
-                        </p>
+                      <div className="flex items-start gap-3">
+                        <input
+                          type="checkbox"
+                          className="mt-1 h-4 w-4 cursor-pointer"
+                          checked={selected.has(doc.documentNumber)}
+                          onChange={() => toggleDoc(doc.documentNumber)}
+                          aria-label={`Générer le document ${doc.documentNumber}`}
+                        />
+                        <div>
+                          <CardTitle className="text-base">
+                            Document {doc.documentNumber}
+                            <span className="ml-2 text-sm font-normal text-muted-foreground">
+                              {doc.clientName} ({doc.clientCode})
+                            </span>
+                          </CardTitle>
+                          <p className="mt-1 font-mono text-xs text-muted-foreground">
+                            {integrationFileName(doc.documentNumber, city, importDate)}
+                          </p>
+                        </div>
                       </div>
                       <div className="flex items-center gap-2">
                         {city ? (
