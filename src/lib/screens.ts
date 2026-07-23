@@ -18,6 +18,7 @@ export const APP_SCREENS: { key: string; label: string }[] = [
   { key: "/season-comparison", label: "Comparaison saisons / catalogues" },
   { key: "/client-comparison", label: "Comparaison clients" },
   { key: "/repartition", label: "Répartition magasin" },
+  { key: "/integration-cc", label: "Fichier d'intégration CC" },
   { key: "/controle-commandes", label: "Contrôle commandes" },
   { key: "/export", label: "Exports" },
   { key: "/btoc", label: "BtoC" },

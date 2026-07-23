@@ -50,7 +50,9 @@ colonne.
   les commandes de réassort (voir `04`/`08`).
 - **`Client`** — client B2B (boutique/grossiste). `surplusExcludedSizes` (CSV, ex. `"3XL,4XL"`) :
   tailles jamais servies **en surplus** à cette boutique — réglage **global** (toutes saisons),
-  cf. `08`.
+  cf. `08`. `deliveryCity`/`deliveryPostcode` = adresse de **livraison** (source TIO
+  `lng_shop.city`/`zipcode`, ⚠️ **pas** `billing_*`), synchronisée par n8n et utilisée pour
+  nommer le **fichier d'intégration CC**.
 - **`ClientSeason`** — paramétrage d'un client **pour une saison** (rang, seuils, rotation).
 
 ### Fournisseurs, commandes fournisseur, réceptions

@@ -32,6 +32,11 @@ model Client {
   code      String   @unique
   name      String
   email     String?
+  // Adresse de LIVRAISON (source TIO `lng_shop.city`/`zipcode` — PAS l'adresse de
+  // facturation `billing_*`). Sert notamment à nommer le fichier d'intégration CC
+  // (« Fichier intégration TALANGE 142426 »). Synchronisée par n8n.
+  deliveryCity     String?
+  deliveryPostcode String?
   // Tailles que la boutique ne reçoit PAS en surplus (CSV, ex. "3XL,4XL"). Réglage GLOBAL
   // (pas par saison) : « cette boutique ne prend jamais de 4XL en trop ». Cf.
   // src/lib/allocation/surplus.ts pour les deux garde-fous (ne bloque que le surplus

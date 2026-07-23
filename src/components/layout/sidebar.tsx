@@ -30,6 +30,7 @@ import {
   ScanSearch,
   PackageCheck,
   FlaskConical,
+  FileSpreadsheet,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
@@ -54,6 +55,7 @@ const NAV_ITEMS = [
   { href: "/season-comparison", label: "Comparaison saisons / catalogues", icon: ArrowLeftRight },
   { href: "/client-comparison", label: "Comparaison clients", icon: Building2 },
   { href: "/repartition", label: "Répartition magasin", icon: Store },
+  { href: "/integration-cc", label: "Fichier d'intégration CC", icon: FileSpreadsheet },
   { href: "/controle-commandes", label: "Contrôle commandes", icon: ScanSearch },
   { href: "/export", label: "Exports", icon: Download },
   { href: "/btoc", label: "BtoC", icon: ShoppingBag },

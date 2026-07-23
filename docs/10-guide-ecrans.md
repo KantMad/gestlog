@@ -251,6 +251,23 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
   `src/lib/repartition.ts` (testée). ⚠️ distinct de la **Répartition (allocation)**.
 - **Pièges** : réfs hors catalogue → `missingRefs` ; pièces hors grille → `totalDropped`.
 
+## Fichier d'intégration CC (`/integration-cc`)
+- **Rôle** : transformer un export **EAN / BL** (format Texas, ~77 colonnes) en **fichier
+  d'intégration client** (14 colonnes) — **un fichier par n° de document** (plusieurs → zip).
+- **Source** : fichier `.xlsx` uploadé. Logique pure `src/lib/integration-cc.ts` (testée) ;
+  colonnes repérées **par NOM** (l'ordre de l'export peut varier). Lignes à quantité ≤ 0 ignorées.
+- **Marque** : seules les lignes de marque **MCS** sont reprises ; l'écran indique combien de
+  lignes ont été écartées (constante `BRANDS` dans la page).
+- **Équivalences** : `fournisseur`←*Libellé marque* · `Code Article`←*Code Produit Fini* ·
+  `Désignation`←*Libellé 1 Produit Fini* · `taille`←*Taille* · `coloris`←*Libellé Coloris* ·
+  `EAN`←*Code Barre* · **`prix de revient HT`←*Prix du Document*** (repli *Prix Unitaire* —
+  ⚠️ **aucun prix recalculé**) · `Prix de vente TTC`= vide · `secteur`=**PAP** (constante) ·
+  `saison`←*Saison Document* · `code modele`= vide · `famille d'article`←*Libellé famille
+  statistique* · `matiere`←*Composition* · `Quantité`←*Qté*.
+- **Nom du fichier** : `Fichier intégration {VILLE} {N° Document}.xlsx` — la **ville de
+  livraison** vient de `Client.deliveryCity` (synchronisée depuis TIO `lng_shop.city`), résolue
+  par le **Code Client** du fichier. Ville inconnue → nom sans ville + alerte à l'écran.
+
 ## BtoC (`/btoc`)
 - **Rôle** : piloter la boutique en ligne (stats, exports, clients, VIP Brevo).
 - **Source** : tables `Btoc*` (sync WooCommerce), `HistOrder` (historique autre Woo),
