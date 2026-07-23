@@ -27,11 +27,7 @@ import {
   formatImportDate,
   INTEGRATION_HEADERS,
   type IntegrationDocument,
-  type IntegrationSourceLine,
 } from "@/lib/integration-cc";
-
-// Marque(s) retenues pour le fichier d'intégration.
-const BRANDS = ["MCS"];
 
 interface ClientRow {
   code: string;
@@ -41,7 +37,6 @@ interface ClientRow {
 
 export default function IntegrationCcPage() {
   const [file, setFile] = useState<File | null>(null);
-  const [lines, setLines] = useState<IntegrationSourceLine[]>([]);
   const [docs, setDocs] = useState<IntegrationDocument[]>([]);
   // Date d'import du fichier d'origine (figée au dépôt, pas à la génération) → nom du fichier.
   const [importDate, setImportDate] = useState("");
@@ -76,7 +71,6 @@ export default function IntegrationCcPage() {
 
   const reset = () => {
     setFile(null);
-    setLines([]);
     setDocs([]);
     setImportDate("");
     setSelected(new Set());
@@ -98,8 +92,9 @@ export default function IntegrationCcPage() {
         reset();
         return;
       }
-      const built = buildIntegrationDocuments(parsed, BRANDS);
-      setLines(parsed);
+      // Toutes les marques sont reprises (Country Classic ET MCS) — la colonne
+      // « fournisseur » porte le libellé de marque de chaque ligne.
+      const built = buildIntegrationDocuments(parsed);
       setDocs(built);
       setSelected(new Set(built.map((d) => d.documentNumber)));
     } catch {
@@ -174,7 +169,6 @@ export default function IntegrationCcPage() {
     }
   };
 
-  const excluded = lines.length - docs.reduce((s, d) => s + d.rows.length, 0);
   const chosenDocs = docs.filter((d) => selected.has(d.documentNumber));
   const missingCity = chosenDocs.filter((d) => !cityFor(d.clientCode));
   const toggleDoc = (n: string) =>
@@ -223,8 +217,8 @@ export default function IntegrationCcPage() {
               <div>
                 <CardTitle className="text-base">Fichier source (EAN / BL)</CardTitle>
                 <p className="text-sm text-muted-foreground">
-                  Export Texas contenant « N° Document » et « Code Produit Fini ». Seules les
-                  lignes de marque <strong>{BRANDS.join(", ")}</strong> sont reprises.
+                  Export Texas contenant « N° Document » et « Code Produit Fini ». Toutes les
+                  marques sont reprises ; les lignes de quantité nulle sont ignorées.
                 </p>
               </div>
             </div>
@@ -293,7 +287,7 @@ export default function IntegrationCcPage() {
               </Card>
             </div>
 
-            {(excluded > 0 || missingCity.length > 0 || docs.length > 1) && (
+            {(missingCity.length > 0 || docs.length > 1) && (
               <Card className="border-amber-200 bg-amber-50/50">
                 <CardContent className="space-y-1 pt-6 text-sm">
                   {docs.length > 1 && (
@@ -304,15 +298,6 @@ export default function IntegrationCcPage() {
                         {docs.map((d) => `${d.documentNumber} — ${d.clientName}`).join(" · ")}). Un
                         export Texas empile parfois plusieurs BL : <strong>décochez</strong> ceux
                         que vous ne voulez pas générer.
-                      </span>
-                    </p>
-                  )}
-                  {excluded > 0 && (
-                    <p className="flex items-start gap-2 text-amber-800">
-                      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                      <span>
-                        <strong>{excluded}</strong> ligne(s) écartée(s) : marque autre que{" "}
-                        {BRANDS.join(", ")}.
                       </span>
                     </p>
                   )}
