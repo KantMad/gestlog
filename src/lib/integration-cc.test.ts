@@ -5,6 +5,7 @@ import {
   buildIntegrationDocuments,
   integrationFileName,
   formatImportDate,
+  round2,
   INTEGRATION_HEADERS,
 } from "./integration-cc";
 
@@ -91,6 +92,27 @@ describe("fichier d'intégration CC", () => {
     );
     // Caractères interdits neutralisés
     expect(integrationFileName("143161", "ROMANS/ISERE")).toBe("Fichier intégration ROMANSISERE 143161.xlsx");
+  });
+
+  it("arrondit le prix à 2 décimales", () => {
+    expect(round2(22.169)).toBe(22.17);
+    expect(round2(23.099999999999998)).toBe(23.1);
+    expect(round2(1.005)).toBe(1.01); // piège du binaire
+    expect(round2(21.5)).toBe(21.5); // déjà à 2 décimales → inchangé
+  });
+
+  it("le prix écrit dans le fichier est arrondi à 2 décimales", () => {
+    const rows = [
+      ["N° Document", "Code Produit Fini", "Qté", "Libellé marque", "Prix du Document"],
+      ["1", "REF_A", 1, "MCS", "19.8333"],
+      ["1", "REF_B", 1, "MCS", "10.005"],
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Feuil1");
+    const buf = XLSX.write(wb, { type: "array", bookType: "xlsx" }) as ArrayBuffer;
+    const [doc] = buildIntegrationDocuments(parseIntegrationSource(buf), ["MCS"]);
+    expect(doc.rows.map((r) => r["prix de revient HT"])).toEqual([19.83, 10.01]);
   });
 
   it("formate la date d'import en JJ-MM-AA", () => {

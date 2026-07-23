@@ -60,6 +60,13 @@ type Cell = string | number | boolean | null | undefined;
 const norm = (v: Cell): string => String(v ?? "").replace(/\s+/g, " ").trim();
 const key = (v: Cell): string => norm(v).toLowerCase().replace(/[^a-z0-9]/g, "");
 
+/**
+ * Arrondi monétaire à 2 décimales. `Number.EPSILON` évite les surprises du binaire
+ * (ex. `1.005 * 100 = 100.49999…` qui arrondirait à 1.00 au lieu de 1.01).
+ */
+export const round2 = (n: number): number =>
+  Number.isFinite(n) ? Math.round((n + Number.EPSILON) * 100) / 100 : 0;
+
 const num = (v: Cell): number => {
   if (typeof v === "number") return Number.isFinite(v) ? v : 0;
   // Les exports Texas écrivent parfois les nombres en texte, avec virgule décimale.
@@ -173,7 +180,8 @@ export function buildIntegrationDocuments(
       taille: l.size,
       coloris: l.colorLabel,
       EAN: l.ean,
-      "prix de revient HT": l.price,
+      // Prix TOUJOURS à 2 décimales (arrondi) dans le fichier livré au client.
+      "prix de revient HT": round2(l.price),
       "Prix de vente TTC": null,
       secteur: SECTEUR,
       saison: l.season,

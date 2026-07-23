@@ -272,7 +272,8 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
 - **Équivalences** : `fournisseur`←*Libellé marque* · `Code Article`←*Code Produit Fini* ·
   `Désignation`←*Libellé 1 Produit Fini* · `taille`←*Taille* · `coloris`←*Libellé Coloris* ·
   `EAN`←*Code Barre* · **`prix de revient HT`←*Prix du Document*** (repli *Prix Unitaire* —
-  ⚠️ **aucun prix recalculé**) · `Prix de vente TTC`= vide · `secteur`=**PAP** (constante) ·
+  ⚠️ **aucun prix recalculé**, mais **arrondi à 2 décimales** via `round2`, et la cellule Excel
+  est formatée `0.00`) · `Prix de vente TTC`= vide · `secteur`=**PAP** (constante) ·
   `saison`←*Saison Document* · `code modele`= vide · `famille d'article`←*Libellé famille
   statistique* · `matiere`←*Composition* · `Quantité`←*Qté*.
 - **Nom du fichier** : `Fichier intégration {VILLE} {N° Document} {JJ-MM-AA}.xlsx` — la **ville

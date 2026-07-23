@@ -112,6 +112,12 @@ export default function IntegrationCcPage() {
 
   const sheetFor = (doc: IntegrationDocument) => {
     const ws = XLSX.utils.json_to_sheet(doc.rows, { header: [...INTEGRATION_HEADERS] });
+    // Prix affiché à 2 décimales dans Excel (la valeur est déjà arrondie par la lib).
+    const priceCol = INTEGRATION_HEADERS.indexOf("prix de revient HT");
+    for (let r = 1; r <= doc.rows.length; r++) {
+      const cell = ws[XLSX.utils.encode_cell({ c: priceCol, r })];
+      if (cell && cell.t === "n") cell.z = "0.00";
+    }
     ws["!cols"] = INTEGRATION_HEADERS.map((h) => ({
       wch: Math.min(
         45,
