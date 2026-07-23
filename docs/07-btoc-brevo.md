@@ -88,8 +88,13 @@ Donc : **ne pas se fier à `total_spent` de Woo** ; utiliser le total recalculé
     `shippingFirstName/LastName/Address1/Postcode/Country` (billing/shipping `City`+`Country`
     existaient déjà). Alimentées par la synchro n8n (`/api/sync/btoc/orders`, upsert) depuis les
     objets `billing`/`shipping` du payload WooCommerce. **Les commandes déjà en base sont NULL
-    tant qu'elles ne sont pas re-synchronisées** → relancer la synchro n8n des commandes sur la
-    période voulue pour remplir l'historique (le `COALESCE` de l'upsert remplit les champs vides).
+    tant qu'elles ne sont pas re-synchronisées** (le `COALESCE` de l'upsert remplit les vides).
+  - **Backfill de l'historique** : `POST /api/sync/btoc/order-addresses` (clé `x-api-key`)
+    — body `{ orders: [{ wooId, billing:{…}, shipping:{…} }] }`. Met à jour **uniquement les
+    colonnes d'adresse**, **sans toucher aux lignes ni aux montants** (contrairement à la sync
+    complète qui supprime/réinsère les `BtocOrderLine`). Idempotent : une valeur vide n'écrase
+    jamais une valeur existante (`COALESCE(NULLIF(…,''), …)`). Même principe que le backfill
+    pays (`order-countries`), alimenté par un workflow n8n **ponctuel**.
 - **Deux montants affichés** (tuile CA de l'onglet Stats) :
   - **CA TTC encaissé** = `SUM(total − totalRefunded)` — TVA et frais de port **inclus**
     (montant réellement encaissé).
