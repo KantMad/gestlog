@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { seasonId, catalogId, clientIds, supplierIds, productReferences, orderType, importedAllocation, addProductIds } = parsed.data;
+    const { seasonId, catalogId, clientIds, supplierIds, productReferences, orderType, importedAllocation, addProductIds, excludeSessionId } = parsed.data;
 
     // Source B2B active pour la saison (Texas prioritaire, repli TIO).
     const orderSource = await resolveOrderSource(seasonId);
@@ -126,18 +126,45 @@ export async function POST(request: NextRequest) {
       m[s.size] = (m[s.size] || 0) + s.quantity;
     }
 
+    // Pièces DÉJÀ RÉPARTIES dans des répartitions VALIDÉES de la saison : elles sont
+    // engagées auprès des boutiques, on ne peut plus les redistribuer. Sans cette
+    // déduction, importer une 2e réception rendait de nouveau disponible le stock de la
+    // 1re, déjà réparti et validé.
+    // ⚠️ En REPRISE, la session rejouée est exclue : sinon elle se déduirait elle-même et
+    // son propre stock paraîtrait consommé.
+    const validatedLines = await prisma.allocationLine.findMany({
+      where: {
+        allocationSession: {
+          seasonId,
+          status: "VALIDATED",
+          ...(excludeSessionId ? { id: { not: excludeSessionId } } : {}),
+        },
+      },
+      select: { productId: true, allocatedBySize: true },
+    });
+    const allocatedByProduct: Record<string, SizeQuantities> = {};
+    for (const l of validatedLines) {
+      const qty = parseSizeQuantities(l.allocatedBySize);
+      const m = (allocatedByProduct[l.productId] ||= {});
+      for (const [size, n] of Object.entries(qty)) {
+        if (n > 0) m[size] = (m[size] || 0) + n;
+      }
+    }
+
     const available = new Map<string, SizeQuantities>();
     for (const [productId, qty] of receivedByProduct) {
       const taken = sampledByProduct[productId];
-      if (!taken) {
+      const used = allocatedByProduct[productId];
+      if (!taken && !used) {
         available.set(productId, qty);
         continue;
       }
-      // Jamais négatif : un prélèvement ne peut pas dépasser le reçu (garde-fou côté API),
-      // mais une réception corrigée À LA BAISSE après coup pourrait le rendre caduc.
+      // Jamais négatif : ni un prélèvement ni une répartition validée ne peuvent dépasser le
+      // reçu (garde-fous côté API), mais une réception corrigée À LA BAISSE après coup
+      // pourrait le rendre caduc.
       const net: SizeQuantities = {};
       for (const [size, n] of Object.entries(qty)) {
-        const left = n - (taken[size] || 0);
+        const left = n - (taken?.[size] || 0) - (used?.[size] || 0);
         if (left > 0) net[size] = left;
       }
       available.set(productId, net);
@@ -392,6 +419,12 @@ export async function POST(request: NextRequest) {
     const receivedOut: Record<string, SizeQuantities> = {};
     for (const [productId, qty] of receivedByProduct) receivedOut[productId] = qty;
 
+    // DISPONIBLE réel = reçu − échantillons − déjà réparti dans d'autres répartitions
+    // validées. C'est ce qui doit plafonner les ajustements manuels et le surplus côté
+    // écran (le « reçu » seul autoriserait à redistribuer des pièces déjà engagées).
+    const availableOut: Record<string, SizeQuantities> = {};
+    for (const [productId, qty] of available) availableOut[productId] = qty;
+
     // Ranking par client (pour départager les arrondis lors de la répartition du surplus).
     const rankingByClient: Record<string, number> = {};
     for (const [id, c] of clientConfigs) rankingByClient[id] = c.ranking;
@@ -433,9 +466,12 @@ export async function POST(request: NextRequest) {
       warnings: [...result.warnings, ...importWarnings],
       clientImpacts: Array.from(clientImpacts.values()),
       receivedByProduct: receivedOut,
+      availableByProduct: availableOut,
       rankingByClient,
       excludedSizesByClient,
       sampledByProduct,
+      // Déjà réparti dans d'AUTRES répartitions validées → déduit du disponible.
+      allocatedElsewhereByProduct: allocatedByProduct,
       eansByProduct,
       supplierIdsByProduct,
       addableProducts,

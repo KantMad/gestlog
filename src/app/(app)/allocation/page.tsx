@@ -1014,6 +1014,13 @@ export default function AllocationPage() {
   const [summary, setSummary] = useState<SimulationSummary | null>(null);
   // Reçu (réception fournisseur) et EAN par produit → écart demande/réception + export EAN.
   const [receivedByProduct, setReceivedByProduct] = useState<Record<string, SizeQuantities>>({});
+  // Disponible RÉEL = reçu − échantillons − déjà réparti dans d'autres répartitions validées.
+  // Plafonne les ajustements manuels et le surplus (le reçu seul laisserait redistribuer des
+  // pièces déjà engagées auprès des boutiques).
+  const [availableByProduct, setAvailableByProduct] = useState<Record<string, SizeQuantities>>({});
+  const [allocatedElsewhereByProduct, setAllocatedElsewhereByProduct] = useState<
+    Record<string, SizeQuantities>
+  >({});
   const [eansByProduct, setEansByProduct] = useState<Record<string, Record<string, string>>>({});
   const [rankingByClient, setRankingByClient] = useState<Record<string, number>>({});
   const [excludedSizesByClient, setExcludedSizesByClient] = useState<Record<string, string[]>>({});
@@ -1087,8 +1094,9 @@ export default function AllocationPage() {
           sessionStorage.removeItem(REOPEN_KEY);
           restoredRef.current = true;
           seasonIdRef.current = activeSeason.id;
-          setReopenSourceId(typeof h.sessionId === "string" ? h.sessionId : null);
-          runSimulation(h.rows as ImportedRow[]);
+          const srcId = typeof h.sessionId === "string" ? h.sessionId : null;
+          setReopenSourceId(srcId);
+          runSimulation(h.rows as ImportedRow[], [], srcId);
           return;
         }
         sessionStorage.removeItem(REOPEN_KEY);
@@ -1109,6 +1117,8 @@ export default function AllocationPage() {
       setClientImpacts(s.clientImpacts || []);
       setSummary(s.summary || null);
       setReceivedByProduct(s.receivedByProduct || {});
+      setAvailableByProduct(s.availableByProduct || {});
+      setAllocatedElsewhereByProduct(s.allocatedElsewhereByProduct || {});
       setEansByProduct(s.eansByProduct || {});
       setRankingByClient(s.rankingByClient || {});
       setExcludedSizesByClient(s.excludedSizesByClient || {});
@@ -1146,6 +1156,8 @@ export default function AllocationPage() {
     setClientImpacts([]);
     setSummary(null);
     setReceivedByProduct({});
+    setAvailableByProduct({});
+    setAllocatedElsewhereByProduct({});
     setEansByProduct({});
     setRankingByClient({});
     setExcludedSizesByClient({});
@@ -1185,6 +1197,8 @@ export default function AllocationPage() {
           clientImpacts,
           summary,
           receivedByProduct,
+          availableByProduct,
+          allocatedElsewhereByProduct,
           eansByProduct,
           rankingByClient,
           excludedSizesByClient,
@@ -1221,6 +1235,8 @@ export default function AllocationPage() {
     clientImpacts,
     summary,
     receivedByProduct,
+    availableByProduct,
+    allocatedElsewhereByProduct,
     eansByProduct,
     rankingByClient,
     excludedSizesByClient,
@@ -1312,7 +1328,14 @@ export default function AllocationPage() {
   // `imported` = lignes d'un fichier EAN à rejouer. Dans ce cas les filtres de l'écran ne
   // sont PAS appliqués : ils restreindraient la demande et écarteraient des lignes du
   // fichier. Le fichier définit la répartition, il doit pouvoir se poser en entier.
-  const runSimulation = async (imported?: ImportedRow[], addIds?: string[]) => {
+  // `sourceSessionId` : session rejouée en reprise — à exclure du stock déjà consommé.
+  // Passé EXPLICITEMENT (et non lu depuis `reopenSourceId`) car l'état n'est pas encore
+  // à jour quand la reprise déclenche la simulation dans le même rendu.
+  const runSimulation = async (
+    imported?: ImportedRow[],
+    addIds?: string[],
+    sourceSessionId?: string | null
+  ) => {
     if (!activeSeason) return;
     setSimulating(true);
     setManualEdits(0);
@@ -1335,6 +1358,8 @@ export default function AllocationPage() {
       if (imported) {
         payload.importedAllocation = imported;
         if (addIds && addIds.length > 0) payload.addProductIds = addIds;
+        const src = sourceSessionId ?? reopenSourceId;
+        if (src) payload.excludeSessionId = src;
       } else {
         if (selectedCatalog !== "ALL") payload.catalogId = selectedCatalog;
         if (selectedClients.length > 0) payload.clientIds = selectedClients;
@@ -1362,6 +1387,8 @@ export default function AllocationPage() {
       setClientImpacts(data.clientImpacts || []);
       setSummary(data.summary || null);
       setReceivedByProduct(data.receivedByProduct || {});
+      setAvailableByProduct(data.availableByProduct || {});
+      setAllocatedElsewhereByProduct(data.allocatedElsewhereByProduct || {});
       setEansByProduct(data.eansByProduct || {});
       setSupplierIdsByProduct(data.supplierIdsByProduct || {});
       setAddableProducts(data.addableProducts || []);
@@ -1396,7 +1423,7 @@ export default function AllocationPage() {
     )
       return;
     setAddSearch("");
-    runSimulation(importedRows, [...addedProductIds, productId]);
+    runSimulation(importedRows, [...addedProductIds, productId], reopenSourceId);
   };
 
   // Libellé lisible d'un produit ajoutable (sert de valeur au champ de recherche/datalist).
@@ -1487,7 +1514,8 @@ export default function AllocationPage() {
   // Répartit le surplus d'un produit. Logique métier (règles + tests) dans
   // src/lib/allocation/surplus.ts — ici on ne fait que brancher l'état de l'écran.
   const distributeSurplus = (productId: string) => {
-    const received = receivedByProduct[productId] || {};
+    // Surplus borné au DISPONIBLE, pas au reçu (cf. stockBase).
+    const received = stockBase[productId] || {};
     const productLines = lines.filter((l) => l.productId === productId);
     if (productLines.length === 0) return;
 
@@ -1724,6 +1752,14 @@ export default function AllocationPage() {
   // Reliquat reçu NON alloué, par produit et par taille. Sert de plafond à la saisie
   // manuelle : on peut ajouter du surplus à la main, mais jamais au-delà du reçu.
   // Recalculé à chaque changement des lignes → suit les ajustements manuels.
+  // Base du plafond = DISPONIBLE (reçu − échantillons − déjà réparti ailleurs), pas le reçu :
+  // sinon on pourrait réattribuer à la main des pièces déjà engagées dans une répartition
+  // validée. Repli sur le reçu pour une simulation restaurée d'avant cette donnée.
+  const stockBase = useMemo(
+    () => (Object.keys(availableByProduct).length > 0 ? availableByProduct : receivedByProduct),
+    [availableByProduct, receivedByProduct]
+  );
+
   const remainingByProduct = useMemo(() => {
     const used: Record<string, Record<string, number>> = {};
     for (const l of lines) {
@@ -1731,13 +1767,13 @@ export default function AllocationPage() {
       for (const [s, q] of Object.entries(l.allocated)) u[s] = (u[s] || 0) + q;
     }
     const out: Record<string, Record<string, number>> = {};
-    for (const [pid, recv] of Object.entries(receivedByProduct)) {
+    for (const [pid, stock] of Object.entries(stockBase)) {
       const r: Record<string, number> = {};
-      for (const [s, n] of Object.entries(recv)) r[s] = Math.max(0, n - (used[pid]?.[s] || 0));
+      for (const [s, n] of Object.entries(stock)) r[s] = Math.max(0, n - (used[pid]?.[s] || 0));
       out[pid] = r;
     }
     return out;
-  }, [lines, receivedByProduct]);
+  }, [lines, stockBase]);
 
   // Filtre réception : un produit est « réceptionné » si son total reçu > 0.
   const isReceived = (productId: string) =>

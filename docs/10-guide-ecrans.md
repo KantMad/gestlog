@@ -90,6 +90,17 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
 ## Répartition (`/allocation`)
 - **Rôle** : répartir les quantités **reçues** entre boutiques quand le stock ne suffit pas,
   ajuster à la main, valider en session, exporter.
+- ⚠️ **Le DISPONIBLE n'est pas le reçu** :
+  `disponible = reçu − échantillons − déjà réparti dans les répartitions VALIDÉES de la saison`.
+  Une pièce engagée dans une répartition validée n'est plus redistribuable : sans cette
+  déduction, importer une 2ᵉ réception d'un fournisseur remettait en jeu le stock de la 1ʳᵉ,
+  déjà réparti et validé. La déduction lit `AllocationLine.allocatedBySize` des sessions
+  `status = "VALIDATED"`. **En REPRISE, la session rejouée est exclue** (`excludeSessionId`) —
+  sinon elle se déduirait elle-même. Le serveur renvoie `availableByProduct` (et
+  `allocatedElsewhereByProduct`) ; l'écran s'en sert pour **plafonner les ajustements manuels
+  et le « Répartir surplus »** — les plafonner sur le reçu laisserait réattribuer des pièces
+  déjà engagées. *Ordre de grandeur AH26 au moment de la mise en place : 8 sessions validées,
+  16 976 pièces déjà engagées.*
 - **Sources** : demande = `ClientOrder`/`ClientOrderLine` (**source active** via
   `resolveOrderSource`) ; **stock = réceptions live** (`SupplierOrder.receptions.lines`
   agrégées par produit) ; config = `ClientSeason` (rang, plafonds, seuil, rotation) ;

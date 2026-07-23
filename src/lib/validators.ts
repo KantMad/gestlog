@@ -64,6 +64,9 @@ export const allocationSimulateSchema = z.object({
   // Reprise : produits explicitement AJOUTÉS par l'utilisateur (reçus après la répartition) —
   // répartis normalement et fusionnés au fichier repris (cf. sélecteur « + Ajouter un produit reçu »).
   addProductIds: z.array(z.string()).optional(),
+  // Reprise : session d'origine à EXCLURE du stock déjà consommé (sinon elle se
+  // déduirait elle-même et le stock qu'elle a réparti paraîtrait indisponible).
+  excludeSessionId: z.string().optional(),
   orderType: z.enum(["COMMANDE", "VSS", "ALL"]).optional(), // default COMMANDE
   // Reprise d'une répartition depuis son fichier EAN : si présent, l'alloué VIENT DU
   // FICHIER (aucun recalcul) et le reste de la réponse est construit normalement.

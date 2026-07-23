@@ -225,6 +225,15 @@ sont gérés par écran (cf. [`05-authentification.md`](05-authentification.md))
     recalculés en cohérence). À la validation ils sont enregistrés dans la session. ⚠️ L'ajout
     **relance** la répartition (les ajustements manuels faits depuis la reprise sont perdus →
     confirmation demandée si `manualEdits > 0`).
+- **Répartition — le stock déjà VALIDÉ n'est plus redistribuable** : le disponible vaut
+  `reçu − échantillons − déjà réparti dans les sessions VALIDATED de la saison`
+  (`AllocationLine.allocatedBySize`, agrégé par produit/taille, jamais négatif). Motif : à
+  l'import d'une **2ᵉ réception** d'un fournisseur, les pièces de la 1ʳᵉ **déjà réparties et
+  validées** étaient de nouveau proposées. En **reprise**, la session rejouée est **exclue**
+  (`excludeSessionId`) — sans quoi elle se déduirait elle-même et son propre stock paraîtrait
+  consommé. `simulate` renvoie `availableByProduct` **et** `allocatedElsewhereByProduct` :
+  l'écran plafonne dessus les **ajustements manuels** et le **surplus** (les plafonner sur le
+  reçu permettrait de réattribuer des pièces engagées).
 - **Répartition — périmètre de validation** (fournisseurs **et** catalogues, multi-sélection) :
   la simulation est **toujours calculée sur toute la demande** (la restreindre fausserait les
   coupes : le stock reçu serait réparti sur un sous-ensemble de boutiques), mais on ne **valide**
