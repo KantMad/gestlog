@@ -258,6 +258,11 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
   colonnes repérées **par NOM** (l'ordre de l'export peut varier). Lignes à quantité ≤ 0 ignorées.
 - **Marque** : seules les lignes de marque **MCS** sont reprises ; l'écran indique combien de
   lignes ont été écartées (constante `BRANDS` dans la page).
+  ⚠️ **C'est volontaire et confirmé** — ne pas « corriger » en Country Classic : l'écran
+  s'appelle « CC » et le fichier d'exemple (*TALANGE*) porte `fournisseur = Country Classic`,
+  mais le filtre attendu est bien **`Libellé marque = MCS`** (sur l'export de référence, cela
+  ne retient que 72 des 440 lignes). La colonne `fournisseur` reprend le libellé de marque de
+  chaque ligne, donc vaut « MCS » ici.
 - **Équivalences** : `fournisseur`←*Libellé marque* · `Code Article`←*Code Produit Fini* ·
   `Désignation`←*Libellé 1 Produit Fini* · `taille`←*Taille* · `coloris`←*Libellé Coloris* ·
   `EAN`←*Code Barre* · **`prix de revient HT`←*Prix du Document*** (repli *Prix Unitaire* —
