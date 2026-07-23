@@ -59,7 +59,17 @@ Tables/clés utiles :
 | **Sync commandes** | `16sDefOysHJJstHE` | Commandes TIO → `/api/sync/orders`. Routage saison **Réassort** inclus. | (schedule/webhook) |
 | **Sync BL/FAC (FTP)** | — | Récupère BL & factures dépôt depuis un **FTP**, parse, POST `/api/sync/shipments`. Remplit `WarehouseDocument(+Line)`. Lien BL↔commande TIO via le **nom de fichier** (`IS-xxx`). | (schedule) |
 | **Explore** | `rph8qNuSGm7k2iWv` | Sonde TIO (debug). `curl https://centralway.pro/webhook/gestlog-explore` renvoie 1 ligne du dernier nœud. | webhook |
-| **BtoC (WooCommerce)** | — | Voir [`07-btoc-brevo.md`](07-btoc-brevo.md). | — |
+| **BtoC (WooCommerce)** | `wH890xjpZS616wpW` | Voir [`07-btoc-brevo.md`](07-btoc-brevo.md). Exécution longue (**~30 min**). | (schedule) |
+| **Backfill pays commandes (ponctuel)** | `MKP2SUCOmqmHycSj` | WC `getAll` → POST `/api/sync/btoc/order-countries`. **Inactif** entre deux usages. | webhook GET `/webhook/gestlog-backfill-pays` |
+| **Backfill adresses commandes BtoC (ponctuel)** | `QU6rYeHrlIJJ3rpz` | WC `getAll` (`after`) → POST `/api/sync/btoc/order-addresses` (adresses facturation/livraison). **Inactif** entre deux usages. | webhook GET `/webhook/gestlog-backfill-adresses` |
+
+⚠️ **Gotcha — webhook long : 504 ≠ échec.** Les workflows qui font un `getAll` WooCommerce
+tournent **plus de 10 min**, alors que le nginx devant n8n coupe la réponse à **60 s** (`504
+Gateway Time-out`). **L'exécution continue** côté n8n : ne pas relancer sur la foi du 504.
+Vérifier via `n8n_executions` (⚠️ l'API ne liste que les exécutions **terminées** — une
+exécution en cours n'apparaît pas) ou, plus sûr, en **regardant la base** (compteurs de
+colonnes remplies / `MAX("updatedAt")`). Un workflow ponctuel doit être **activé** pour être
+déclenchable par webhook, puis **désactivé** après usage.
 
 Le workflow produits a deux nœuds clés : **« Lire produits MySQL »** (la requête SQL) et
 **« Transformer en batches »** (le code JS qui construit les objets produit par lots de 10).
