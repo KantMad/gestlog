@@ -61,15 +61,19 @@ Tables/clés utiles :
 | **Explore** | `rph8qNuSGm7k2iWv` | Sonde TIO (debug). `curl https://centralway.pro/webhook/gestlog-explore` renvoie 1 ligne du dernier nœud. | webhook |
 | **BtoC (WooCommerce)** | `wH890xjpZS616wpW` | Voir [`07-btoc-brevo.md`](07-btoc-brevo.md). Exécution longue (**~30 min**). | (schedule) |
 | **Backfill pays commandes (ponctuel)** | `MKP2SUCOmqmHycSj` | WC `getAll` → POST `/api/sync/btoc/order-countries`. **Inactif** entre deux usages. | webhook GET `/webhook/gestlog-backfill-pays` |
-| **Backfill adresses commandes BtoC (ponctuel)** | `QU6rYeHrlIJJ3rpz` | WC `getAll` (`after`) → POST `/api/sync/btoc/order-addresses` (adresses facturation/livraison). **Inactif** entre deux usages. | webhook GET `/webhook/gestlog-backfill-adresses` |
+| **Backfill adresses commandes BtoC (ponctuel)** | `QU6rYeHrlIJJ3rpz` | WC `getAll` (`after`) → POST `/api/sync/btoc/order-addresses` (adresses facturation/livraison). **Inactif** entre deux usages. | **Schedule** (toutes les 15 min) — **pas de webhook** (cf. gotcha 504) |
 
-⚠️ **Gotcha — webhook long : 504 ≠ échec.** Les workflows qui font un `getAll` WooCommerce
-tournent **plus de 10 min**, alors que le nginx devant n8n coupe la réponse à **60 s** (`504
-Gateway Time-out`). **L'exécution continue** côté n8n : ne pas relancer sur la foi du 504.
-Vérifier via `n8n_executions` (⚠️ l'API ne liste que les exécutions **terminées** — une
-exécution en cours n'apparaît pas) ou, plus sûr, en **regardant la base** (compteurs de
-colonnes remplies / `MAX("updatedAt")`). Un workflow ponctuel doit être **activé** pour être
-déclenchable par webhook, puis **désactivé** après usage.
+⚠️ **Gotcha — ne pas déclencher un run long par webhook.** Les workflows qui font un `getAll`
+WooCommerce tournent **plus de 10 min**, alors que le nginx devant n8n coupe la réponse à
+**60 s** (`504 Gateway Time-out`). L'exécution continue bien côté n8n (le 504 n'est **pas** un
+échec — ne pas relancer sur cette base), mais on n'a aucun retour → **préférer un déclencheur
+`Schedule`** : on **active** le workflow, il démarre au prochain top, puis on le **désactive**.
+C'est ce que fait le backfill adresses (Schedule toutes les **15 min** ; un run dure ~12 min
+donc pas de chevauchement, et l'endpoint est de toute façon idempotent).
+
+Pour **suivre** un run : `n8n_executions` (⚠️ l'API ne liste que les exécutions **terminées** —
+une exécution en cours n'apparaît pas) ou, plus fiable, **regarder la base** (compteurs de
+colonnes remplies / `MAX("updatedAt")`).
 
 Le workflow produits a deux nœuds clés : **« Lire produits MySQL »** (la requête SQL) et
 **« Transformer en batches »** (le code JS qui construit les objets produit par lots de 10).
