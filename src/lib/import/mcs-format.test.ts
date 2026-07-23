@@ -10,6 +10,45 @@ function bufferFromRows(rows: (string | number | null)[][]): ArrayBuffer {
   return XLSX.write(wb, { type: "array", bookType: "xlsx" }) as ArrayBuffer;
 }
 
+describe("réception — template CLUB JU (détail par colis + récapitulatif décalé)", () => {
+  // Le fichier porte DEUX blocs : le détail (une ligne par colis, précédé de
+  // « CDE FOURNISSEUR / Box number / Client ») puis un RÉCAPITULATIF dont l'en-tête est
+  // décalé d'une colonne. Sans garde-fou, le récap était relu comme du détail → quantités
+  // DOUBLÉES (cas réel : 3130 pièces au lieu de 1748).
+  const rows: (string | number | null)[][] = [
+    ["", "W26 COUNTRY CLUB JU LOT 2 PL", null, null, null, null, null, null, null, null, null],
+    ["CDE FOURNISSEUR", "Box number", "Client", "FULL MCS PRODUCT REF", "", "COLOR\r\nCODE", "DESCR COLOR", "S", "M", "L", "Qty"],
+    [100771, 1, "MCS", "CCAH26_SW03", "%65 COTTON", 752, "BLEU MARINE", 4, 14, null, 18],
+    [100771, 2, "MCS", "CCAH26_SW03", "%65 COTTON", 752, "BLEU MARINE", null, 8, 10, 18],
+    [100771, 3, "MCS", "CCAH26_SW03", "%65 COTTON", 850, "TAUPE", 1, 2, 3, 6],
+    // ── récapitulatif : en-tête DÉCALÉ (la réf passe en colonne 2) ──
+    [null, null, "FULL MCS PRODUCT REF", "COLOR\r\nCODE", "DESCR COLOR", "S", "M", "L", null, null, "TOTAL"],
+    [null, null, "CCAH26_SW03", 752, "BLEU MARINE", 4, 22, 10, null, null, 36],
+    [null, null, "CCAH26_SW03", 850, "TAUPE", 1, 2, 3, null, null, 6],
+    [null, null, null, null, null, null, null, null, null, "TOTAL", 42],
+  ];
+  const buffer = bufferFromRows(rows);
+
+  it("détecte le format packing-list", () => {
+    expect(detectMcsFormat(buffer)).toBe("packing-list");
+  });
+
+  it("s'arrête au récapitulatif et ne double PAS les quantités", () => {
+    const lines = parseMcsPackingList(buffer);
+    const total = lines.reduce(
+      (s, l) => s + Object.values(l.sizes).reduce((a, b) => a + b, 0),
+      0
+    );
+    // Seul le détail est compté : 18 + 18 + 6 = 42 (et non 84).
+    expect(total).toBe(42);
+    expect(lines).toHaveLength(2);
+    const marine = lines.find((l) => l.colorCode === "752")!;
+    expect(marine.sizes).toEqual({ S: 4, M: 22, L: 10 });
+    // Aucune ligne fantôme issue du récap (référence = un code couleur).
+    expect(lines.map((l) => l.reference)).toEqual(["CCAH26_SW03", "CCAH26_SW03"]);
+  });
+});
+
 describe("réception — template IMDER (en-tête « REFERENCE produit fini », tailles en colonnes)", () => {
   // Reproduit « FW26 COUNTRY IMDER PL GESTLOG.xlsx » : titre + ligne COMMANDE FOURNISSEUR
   // au-dessus, puis l'en-tête RÉEL en ligne 2 (celui qui porte les tailles S,M,L,…).

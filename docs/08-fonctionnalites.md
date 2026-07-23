@@ -509,6 +509,12 @@ Les fichiers réels MCS ne sont pas des tableaux plats → l'import les **auto-d
   - **longue** : **une ligne par taille** — la taille et la quantité sont des *valeurs*, dans
     les colonnes `Taille` et `Quantité`/`Qté`/`Qty` (cas `FW26 TDH ARETEX PL`).
 
+  **Fichiers à DEUX blocs (template CLUB JU)** : détail par colis (précédé de `CDE FOURNISSEUR`
+  / `Box number` / `Client`) **puis un RÉCAPITULATIF** dont l'en-tête est **décalé d'une
+  colonne**. Le parseur s'arrête au 2ᵉ en-tête en le cherchant sur **toute la ligne** (et non
+  dans la seule colonne référence) — sinon le récap était relu comme du détail et les quantités
+  **doublaient** (cas réel *FW26 COUNTRY CLUB JU LOT 2* : **3130 pièces au lieu de 1748**, avec
+  des lignes fantômes dont la « référence » était un code couleur).
   En-tête pas forcément en ligne 0 (un titre peut être au-dessus). Réf **tiret→underscore**
   (`EPOMC-C001` → `EPOMC_C001`), **somme des lignes de colis** (hors `TOTAL`/récap), quantités
   ≤ 0 ignorées. Ancien format MCS

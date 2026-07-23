@@ -472,10 +472,14 @@ export function parseMcsPackingList(buffer: ArrayBuffer): McsReceptionLine[] {
       );
 
     // Lignes de détail : jusqu'au récapitulatif (2e en-tête) ; hors lignes TOTAL.
+    // ⚠️ Le 2e en-tête peut être DÉCALÉ (template CLUB JU : détail avec « CDE FOURNISSEUR /
+    // Box number / Client » devant, récap sans ces colonnes → la réf glisse d'une colonne).
+    // On cherche donc l'en-tête sur TOUTE la ligne, pas seulement dans la colonne référence :
+    // sinon on lisait le récapitulatif comme du détail et on DOUBLAIT les quantités.
     const rows: Cell[][] = [];
     for (let r = h + 1; r < grid.length; r++) {
       const row = grid[r] || [];
-      if (isRefHeader(up(row[cRef]))) break;
+      if (row.map(up).some(isRefHeader)) break;
       const refCell = norm(row[cRef]);
       if (!refCell || refCell.toUpperCase() === "TOTAL") continue;
       rows.push(row);
