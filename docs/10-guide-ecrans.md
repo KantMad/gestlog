@@ -101,6 +101,10 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
   et le « Répartir surplus »** — les plafonner sur le reçu laisserait réattribuer des pièces
   déjà engagées. *Ordre de grandeur AH26 au moment de la mise en place : 8 sessions validées,
   16 976 pièces déjà engagées.*
+  - **Affichage (vue « Par produit »)** : sous « Reçu fourn. », mentions *« dont N éch. »*
+    (échantillons) et *« dont N engagé »* (déjà réparti/validé, en violet), plus une tuile
+    **« Dispo »** = reçu − échantillons − engagé (rouge à 0) → on voit d'un coup pourquoi un
+    produit n'a plus de stock à répartir.
 - **Sources** : demande = `ClientOrder`/`ClientOrderLine` (**source active** via
   `resolveOrderSource`) ; **stock = réceptions live** (`SupplierOrder.receptions.lines`
   agrégées par produit) ; config = `ClientSeason` (rang, plafonds, seuil, rotation) ;

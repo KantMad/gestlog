@@ -461,6 +461,7 @@ function ProductGroup({
   lines,
   received,
   sampled,
+  allocatedElsewhere,
   remainingByProduct,
   onLineChange,
   onDistributeSurplus,
@@ -471,6 +472,8 @@ function ProductGroup({
   received?: SizeQuantities;
   /** Pièces mises de côté (échantillons contrôle qualité) → retirées du disponible. */
   sampled?: SizeQuantities;
+  /** Déjà réparti dans d'AUTRES répartitions validées → retiré du disponible. */
+  allocatedElsewhere?: SizeQuantities;
   /** Reliquat reçu non alloué par produit/taille → plafond de saisie manuelle. */
   remainingByProduct: Record<string, Record<string, number>>;
   onLineChange: (lineKey: string, size: string, value: number) => void;
@@ -489,6 +492,10 @@ function ProductGroup({
   const demandGap = totalReceived - totalOriginal;
   // Échantillons prélevés : jamais livrés → expliquent qu'on alloue moins que le reçu.
   const totalSampled = sampled ? sumQuantities(sampled) : 0;
+  // Pièces déjà engagées dans d'AUTRES répartitions validées → retirées du disponible.
+  const totalElsewhere = allocatedElsewhere ? sumQuantities(allocatedElsewhere) : 0;
+  // Disponible = reçu − échantillons − déjà engagé ailleurs (jamais négatif).
+  const totalAvailable = Math.max(0, totalReceived - totalSampled - totalElsewhere);
   // Surplus RÉPARTISSABLE = reçu − déjà alloué, uniquement sur les tailles commandées
   // (une taille reçue que personne n'a commandée n'est pas auto-répartissable).
   const allocBySize: Record<string, number> = {};
@@ -554,7 +561,29 @@ function ProductGroup({
                 dont {formatNumber(totalSampled)} éch.
               </span>
             )}
+            {totalElsewhere > 0 && (
+              <span
+                className="block text-[10px] text-violet-600"
+                title="Pièces déjà réparties dans une autre répartition VALIDÉE — retirées du disponible"
+              >
+                dont {formatNumber(totalElsewhere)} engagé
+              </span>
+            )}
           </div>
+          {(totalElsewhere > 0 || totalSampled > 0) && (
+            <div className="text-right">
+              <span className="text-xs text-muted-foreground">Dispo</span>
+              <span
+                className={cn(
+                  "block font-medium",
+                  totalAvailable === 0 ? "text-red-600" : "text-foreground"
+                )}
+                title="Disponible réel = reçu − échantillons − déjà réparti dans les répartitions validées"
+              >
+                {formatNumber(totalAvailable)}
+              </span>
+            </div>
+          )}
           <div className="text-right">
             <span className="text-xs text-muted-foreground">Écart</span>
             <span
@@ -2543,6 +2572,7 @@ export default function AllocationPage() {
                           lines={group.lines}
                           received={receivedByProduct[productId]}
                           sampled={sampledByProduct[productId]}
+                          allocatedElsewhere={allocatedElsewhereByProduct[productId]}
                           onLineChange={handleLineChange}
                           onDistributeSurplus={() => distributeSurplus(productId)}
                         />
