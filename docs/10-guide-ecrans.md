@@ -269,9 +269,11 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
   ⚠️ **aucun prix recalculé**) · `Prix de vente TTC`= vide · `secteur`=**PAP** (constante) ·
   `saison`←*Saison Document* · `code modele`= vide · `famille d'article`←*Libellé famille
   statistique* · `matiere`←*Composition* · `Quantité`←*Qté*.
-- **Nom du fichier** : `Fichier intégration {VILLE} {N° Document}.xlsx` — la **ville de
-  livraison** vient de `Client.deliveryCity` (synchronisée depuis TIO `lng_shop.city`), résolue
-  par le **Code Client** du fichier. Ville inconnue → nom sans ville + alerte à l'écran.
+- **Nom du fichier** : `Fichier intégration {VILLE} {N° Document} {JJ-MM-AA}.xlsx` — la **ville
+  de livraison** vient de `Client.deliveryCity` (synchronisée depuis TIO `lng_shop.city`),
+  résolue par le **Code Client** du fichier ; la date est la **date d'import du fichier
+  d'origine**, figée au moment du dépôt (pas à la génération, pour qu'un même import donne
+  toujours le même nom). Ville inconnue → nom sans ville + alerte à l'écran.
 
 ## BtoC (`/btoc`)
 - **Rôle** : piloter la boutique en ligne (stats, exports, clients, VIP Brevo).

@@ -24,6 +24,7 @@ import {
   parseIntegrationSource,
   buildIntegrationDocuments,
   integrationFileName,
+  formatImportDate,
   INTEGRATION_HEADERS,
   type IntegrationDocument,
   type IntegrationSourceLine,
@@ -42,6 +43,8 @@ export default function IntegrationCcPage() {
   const [file, setFile] = useState<File | null>(null);
   const [lines, setLines] = useState<IntegrationSourceLine[]>([]);
   const [docs, setDocs] = useState<IntegrationDocument[]>([]);
+  // Date d'import du fichier d'origine (figée au dépôt, pas à la génération) → nom du fichier.
+  const [importDate, setImportDate] = useState("");
   const [clients, setClients] = useState<Map<string, ClientRow>>(new Map());
   const [busy, setBusy] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -72,11 +75,13 @@ export default function IntegrationCcPage() {
     setFile(null);
     setLines([]);
     setDocs([]);
+    setImportDate("");
     if (inputRef.current) inputRef.current.value = "";
   };
 
   const handleFile = async (f: File) => {
     setFile(f);
+    setImportDate(formatImportDate(new Date()));
     setBusy(true);
     try {
       const buffer = await f.arrayBuffer();
@@ -131,17 +136,22 @@ export default function IntegrationCcPage() {
         const out = XLSX.write(sheetFor(doc), { type: "array", bookType: "xlsx" });
         download(
           new Blob([out], { type: "application/octet-stream" }),
-          integrationFileName(doc.documentNumber, cityFor(doc.clientCode))
+          integrationFileName(doc.documentNumber, cityFor(doc.clientCode), importDate)
         );
       } else {
         const zip = new JSZip();
         for (const doc of docs) {
           const out = XLSX.write(sheetFor(doc), { type: "array", bookType: "xlsx" });
-          zip.file(integrationFileName(doc.documentNumber, cityFor(doc.clientCode)), out);
+          zip.file(integrationFileName(doc.documentNumber, cityFor(doc.clientCode), importDate), out);
         }
         const blob = await zip.generateAsync({ type: "blob" });
         const city = cityFor(docs[0].clientCode);
-        download(blob, `Fichiers intégration ${city} ${docs.map((d) => d.documentNumber).join("-")}.zip`.replace(/\s+/g, " "));
+        download(
+          blob,
+          `Fichiers intégration ${city} ${docs.map((d) => d.documentNumber).join("-")} ${importDate}.zip`
+            .replace(/\s+/g, " ")
+            .trim()
+        );
       }
       toast.success(`${docs.length} fichier(s) généré(s)`);
     } catch (e) {
@@ -291,7 +301,7 @@ export default function IntegrationCcPage() {
                           </span>
                         </CardTitle>
                         <p className="mt-1 font-mono text-xs text-muted-foreground">
-                          {integrationFileName(doc.documentNumber, city)}
+                          {integrationFileName(doc.documentNumber, city, importDate)}
                         </p>
                       </div>
                       <div className="flex items-center gap-2">

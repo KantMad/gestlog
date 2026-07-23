@@ -188,10 +188,31 @@ export function buildIntegrationDocuments(
   return [...byDoc.values()].sort((a, b) => a.documentNumber.localeCompare(b.documentNumber));
 }
 
-/** Nom du fichier généré : « Fichier intégration TALANGE 142426.xlsx ». */
-export function integrationFileName(documentNumber: string, city: string): string {
+/**
+ * Date d'import au format des fichiers d'intégration : « 03-07-26 » (JJ-MM-AA).
+ * Pure : la date est fournie par l'appelant (pas de `new Date()` ici).
+ */
+export function formatImportDate(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${p(d.getDate())}-${p(d.getMonth() + 1)}-${p(d.getFullYear() % 100)}`;
+}
+
+/**
+ * Nom du fichier généré : « Fichier intégration TALANGE 142426 03-07-26.xlsx ».
+ * `importDate` = date d'import du fichier d'origine (JJ-MM-AA), facultative.
+ */
+export function integrationFileName(
+  documentNumber: string,
+  city: string,
+  importDate?: string
+): string {
   // On retire les caractères interdits dans un nom de fichier, sans toucher aux accents.
   const clean = (s: string) => norm(s).replace(/[\\/:*?"<>|]/g, "").trim();
-  const parts = ["Fichier intégration", clean(city), clean(documentNumber)].filter(Boolean);
+  const parts = [
+    "Fichier intégration",
+    clean(city),
+    clean(documentNumber),
+    clean(importDate || ""),
+  ].filter(Boolean);
   return `${parts.join(" ")}.xlsx`;
 }

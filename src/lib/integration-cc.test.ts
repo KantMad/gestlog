@@ -4,6 +4,7 @@ import {
   parseIntegrationSource,
   buildIntegrationDocuments,
   integrationFileName,
+  formatImportDate,
   INTEGRATION_HEADERS,
 } from "./integration-cc";
 
@@ -78,11 +79,22 @@ describe("fichier d'intégration CC", () => {
     expect(docs[0].rows).toHaveLength(2);
   });
 
-  it("nomme le fichier avec la ville de livraison et le n° de document", () => {
+  it("nomme le fichier avec la ville, le n° de document et la date d'import", () => {
+    expect(integrationFileName("142426", "TALANGE", "03-07-26")).toBe(
+      "Fichier intégration TALANGE 142426 03-07-26.xlsx"
+    );
+    // Sans date → nom d'origine conservé
     expect(integrationFileName("142426", "TALANGE")).toBe("Fichier intégration TALANGE 142426.xlsx");
     // Ville inconnue → nom encore valide (pas de double espace)
-    expect(integrationFileName("143161", "")).toBe("Fichier intégration 143161.xlsx");
+    expect(integrationFileName("143161", "", "03-07-26")).toBe(
+      "Fichier intégration 143161 03-07-26.xlsx"
+    );
     // Caractères interdits neutralisés
     expect(integrationFileName("143161", "ROMANS/ISERE")).toBe("Fichier intégration ROMANSISERE 143161.xlsx");
+  });
+
+  it("formate la date d'import en JJ-MM-AA", () => {
+    expect(formatImportDate(new Date(2026, 6, 3))).toBe("03-07-26"); // 3 juillet 2026
+    expect(formatImportDate(new Date(2026, 11, 25))).toBe("25-12-26");
   });
 });
