@@ -55,6 +55,15 @@ sont gérés par écran (cf. [`05-authentification.md`](05-authentification.md))
   (toutes à « — », alloué = commandé). La condition est désormais **`enoughEverySize`** :
   chaque taille demandée doit être couverte, sinon on passe par la répartition pièce par
   pièce (qui respecte le disponible **par taille**). Testé.
+- **Répartition — on ne transforme JAMAIS une taille en une autre** : ⚠️ bug historique —
+  pour supprimer un **trou de taille** (règle 1), `enforceNoSizeGaps` déplaçait 1 pièce d'une
+  **taille extrême** de la boutique vers la taille manquante. Le **total** de la boutique était
+  conservé, mais la pièce **changeait de taille** : on promettait un M qui n'existait pas
+  physiquement. *Cas réel AH26 `CCAH26_PU19/205` : **1 seul M reçu, 2 alloués**.* Le comblage
+  n'est désormais autorisé que si la taille manquante a du **stock libre** ; sinon on applique
+  le repli (retirer la taille extrême basse), sans inventer de pièce. La fonction renvoie ses
+  `moves` et ses `released`, que le moteur répercute sur `remainingBySize`. Testé (jamais plus
+  que le reçu **par taille** + aucun trou résiduel).
 - **Répartition — invariant « alloué ≤ commande »** : ⚠️ bug historique — le pro-rata
   n'était pas plafonné à la quantité commandée. Dès qu'une **taille** était sur-livrée alors
   que le produit était globalement en manque, les boutiques étaient servies **au-dessus de leur
