@@ -110,6 +110,11 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
     concerné : c'est le filtre **« Non réceptionné »** qui le gère.
     *Mesuré sur AH26 : 134 produits masqués sur 709 (713 lignes) — **0 pièce allouée** dedans,
     donc rien de distribuable n'est caché.*
+    Ils sont **aussi exclus de la VALIDATION** (`linesToValidate`) : sinon la session
+    enregistrait pour eux des lignes à **0 en « Annulé »**, alors que ces boutiques ont bien
+    été servies dans une répartition précédente — la confusion se serait déplacée dans les
+    données. L'exclusion est **indépendante du bouton d'affichage** (réafficher ne revalide
+    pas). Le bouton indique alors « Valider N ligne(s) ».
   - **Affichage (vue « Par produit »)** : sous « Reçu fourn. », mentions *« dont N éch. »*
     (échantillons) et *« dont N engagé »* (déjà réparti/validé, en violet), plus une tuile
     **« Dispo »** = reçu − échantillons − engagé (rouge à 0) → on voit d'un coup pourquoi un

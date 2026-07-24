@@ -1606,12 +1606,31 @@ export default function AllocationPage() {
     toast.success(`Surplus réparti : +${added} pièce(s)`, { description: bits.join(" · ") });
   };
 
+  // Filtre réception : un produit est « réceptionné » si son total reçu > 0.
+  const isReceived = (productId: string) =>
+    sumQuantities(receivedByProduct[productId] || {}) > 0;
+
+  // Produit ENTIÈREMENT ENGAGÉ : il a bien été reçu, mais tout est déjà parti (échantillons
+  // + répartitions validées) → il n'y a plus rien à répartir. On le masque par défaut : il
+  // n'afficherait que des lignes à 0 / « Annulé » à −100 %, ce qui laisse croire à tort que
+  // les boutiques n'ont pas été servies (elles l'ont été, dans une répartition précédente).
+  // Un produit JAMAIS reçu n'est pas concerné : c'est le filtre « Non réceptionné » qui le gère.
+  const isFullyEngaged = (productId: string) =>
+    isReceived(productId) && sumQuantities(availableByProduct[productId] || {}) === 0;
+  const fullyEngagedProducts = new Set(
+    lines.map((l) => l.productId).filter((pid) => isFullyEngaged(pid))
+  );
+
   // Lignes réellement validées : filtrées par fournisseur (produit fourni par l'un des
   // fournisseurs choisis) et par catalogue (commande rattachée à l'un des catalogues
   // choisis). Une liste vide = aucun filtre = tout.
+  // On EXCLUT aussi les produits entièrement engagés : ils n'ont rien à distribuer et
+  // seraient enregistrés en « Annulé » à 0, alors que ces boutiques ont bien été servies
+  // dans une répartition précédente. Indépendant du bouton d'affichage.
   const linesToValidate = useMemo(() => {
-    if (validateSuppliers.length === 0 && validateCatalogs.length === 0) return lines;
-    return lines.filter((l) => {
+    const base = lines.filter((l) => !fullyEngagedProducts.has(l.productId));
+    if (validateSuppliers.length === 0 && validateCatalogs.length === 0) return base;
+    return base.filter((l) => {
       if (validateSuppliers.length > 0) {
         const sups = supplierIdsByProduct[l.productId] || [];
         if (!sups.some((s) => validateSuppliers.includes(s))) return false;
@@ -1623,7 +1642,8 @@ export default function AllocationPage() {
       }
       return true;
     });
-  }, [lines, validateSuppliers, validateCatalogs, supplierIdsByProduct, catalogIdByOrder]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lines, validateSuppliers, validateCatalogs, supplierIdsByProduct, catalogIdByOrder, availableByProduct, receivedByProduct]);
 
   const validateAllocation = async () => {
     if (!activeSeason || lines.length === 0) return;
@@ -1811,20 +1831,6 @@ export default function AllocationPage() {
     return out;
   }, [lines, stockBase]);
 
-  // Filtre réception : un produit est « réceptionné » si son total reçu > 0.
-  const isReceived = (productId: string) =>
-    sumQuantities(receivedByProduct[productId] || {}) > 0;
-
-  // Produit ENTIÈREMENT ENGAGÉ : il a bien été reçu, mais tout est déjà parti (échantillons
-  // + répartitions validées) → il n'y a plus rien à répartir. On le masque par défaut : il
-  // n'afficherait que des lignes à 0 / « Annulé » à −100 %, ce qui laisse croire à tort que
-  // les boutiques n'ont pas été servies (elles l'ont été, dans une répartition précédente).
-  // Un produit JAMAIS reçu n'est pas concerné : c'est le filtre « Non réceptionné » qui le gère.
-  const isFullyEngaged = (productId: string) =>
-    isReceived(productId) && sumQuantities(availableByProduct[productId] || {}) === 0;
-  const fullyEngagedProducts = new Set(
-    lines.map((l) => l.productId).filter((pid) => isFullyEngaged(pid))
-  );
   const visibleLines = (
     receptionFilter === "all"
       ? lines
