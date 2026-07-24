@@ -228,9 +228,22 @@ export function runAllocation(input: AllocationInput): AllocationResult {
     for (const d of sorted) {
       const key = `${d.clientId}:${d.clientOrderId}`;
       const alloc = allocations.get(key)!;
-      const { adjusted, hadGaps } = enforceNoSizeGaps(d.sizeScale, alloc);
+      // `remainingBySize` = stock encore libre : il contraint le comblage des trous (on ne
+      // comble que si la taille manquante existe physiquement) et doit suivre les mouvements.
+      const { adjusted, hadGaps, moves, released } = enforceNoSizeGaps(
+        d.sizeScale,
+        alloc,
+        remainingBySize
+      );
       if (hadGaps) {
         allocations.set(key, adjusted);
+        for (const m of moves) {
+          remainingBySize[m.from] = (remainingBySize[m.from] || 0) + 1;
+          remainingBySize[m.to] = (remainingBySize[m.to] || 0) - 1;
+        }
+        for (const [size, n] of Object.entries(released)) {
+          remainingBySize[size] = (remainingBySize[size] || 0) + n;
+        }
         warnings.push(
           `Client ${cName(d.clientId)}, produit ${pName(productId)}: trous de taille corrigés`
         );

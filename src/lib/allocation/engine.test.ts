@@ -157,3 +157,51 @@ describe("runAllocation — l'alloué ne dépasse jamais le reçu", () => {
     expect(r.lines.every((l) => l.reductionReason === "NONE")).toBe(true);
   });
 });
+
+describe("runAllocation — on ne transforme JAMAIS une taille en une autre", () => {
+  // Cas réel CCAH26_PU19/205 : 1 seule pièce reçue en M, mais plusieurs boutiques en
+  // demandent. Pour supprimer un « trou de taille » (S et L servis, M vide), le moteur
+  // déplaçait 1 pièce d'une taille extrême vers le M : le total de la boutique était
+  // conservé, mais on allouait 2 M alors qu'un seul existait physiquement.
+  const cfgGap = (ranking: number): ClientConfig => ({
+    ranking,
+    maxReductionOrder: 100,
+    maxReductionLine: 100,
+    minDeliveryThreshold: 0,
+    rotationScore: 0,
+  });
+  const SCALE = ["S", "M", "L"];
+
+  const res = runAllocation({
+    seasonId: "s1",
+    // 1 seul M disponible, du stock en S et L.
+    available: new Map([["P", { S: 6, M: 1, L: 6 }]]),
+    demands: [
+      { clientId: "A", clientOrderId: "oA", productId: "P", sizeScale: SCALE, requested: { S: 3, M: 3, L: 3 } },
+      { clientId: "B", clientOrderId: "oB", productId: "P", sizeScale: SCALE, requested: { S: 3, M: 3, L: 3 } },
+      { clientId: "C", clientOrderId: "oC", productId: "P", sizeScale: SCALE, requested: { S: 3, M: 3, L: 3 } },
+    ],
+    clientConfigs: new Map([["A", cfgGap(1)], ["B", cfgGap(2)], ["C", cfgGap(3)]]),
+  });
+
+  it("n'alloue jamais plus que le reçu, taille par taille", () => {
+    const bySize: Record<string, number> = {};
+    for (const l of res.lines) {
+      for (const [s, q] of Object.entries(l.allocated)) bySize[s] = (bySize[s] || 0) + q;
+    }
+    expect(bySize.M ?? 0).toBeLessThanOrEqual(1);
+    expect(bySize.S ?? 0).toBeLessThanOrEqual(6);
+    expect(bySize.L ?? 0).toBeLessThanOrEqual(6);
+  });
+
+  it("ne laisse pas de trou de taille dans une allocation", () => {
+    for (const l of res.lines) {
+      const served = SCALE.map((s) => (l.allocated[s] || 0) > 0);
+      const first = served.indexOf(true);
+      const last = served.lastIndexOf(true);
+      if (first === -1) continue;
+      // Entre la première et la dernière taille servie, aucune taille à 0.
+      expect(served.slice(first, last + 1).every(Boolean)).toBe(true);
+    }
+  });
+});
