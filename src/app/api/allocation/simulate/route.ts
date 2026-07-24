@@ -140,14 +140,21 @@ export async function POST(request: NextRequest) {
           ...(excludeSessionId ? { id: { not: excludeSessionId } } : {}),
         },
       },
-      select: { productId: true, allocatedBySize: true },
+      select: { productId: true, clientId: true, allocatedBySize: true },
     });
     const allocatedByProduct: Record<string, SizeQuantities> = {};
+    // Déjà livré à CETTE boutique pour CE produit → à retirer de sa commande (« reste à
+    // livrer »). Sans ça, une boutique déjà servie sur une 1re réception réapparaissait avec
+    // sa commande ENTIÈRE face au stock de la 2e : écart faux et boutique « coupée » à tort.
+    const allocatedByClientProduct: Record<string, SizeQuantities> = {};
     for (const l of validatedLines) {
       const qty = parseSizeQuantities(l.allocatedBySize);
       const m = (allocatedByProduct[l.productId] ||= {});
+      const c = l.clientId ? (allocatedByClientProduct[`${l.clientId}__${l.productId}`] ||= {}) : null;
       for (const [size, n] of Object.entries(qty)) {
-        if (n > 0) m[size] = (m[size] || 0) + n;
+        if (n <= 0) continue;
+        m[size] = (m[size] || 0) + n;
+        if (c) c[size] = (c[size] || 0) + n;
       }
     }
 
@@ -175,6 +182,14 @@ export async function POST(request: NextRequest) {
       ? new Set(productReferences)
       : null;
 
+    // La demande affichée/répartie = le RESTE À LIVRER : commande − déjà livré à cette
+    // boutique dans les répartitions validées. Ex. 3 polos L commandés, 1 livré sur la 1re
+    // réception → il en reste 2 à répartir, à faire correspondre au stock de la 2e réception.
+    // Le « pot » est consommé au fil des lignes : une boutique ayant plusieurs commandes du
+    // même produit voit le déjà-livré s'imputer sur ses lignes dans l'ordre.
+    const deliveredPool: Record<string, SizeQuantities> = {};
+    for (const [k, v] of Object.entries(allocatedByClientProduct)) deliveredPool[k] = { ...v };
+
     const demands: AllocationDemand[] = [];
     for (const order of clientOrders) {
       for (const line of order.lines) {
@@ -182,12 +197,26 @@ export async function POST(request: NextRequest) {
         if (refFilter && !refFilter.has(line.product.reference)) continue;
         // Skip products not supplied by the selected supplier(s)
         if (supplierProductFilter && !supplierProductFilter.has(line.productId)) continue;
+
+        const ordered = parseSizeQuantities(line.quantitiesBySize);
+        const pool = deliveredPool[`${order.clientId}__${line.productId}`];
+        const remaining: SizeQuantities = {};
+        for (const [size, n] of Object.entries(ordered)) {
+          const already = pool?.[size] || 0;
+          const take = Math.min(already, n); // jamais négatif
+          if (pool && take > 0) pool[size] = already - take;
+          const left = n - take;
+          if (left > 0) remaining[size] = left;
+        }
+        // Commande entièrement livrée → plus rien à répartir, la ligne disparaît.
+        if (sumQuantities(remaining) === 0) continue;
+
         demands.push({
           clientId: order.clientId,
           clientOrderId: order.id,
           productId: line.productId,
           sizeScale: parseSizeScale(line.product.sizeScale),
-          requested: parseSizeQuantities(line.quantitiesBySize),
+          requested: remaining,
         });
       }
     }

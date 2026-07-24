@@ -243,6 +243,20 @@ sont gérés par écran (cf. [`05-authentification.md`](05-authentification.md))
     recalculés en cohérence). À la validation ils sont enregistrés dans la session. ⚠️ L'ajout
     **relance** la répartition (les ajustements manuels faits depuis la reprise sont perdus →
     confirmation demandée si `manualEdits > 0`).
+- **Répartition — la demande affichée est le RESTE À LIVRER** : la commande d'une boutique est
+  diminuée de ce qui lui a **déjà été livré** dans les répartitions validées
+  (`AllocationLine` par **boutique + produit + taille**, session `VALIDATED`). Une ligne
+  entièrement livrée **disparaît** de la répartition.
+  *Exemple : 3 polos L commandés · 1 livré sur la 1ʳᵉ réception → il en reste **2** à répartir,
+  à faire correspondre aux 2 pièces de la 2ᵉ réception → commande complète.* Sans cette
+  déduction, la boutique réapparaissait avec sa commande **entière** (3) face au stock restant
+  (2) : écart faux et boutique « coupée » à tort alors qu'elle est servie.
+  - Le « pot » du déjà-livré est **consommé au fil des lignes** : une boutique ayant plusieurs
+    commandes du même produit voit le déjà-livré s'imputer sur ses lignes dans l'ordre.
+  - Symétrique de la déduction côté **stock** (ci-dessous) : on retire les pièces **des deux
+    côtés** — de l'offre ET de la demande — sans quoi les deux ne se correspondent plus.
+  - *Mesuré sur AH26 : commande brute **69 925 → reste à livrer 56 509** (13 416 déjà livrées),
+    **854 lignes soldées** retirées ; 762 lignes servies en plein.*
 - **Répartition — le stock déjà VALIDÉ n'est plus redistribuable** : le disponible vaut
   `reçu − échantillons − déjà réparti dans les sessions VALIDATED de la saison`
   (`AllocationLine.allocatedBySize`, agrégé par produit/taille, jamais négatif). Motif : à

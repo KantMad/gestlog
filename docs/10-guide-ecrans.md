@@ -90,6 +90,11 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
 ## Répartition (`/allocation`)
 - **Rôle** : répartir les quantités **reçues** entre boutiques quand le stock ne suffit pas,
   ajuster à la main, valider en session, exporter.
+- ⚠️ **La colonne « Cmd. clients » = le RESTE À LIVRER**, pas la commande d'origine : ce qui a
+  déjà été livré à la boutique dans une répartition **validée** en est déduit, et une ligne
+  entièrement livrée **disparaît**. C'est ce qui permet de faire correspondre le reste dû au
+  stock d'une **2ᵉ réception** (cf. `08`). Une réception partielle ne « re-demande » donc plus
+  ce qui est déjà parti.
 - ⚠️ **Le DISPONIBLE n'est pas le reçu** :
   `disponible = reçu − échantillons − déjà réparti dans les répartitions VALIDÉES de la saison`.
   Une pièce engagée dans une répartition validée n'est plus redistribuable : sans cette
