@@ -90,6 +90,15 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
 ## Répartition (`/allocation`)
 - **Rôle** : répartir les quantités **reçues** entre boutiques quand le stock ne suffit pas,
   ajuster à la main, valider en session, exporter.
+- **Écarter un produit à la main** (vue « Par produit ») : une case **« Exclure de la
+  répartition »** à côté de la référence retire le couple **référence + couleur** de la
+  répartition **et de la validation** (réception défectueuse, coloris douteux… — **aucun motif
+  demandé**). La carte est grisée, la référence barrée, un rappel rouge **« N produits exclus »**
+  s'affiche dans la barre d'outils et le bouton indique le nombre exact de lignes validées.
+  Rien n'étant enregistré, **le stock n'est pas consommé** : les pièces restent disponibles pour
+  une répartition ultérieure. L'état (`excludedProducts`) **survit à une relance de simulation**
+  (c'est une décision métier, pas un filtre d'affichage) mais est réinitialisé au **changement de
+  saison** ; il est persisté avec la simulation.
 - ⚠️ **La colonne « Cmd. clients » = le RESTE À LIVRER**, pas la commande d'origine : ce qui a
   déjà été livré à la boutique dans une répartition **validée** en est déduit, et une ligne
   entièrement livrée **disparaît**. C'est ce qui permet de faire correspondre le reste dû au

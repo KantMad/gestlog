@@ -463,6 +463,8 @@ function ProductGroup({
   sampled,
   allocatedElsewhere,
   remainingByProduct,
+  excluded,
+  onToggleExclude,
   onLineChange,
   onDistributeSurplus,
 }: {
@@ -476,6 +478,9 @@ function ProductGroup({
   allocatedElsewhere?: SizeQuantities;
   /** Reliquat reçu non alloué par produit/taille → plafond de saisie manuelle. */
   remainingByProduct: Record<string, Record<string, number>>;
+  /** Produit écarté par l'utilisateur (réception défectueuse…) → ni réparti, ni validé. */
+  excluded: boolean;
+  onToggleExclude: () => void;
   onLineChange: (lineKey: string, size: string, value: number) => void;
   onDistributeSurplus: () => void;
 }) {
@@ -522,7 +527,7 @@ function ProductGroup({
   const sizes = getAllSizes(lines);
 
   return (
-    <Card className="overflow-hidden">
+    <Card className={cn("overflow-hidden", excluded && "opacity-60")}>
       <div
         className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-muted/50 transition-colors"
         onClick={() => setExpanded(!expanded)}
@@ -535,11 +540,27 @@ function ProductGroup({
           )}
           <Package className="h-4 w-4 text-muted-foreground" />
           <div>
-            <span className="font-mono text-sm font-semibold">{reference}</span>
+            <span className={cn("font-mono text-sm font-semibold", excluded && "line-through")}>
+              {reference}
+            </span>
             <span className="text-muted-foreground text-sm ml-2">{color}</span>
             <span className="text-muted-foreground text-xs ml-3">
               {lines.length} boutique{lines.length > 1 ? "s" : ""}
             </span>
+            {/* Écarter tout le couple référence+couleur (ex. réception défectueuse).
+                stopPropagation : le clic ne doit pas plier/déplier la carte. */}
+            <label
+              className="ml-3 inline-flex cursor-pointer items-center gap-1.5 align-middle text-xs text-muted-foreground hover:text-foreground"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <input
+                type="checkbox"
+                className="h-3.5 w-3.5 cursor-pointer"
+                checked={excluded}
+                onChange={onToggleExclude}
+              />
+              Exclure de la répartition
+            </label>
           </div>
         </div>
         <div className="flex items-center gap-4 text-sm">
@@ -1072,6 +1093,9 @@ export default function AllocationPage() {
   const [addSearch, setAddSearch] = useState(""); // saisie du champ « Ajouter un produit reçu »
   // Masquer les produits entièrement engagés (plus rien à répartir) — affichables à la demande.
   const [showFullyEngaged, setShowFullyEngaged] = useState(false);
+  // Produits ÉCARTÉS à la main (réception défectueuse…) : ni répartis, ni validés.
+  // Décision de l'utilisateur → conservée si on relance la simulation.
+  const [excludedProducts, setExcludedProducts] = useState<string[]>([]);
   const [validateSuppliers, setValidateSuppliers] = useState<string[]>([]);
   const [validateCatalogs, setValidateCatalogs] = useState<string[]>([]);
   // Périmètre de l'EXPORT EAN — distinct de celui de la validation (mêmes règles que sur
@@ -1163,6 +1187,7 @@ export default function AllocationPage() {
       setCatalogIdByOrder(s.catalogIdByOrder || {});
       setManualEdits(s.manualEdits || 0);
       setReopenSourceId(s.reopenSourceId ?? null);
+      setExcludedProducts(s.excludedProducts ?? []);
       setImportedRows(s.importedRows ?? null);
       setAddedProductIds(s.addedProductIds ?? []);
       setAddableProducts(s.addableProducts ?? []);
@@ -1205,6 +1230,7 @@ export default function AllocationPage() {
     setExportSuppliers([]);
     setExportClients([]);
     setReopenSourceId(null);
+    setExcludedProducts([]);
     setImportedRows(null);
     setAddedProductIds([]);
     setAddableProducts([]);
@@ -1243,6 +1269,7 @@ export default function AllocationPage() {
           catalogIdByOrder,
           manualEdits,
           reopenSourceId,
+          excludedProducts,
           importedRows,
           addedProductIds,
           addableProducts,
@@ -1281,6 +1308,7 @@ export default function AllocationPage() {
     catalogIdByOrder,
     manualEdits,
     reopenSourceId,
+    excludedProducts,
     importedRows,
     addedProductIds,
     addableProducts,
@@ -1628,7 +1656,9 @@ export default function AllocationPage() {
   // seraient enregistrés en « Annulé » à 0, alors que ces boutiques ont bien été servies
   // dans une répartition précédente. Indépendant du bouton d'affichage.
   const linesToValidate = useMemo(() => {
-    const base = lines.filter((l) => !fullyEngagedProducts.has(l.productId));
+    const base = lines.filter(
+      (l) => !fullyEngagedProducts.has(l.productId) && !excludedProducts.includes(l.productId)
+    );
     if (validateSuppliers.length === 0 && validateCatalogs.length === 0) return base;
     return base.filter((l) => {
       if (validateSuppliers.length > 0) {
@@ -1643,7 +1673,7 @@ export default function AllocationPage() {
       return true;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lines, validateSuppliers, validateCatalogs, supplierIdsByProduct, catalogIdByOrder, availableByProduct, receivedByProduct]);
+  }, [lines, validateSuppliers, validateCatalogs, supplierIdsByProduct, catalogIdByOrder, availableByProduct, receivedByProduct, excludedProducts]);
 
   const validateAllocation = async () => {
     if (!activeSeason || lines.length === 0) return;
@@ -2465,6 +2495,16 @@ export default function AllocationPage() {
                     <span className="text-xs text-muted-foreground ml-2">
                       {visibleLines.length} lignes · cliquez sur une quantité pour la modifier
                     </span>
+                    {excludedProducts.length > 0 && (
+                      <span
+                        className="ml-2 inline-flex items-center gap-1 rounded-md bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700"
+                        title="Produits écartés à la main : ni répartis, ni validés. Décocher la case du produit pour les réintégrer."
+                      >
+                        {excludedProducts.length} produit
+                        {excludedProducts.length > 1 ? "s" : ""} exclu
+                        {excludedProducts.length > 1 ? "s" : ""}
+                      </span>
+                    )}
                     {fullyEngagedProducts.size > 0 && (
                       <button
                         type="button"
@@ -2611,6 +2651,14 @@ export default function AllocationPage() {
                           received={receivedByProduct[productId]}
                           sampled={sampledByProduct[productId]}
                           allocatedElsewhere={allocatedElsewhereByProduct[productId]}
+                          excluded={excludedProducts.includes(productId)}
+                          onToggleExclude={() =>
+                            setExcludedProducts((cur) =>
+                              cur.includes(productId)
+                                ? cur.filter((x) => x !== productId)
+                                : [...cur, productId]
+                            )
+                          }
                           onLineChange={handleLineChange}
                           onDistributeSurplus={() => distributeSurplus(productId)}
                         />

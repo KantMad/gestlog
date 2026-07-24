@@ -194,6 +194,37 @@ export const HELP_THEMES: HelpTheme[] = [
         ],
       },
       {
+        id: "import-reception-plus",
+        icon: "🧾",
+        title: "Réceptions : choisir la commande et formats reconnus",
+        keywords: "réception commande fournisseur rattacher recherche format packing list imder club ju récapitulatif colisage",
+        sections: [
+          {
+            lines: [
+              "Une réception doit être rattachée à **une commande fournisseur**. Quand le fichier de colisage ne porte pas le numéro de commande, tu peux désormais **la chercher**.",
+            ],
+          },
+          {
+            h: "Rattacher la bonne commande",
+            lines: [
+              "Sous le fichier, le champ **« Commande fournisseur à rattacher »** propose les commandes **déjà importées dans la saison** : tape un numéro ou un nom de fournisseur et choisis dans la liste (n° + fournisseur + nombre de références).",
+              "**Laissé vide**, GestLog rattache **automatiquement** la réception à la commande de la saison qui contient le plus de produits reçus.",
+              "Le champ reste libre : tu peux saisir un numéro qui n'est pas dans la liste.",
+            ],
+            tip: "En cas de doute, choisis explicitement la commande : le rattachement automatique se trompe si deux commandes partagent les mêmes références. 🎯",
+          },
+          {
+            h: "Les formats de colisage reconnus",
+            lines: [
+              "GestLog s'adapte à des mises en page très différentes : il repère les colonnes **par leur nom**, l'en-tête peut être **plus bas** dans la feuille (un titre au-dessus ne gêne pas), et les tailles peuvent être **en colonnes** ou **en lignes**.",
+              "Les libellés français sont acceptés (`REFERENCE produit fini`) comme les anglais (`FULL MCS PRODUCT REF`).",
+              "Les fichiers contenant **le détail par colis puis un récapitulatif** en bas sont gérés : seul le détail est compté. ⚠️ Sans ça, le récapitulatif était relu comme du détail et les quantités **doublaient**.",
+            ],
+            tip: "Après import, compare toujours le **total annoncé** à la ligne « TOTAL » de ton fichier : c'est le contrôle le plus rapide. ✅",
+          },
+        ],
+      },
+      {
         id: "import-stock",
         icon: "🏷️",
         title: "Importer le stock",
@@ -226,6 +257,21 @@ export const HELP_THEMES: HelpTheme[] = [
               "Pour **échanger 2 couleurs** : change la couleur sur chacune des 2 lignes, puis enregistre.",
             ],
             tip: "Après correction, va sur **Répartition** et clique **Relancer** : la répartition se recalcule sur les nouvelles quantités. 🔄",
+          },
+        ],
+      },
+      {
+        id: "corriger-reception-doublons",
+        icon: "🔗",
+        title: "Corriger une réception : lignes en double",
+        keywords: "corriger réception doublon fusion même produit couleur addition quantités",
+        sections: [
+          {
+            lines: [
+              "Dans l'éditeur de correction, si **deux lignes désignent le même produit** (même référence **et** même code couleur), GestLog les **fusionne à l'enregistrement** en additionnant les quantités taille par taille.",
+              "Avant, l'enregistrement était refusé avec un message d'erreur et il fallait fusionner à la main.",
+            ],
+            tip: "C'est normal et fréquent : un même produit arrive souvent réparti sur **plusieurs colis**. L'import fait déjà la somme, la correction aussi. ➕",
           },
         ],
       },
@@ -321,6 +367,97 @@ export const HELP_THEMES: HelpTheme[] = [
         ],
       },
       {
+        id: "reste-a-repartir",
+        icon: "🧮",
+        title: "Ce qui reste vraiment à répartir",
+        keywords: "reste à livrer disponible engagé déjà réparti deuxième réception partielle stock réel dispo",
+        sections: [
+          {
+            lines: [
+              "C'est **le point le plus important** de l'écran Répartition, et le plus souvent mal compris : ni la colonne **Cmd. clients**, ni la colonne **Reçu fourn.** ne servent directement au calcul.",
+              "GestLog raisonne sur **ce qu'il reste à faire** : le **reste à livrer** d'un côté, le **stock encore libre** de l'autre.",
+            ],
+            tip: "Règle à retenir : **on ne répartit jamais deux fois la même pièce, et on ne redemande jamais ce qui est déjà livré.**",
+          },
+          {
+            h: "Une réception en plusieurs fois : l'exemple à connaître",
+            lines: [
+              "Une boutique commande **3 polos bleus en L**.",
+              "**1ʳᵉ réception** : 1 polo arrive. Tu le répartis, tu valides. Il en reste **2 à livrer**.",
+              "**2ᵉ réception** : les 2 polos manquants arrivent. Dans la répartition, la boutique n'affiche plus 3 mais **2** — et il y a **2** pièces disponibles. **La commande est complète, écart à zéro.**",
+              "Sans ce mécanisme, la boutique réafficherait **3** demandés face à **2** disponibles : elle paraîtrait coupée d'une pièce alors qu'elle est parfaitement servie.",
+            ],
+            tip: "Le polo déjà réparti n'est **plus jamais** repris : ni dans la commande, ni dans le stock. 🎯",
+          },
+          {
+            h: "La colonne « Cmd. clients » = le reste à livrer",
+            lines: [
+              "Ce n'est **pas** la commande d'origine, mais ce qu'il reste dû à la boutique : **commande − déjà livré** dans les répartitions validées, **taille par taille**.",
+              "Une ligne entièrement livrée **disparaît** de l'écran : il n'y a plus rien à en faire.",
+              "Si une boutique a **plusieurs commandes** du même produit, le déjà-livré s'impute sur ses lignes dans l'ordre.",
+            ],
+          },
+          {
+            h: "La tuile « Dispo » = le stock encore libre",
+            lines: [
+              "Le **disponible** vaut : **Reçu − échantillons − pièces déjà réparties dans une répartition validée**.",
+              "Sous « Reçu fourn. », deux mentions expliquent l'écart quand il y en a un : **« dont N éch. »** (mises de côté pour le contrôle qualité) et **« dont N engagé »** (déjà promises à des boutiques).",
+              "Exemple lu à l'écran : *Reçu 117, dont 1 éch., dont 116 engagé → **Dispo 0***. Tout est déjà parti, il n'y a plus rien à répartir sur ce produit.",
+            ],
+            tip: "Le **surplus** et tes **saisies manuelles** sont plafonnés au **Dispo**, jamais au Reçu : impossible de réattribuer une pièce déjà promise. 🔒",
+          },
+          {
+            h: "Les produits entièrement écoulés sont masqués",
+            lines: [
+              "Un produit reçu dont il ne reste **rien** n'apparaît plus dans la liste : il n'afficherait que des lignes à 0 en « Annulé » à −100 %, ce qui laisse croire à tort que les boutiques n'ont pas été servies — alors qu'elles l'ont été, dans la répartition précédente.",
+              "Rien ne disparaît en douce : la barre d'outils affiche **« Afficher les N produits entièrement engagés »** si tu veux les revoir.",
+              "Ils sont aussi **exclus de la validation** : une répartition n'enregistre que ce qu'elle distribue réellement.",
+            ],
+            tip: "Un produit **jamais reçu** n'est pas concerné : c'est le filtre **Non réceptionné** qui te le montre. 📦",
+          },
+          {
+            h: "Deux règles que le moteur ne transgresse jamais",
+            lines: [
+              "**Une taille ne se transforme pas en une autre.** Si une boutique est servie en S et en L mais qu'il n'existe aucun M, GestLog ne « convertit » pas un S en M pour boucher le trou — sinon on promettrait un M qui n'existe pas.",
+              "**Pas de trou de taille.** Quand le trou ne peut pas être comblé faute de stock, GestLog retire le plus petit des deux blocs qui l'entourent, et les pièces retirées **repartent au stock** pour d'autres boutiques.",
+            ],
+            tip: "Ces pièces libérées ne sont pas perdues : elles se retrouvent dans le **surplus**, que tu peux placer à la main. ♻️",
+          },
+        ],
+      },
+      {
+        id: "exclure-produit",
+        icon: "🚫",
+        title: "Écarter un produit d'une répartition",
+        keywords: "exclure produit défectueux problème réception ne pas livrer coche case exclusion",
+        sections: [
+          {
+            lines: [
+              "Il arrive qu'un produit **ne doive pas partir** : réception défectueuse, erreur de coloris, doute sur la qualité… Tu peux l'**écarter** de la répartition en cours.",
+              "Passe en vue **Par produit**. À côté de la référence, coche **« Exclure de la répartition »**.",
+            ],
+            tip: "Pas besoin de justifier : c'est une simple coche, sans motif à saisir. ✍️",
+          },
+          {
+            h: "Ce que ça fait",
+            lines: [
+              "Le produit est **écarté de la répartition et de la validation** : ses lignes ne seront **pas enregistrées**.",
+              "La carte du produit devient **grisée** et sa référence **barrée** — il reste visible pour que tu puisses revenir en arrière.",
+              "La barre d'outils affiche un rappel rouge **« N produits exclus »**, et le bouton de validation indique le nombre exact de lignes qui partiront.",
+              "Comme rien n'est enregistré, **le stock n'est pas consommé** : ces pièces resteront disponibles pour une répartition ultérieure, une fois le problème réglé.",
+            ],
+            tip: "L'exclusion vise le couple **référence + couleur** en entier, pour toutes les boutiques à la fois. Pour ne retirer qu'une boutique ou une taille, mets plutôt la quantité à **0** à la main. 🎯",
+          },
+          {
+            h: "Revenir en arrière",
+            lines: [
+              "Décoche la case : le produit repart normalement dans la répartition et la validation.",
+              "Ton choix est **conservé si tu relances la simulation** — c'est une décision métier, pas un réglage d'affichage. Il est en revanche remis à zéro si tu **changes de saison**.",
+            ],
+          },
+        ],
+      },
+      {
         id: "echantillons",
         icon: "🧪",
         title: "Mettre des pièces de côté (échantillons)",
@@ -409,7 +546,8 @@ export const HELP_THEMES: HelpTheme[] = [
             h: "Modifier une répartition déjà validée",
             lines: [
               "Une session validée est **figée** — on ne la modifie pas directement. Mais tu peux la **reprendre** : sur sa page de détail, le bouton **Reprendre pour modifier** la recharge dans l'écran de répartition.",
-              "Tu réajustes ce que tu veux, puis tu **revalides** : ça crée une **nouvelle** session. L'ancienne reste dans l'historique comme trace.",
+              "Tu réajustes ce que tu veux, puis tu **revalides** : la répartition d'origine est **mise à jour sur place** (sa date est rafraîchie). Elle n'est **pas** dupliquée — avant, on se retrouvait avec deux fois la même répartition dans l'historique.",
+              "**Un produit reçu depuis ?** Un champ **« + Ajouter un produit reçu »** apparaît au-dessus du tableau : cherche la référence et elle rejoint la répartition, déjà répartie entre ses boutiques. Pratique quand tu as corrigé une réception après coup.",
               "⚠️ Ne reprends pas une répartition dont tu as **déjà généré les livraisons** : ce qui a été préparé et envoyé en caisse ne se mettrait pas à jour tout seul.",
             ],
           },
@@ -550,6 +688,35 @@ export const HELP_THEMES: HelpTheme[] = [
               "Recherche fournisseur + filtre **Tout / Réceptionné / Non réceptionné**.",
             ],
             tip: "Les fournisseurs sont toujours **triés par ordre alphabétique**. L'export Excel exporte **tout** (il ignore la recherche/filtre affichés).",
+          },
+        ],
+      },
+      {
+        id: "comparaison-blocs",
+        icon: "🧱",
+        title: "Comparaison : une réception = un bloc",
+        keywords: "comparaison réception bloc total séparé fournisseur plusieurs livraisons hors commande",
+        sections: [
+          {
+            lines: [
+              "Quand un fournisseur t'a livré **en plusieurs fois**, l'écran Comparaison ne mélange plus tout : chaque **réception a son propre bloc**, avec son tableau et **son total**.",
+              "Tu vois donc immédiatement ce qu'a apporté chaque livraison, au lieu d'un « Reçu » global impossible à recouper.",
+            ],
+          },
+          {
+            h: "Lire un bloc",
+            lines: [
+              "L'en-tête indique **R1 · date** et le **total de la réception** en pièces.",
+              "Le tableau compare, pour chaque référence/couleur : **Commandé**, **Reçu**, **Écart**, **%** et le **statut**. Une ligne **Total** ferme le bloc.",
+              "Un bloc **« Non réceptionné »** regroupe à la fin les références commandées qui ne sont **jamais arrivées**.",
+            ],
+          },
+          {
+            h: "« dont N hors commande »",
+            lines: [
+              "Si le total physique d'une réception dépasse ce qui correspond à des références commandées, l'écart est signalé : le fournisseur a livré des références **absentes de la commande**.",
+              "C'est une information utile à remonter au fournisseur, pas une erreur de GestLog.",
+            ],
           },
         ],
       },
@@ -695,6 +862,45 @@ export const HELP_THEMES: HelpTheme[] = [
         ],
       },
       {
+        id: "integration-cc",
+        icon: "🧾",
+        title: "Fichier d'intégration CC",
+        keywords: "intégration cc client fichier ean bl texas document ville livraison prix revient",
+        sections: [
+          {
+            lines: [
+              "Cet écran transforme un **export EAN / BL** (le fichier large issu de Texas) en **fichier d'intégration** prêt à envoyer au client — 14 colonnes, propre.",
+              "Dépose le fichier : GestLog le lit, te montre un aperçu, et génère **un fichier par numéro de document**.",
+            ],
+          },
+          {
+            h: "Un fichier par document",
+            lines: [
+              "Un export Texas contient parfois **plusieurs BL empilés** (et donc plusieurs clients). L'écran les détecte, **liste chaque document** et affiche un avertissement.",
+              "Chaque document a une **case à cocher** : décoche ceux que tu ne veux pas générer. S'il en reste plusieurs, le téléchargement se fait en **zip**.",
+            ],
+            tip: "Si tu obtiens un document inattendu, ouvre ton fichier source : les lignes du BL précédent y sont probablement encore, parfois **masquées** dans Excel. 👀",
+          },
+          {
+            h: "Le nom du fichier",
+            lines: [
+              "Il est composé automatiquement : **Fichier intégration + VILLE + N° document + date d'import** (ex. `Fichier intégration ROMANS SUR ISERE 143161 23-07-26.xlsx`).",
+              "La **ville** est celle de **livraison** du client, retrouvée à partir du code client (elle est synchronisée depuis TIO chaque nuit).",
+              "La **date** est celle du **dépôt du fichier**, pas de la génération : régénérer plus tard redonne le même nom.",
+            ],
+            tip: "Ville manquante ? L'écran te le signale et génère le nom **sans** la ville plutôt que d'inventer. 🏙️",
+          },
+          {
+            h: "Ce qui est repris",
+            lines: [
+              "**Toutes les marques** sont reprises ; la colonne *fournisseur* porte la marque de chaque ligne.",
+              "Le **prix** est celui **du document** — aucun prix n'est recalculé — simplement **arrondi à 2 décimales**.",
+              "Les lignes à **quantité nulle** sont ignorées.",
+            ],
+          },
+        ],
+      },
+      {
         id: "repartition-magasin",
         icon: "🏪",
         title: "Répartition magasin (1 onglet par fournisseur)",
@@ -728,6 +934,36 @@ export const HELP_THEMES: HelpTheme[] = [
             lines: [
               "L'espace **BtoC** analyse les ventes du site (CA, commandes, panier moyen, top produits/catégories/pays) et propose des **exports** (produits, ventes, clients, meilleures ventes).",
               "Les données viennent de **WooCommerce** (synchronisées automatiquement).",
+            ],
+          },
+        ],
+      },
+      {
+        id: "btoc-ventes-details",
+        icon: "📍",
+        title: "Export Ventes détaillées (adresses + paiement)",
+        keywords: "btoc export ventes détaillées adresse facturation livraison paiement paypal monetico",
+        sections: [
+          {
+            lines: [
+              "Dans **BtoC → Export**, l'export **Ventes détaillées** sort **une ligne par commande** avec les coordonnées complètes et le moyen de paiement.",
+            ],
+          },
+          {
+            h: "Les colonnes",
+            lines: [
+              "**Facturation** et **Livraison**, séparément : prénom, nom, adresse, code postal, ville, pays.",
+              "**Paiement** : le libellé lisible (PayPal, Monetico…) et son code interne.",
+              "**Commande** : n°, date, statut, e-mail, total TTC, TVA, frais de port, remboursé, devise.",
+              "Filtres : **plage de dates** et **statuts** (le sélecteur partagé en haut de l'onglet).",
+            ],
+            tip: "Si une commande n'a pas d'adresse de livraison distincte, les colonnes Livraison **reprennent la facturation**, et une colonne le signale. 📦",
+          },
+          {
+            h: "Bon à savoir",
+            lines: [
+              "Ces coordonnées ont été **récupérées pour tout l'historique** depuis le 01/01/2026 ; les nouvelles commandes se remplissent automatiquement.",
+              "Quelques commandes anciennes peuvent avoir des champs vides : c'est qu'ils sont **vides dans WooCommerce** aussi.",
             ],
           },
         ],
