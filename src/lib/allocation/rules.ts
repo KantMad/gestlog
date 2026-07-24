@@ -47,11 +47,22 @@ export function enforceNoSizeGaps(
           result[donor] = (result[donor] || 0) - 1;
           result[size] = 1;
           moves.push({ from: donor, to: size });
-        } else if ((result[sizeScale[0]] || 0) > 0) {
-          // Trou incomblable → on retire la taille extrême basse (elle redevient libre),
-          // ce qui supprime le trou sans inventer de pièce.
-          released[sizeScale[0]] = (released[sizeScale[0]] || 0) + result[sizeScale[0]];
-          result[sizeScale[0]] = 0;
+        } else {
+          // Trou INCOMBLABLE (aucune pièce de cette taille n'existe) : on ne peut ni inventer
+          // la taille, ni laisser le trou. On retire donc le **plus petit des deux blocs**
+          // qui entourent le trou → l'allocation redevient contiguë, et les pièces retirées
+          // repartent au stock libre pour d'autres boutiques.
+          const left = sizeScale.slice(0, i);
+          const right = sizeScale.slice(i + 1);
+          const sum = (ss: string[]) => ss.reduce((a, s) => a + (result[s] || 0), 0);
+          const drop = sum(left) <= sum(right) ? left : right;
+          for (const s of drop) {
+            const n = result[s] || 0;
+            if (n > 0) {
+              released[s] = (released[s] || 0) + n;
+              result[s] = 0;
+            }
+          }
         }
       }
     }

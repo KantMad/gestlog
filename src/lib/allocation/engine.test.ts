@@ -205,3 +205,33 @@ describe("runAllocation — on ne transforme JAMAIS une taille en une autre", ()
     }
   });
 });
+
+describe("runAllocation — trou incomblable : on retire un bloc, on n'invente pas la taille", () => {
+  // Aucune pièce de M n'a été reçue. La boutique a commandé S, M et L : la servir en S et L
+  // laisserait un trou en M (règle 1). Comme on ne peut pas fabriquer un M, le moteur retire
+  // le plus petit des deux blocs qui entourent le trou et rend les pièces au stock.
+  const SCALE = ["S", "M", "L"];
+  const res = runAllocation({
+    seasonId: "s1",
+    available: new Map([["P", { S: 5, L: 5 }]]), // M absent du stock
+    demands: [
+      { clientId: "A", clientOrderId: "oA", productId: "P", sizeScale: SCALE, requested: { S: 2, M: 2, L: 2 } },
+    ],
+    clientConfigs: new Map([
+      ["A", { ranking: 1, maxReductionOrder: 100, maxReductionLine: 100, minDeliveryThreshold: 0, rotationScore: 0 }],
+    ]),
+  });
+
+  const alloc = res.lines[0].allocated;
+
+  it("n'invente aucune pièce dans la taille manquante", () => {
+    expect(alloc.M ?? 0).toBe(0);
+  });
+
+  it("ne laisse pas de trou : un seul bloc contigu subsiste", () => {
+    const served = SCALE.filter((s) => (alloc[s] || 0) > 0);
+    // S et L ne peuvent pas être servis ensemble sans M au milieu.
+    expect(served).not.toEqual(["S", "L"]);
+    expect(served.length).toBeLessThanOrEqual(1);
+  });
+});

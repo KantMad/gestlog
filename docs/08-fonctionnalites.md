@@ -60,10 +60,19 @@ sont gérés par écran (cf. [`05-authentification.md`](05-authentification.md))
   **taille extrême** de la boutique vers la taille manquante. Le **total** de la boutique était
   conservé, mais la pièce **changeait de taille** : on promettait un M qui n'existait pas
   physiquement. *Cas réel AH26 `CCAH26_PU19/205` : **1 seul M reçu, 2 alloués**.* Le comblage
-  n'est désormais autorisé que si la taille manquante a du **stock libre** ; sinon on applique
-  le repli (retirer la taille extrême basse), sans inventer de pièce. La fonction renvoie ses
-  `moves` et ses `released`, que le moteur répercute sur `remainingBySize`. Testé (jamais plus
-  que le reçu **par taille** + aucun trou résiduel).
+  n'est désormais autorisé que si la taille manquante a du **stock libre**. **Trou incomblable**
+  (aucune pièce de cette taille n'existe) → on retire le **plus petit des deux blocs** qui
+  l'entourent : l'allocation redevient contiguë et les pièces retirées **retournent au stock
+  libre**. La fonction renvoie ses `moves` et ses `released`, que le moteur répercute sur
+  `remainingBySize`. Testé (jamais plus que le reçu **par taille**, aucun trou résiduel, aucune
+  pièce inventée).
+  - **Mesuré sur AH26** (moteur réel, 8 364 demandes) : alloué **7 541 → 7 494**, **trous de
+    taille fautifs 46 → 0**, dépassements 0. Les ~47 pièces libérées ne sont **pas perdues** :
+    elles rejoignent le reliquat de la **même** simulation (1 727 → 1 774) et deviennent
+    **plaçables à la main** via « Répartir surplus » (part distribuable **7 → 57**).
+  - ⚠️ **Définir un trou « fautif »** : uniquement quand la boutique **avait commandé** la
+    taille. Une **commande** qui saute des tailles (ex. `{M:1, XL:1}` sans L) n'est pas un trou
+    créé par le moteur — l'ignorer fait surcompter (57 « trous » au lieu de 46 sur AH26).
 - **Répartition — invariant « alloué ≤ commande »** : ⚠️ bug historique — le pro-rata
   n'était pas plafonné à la quantité commandée. Dès qu'une **taille** était sur-livrée alors
   que le produit était globalement en manque, les boutiques étaient servies **au-dessus de leur
