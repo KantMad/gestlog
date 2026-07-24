@@ -101,6 +101,15 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
   et le « Répartir surplus »** — les plafonner sur le reçu laisserait réattribuer des pièces
   déjà engagées. *Ordre de grandeur AH26 au moment de la mise en place : 8 sessions validées,
   16 976 pièces déjà engagées.*
+  - **Produits entièrement engagés MASQUÉS** : un produit **reçu** mais dont il ne reste
+    **rien** (échantillons + répartitions validées) n'affiche que des lignes à 0 / « Annulé »
+    à −100 %, ce qui laisse croire à tort que les boutiques n'ont pas été servies (elles
+    l'ont été, dans une répartition précédente). Ces produits sont donc **masqués par défaut**
+    dans les deux vues, avec un lien **« Afficher les N produits entièrement engagés »** dans
+    la barre d'outils (rien ne disparaît en silence). ⚠️ Un produit **jamais reçu** n'est pas
+    concerné : c'est le filtre **« Non réceptionné »** qui le gère.
+    *Mesuré sur AH26 : 134 produits masqués sur 709 (713 lignes) — **0 pièce allouée** dedans,
+    donc rien de distribuable n'est caché.*
   - **Affichage (vue « Par produit »)** : sous « Reçu fourn. », mentions *« dont N éch. »*
     (échantillons) et *« dont N engagé »* (déjà réparti/validé, en violet), plus une tuile
     **« Dispo »** = reçu − échantillons − engagé (rouge à 0) → on voit d'un coup pourquoi un

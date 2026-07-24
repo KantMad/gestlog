@@ -1070,6 +1070,8 @@ export default function AllocationPage() {
   const [importedRows, setImportedRows] = useState<ImportedRow[] | null>(null);
   const [addedProductIds, setAddedProductIds] = useState<string[]>([]);
   const [addSearch, setAddSearch] = useState(""); // saisie du champ « Ajouter un produit reçu »
+  // Masquer les produits entièrement engagés (plus rien à répartir) — affichables à la demande.
+  const [showFullyEngaged, setShowFullyEngaged] = useState(false);
   const [validateSuppliers, setValidateSuppliers] = useState<string[]>([]);
   const [validateCatalogs, setValidateCatalogs] = useState<string[]>([]);
   // Périmètre de l'EXPORT EAN — distinct de celui de la validation (mêmes règles que sur
@@ -1812,12 +1814,24 @@ export default function AllocationPage() {
   // Filtre réception : un produit est « réceptionné » si son total reçu > 0.
   const isReceived = (productId: string) =>
     sumQuantities(receivedByProduct[productId] || {}) > 0;
-  const visibleLines =
+
+  // Produit ENTIÈREMENT ENGAGÉ : il a bien été reçu, mais tout est déjà parti (échantillons
+  // + répartitions validées) → il n'y a plus rien à répartir. On le masque par défaut : il
+  // n'afficherait que des lignes à 0 / « Annulé » à −100 %, ce qui laisse croire à tort que
+  // les boutiques n'ont pas été servies (elles l'ont été, dans une répartition précédente).
+  // Un produit JAMAIS reçu n'est pas concerné : c'est le filtre « Non réceptionné » qui le gère.
+  const isFullyEngaged = (productId: string) =>
+    isReceived(productId) && sumQuantities(availableByProduct[productId] || {}) === 0;
+  const fullyEngagedProducts = new Set(
+    lines.map((l) => l.productId).filter((pid) => isFullyEngaged(pid))
+  );
+  const visibleLines = (
     receptionFilter === "all"
       ? lines
       : lines.filter((l) =>
           receptionFilter === "received" ? isReceived(l.productId) : !isReceived(l.productId)
-        );
+        )
+  ).filter((l) => showFullyEngaged || !fullyEngagedProducts.has(l.productId));
 
   // Group lines by client
   const clientGroups = new Map<
@@ -2443,8 +2457,21 @@ export default function AllocationPage() {
                       </button>
                     </div>
                     <span className="text-xs text-muted-foreground ml-2">
-                      {lines.length} lignes · cliquez sur une quantité pour la modifier
+                      {visibleLines.length} lignes · cliquez sur une quantité pour la modifier
                     </span>
+                    {fullyEngagedProducts.size > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setShowFullyEngaged((v) => !v)}
+                        className="ml-2 text-xs text-violet-600 underline-offset-2 hover:underline"
+                        title="Produits reçus mais entièrement engagés (échantillons + répartitions validées) : plus rien à répartir"
+                      >
+                        {showFullyEngaged ? "Masquer" : "Afficher"} les{" "}
+                        {fullyEngagedProducts.size} produit
+                        {fullyEngagedProducts.size > 1 ? "s" : ""} entièrement engagé
+                        {fullyEngagedProducts.size > 1 ? "s" : ""}
+                      </button>
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
                     {/* Filtre réception (comme dans Comparaison) */}
