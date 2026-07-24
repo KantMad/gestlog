@@ -95,6 +95,25 @@ Nettoie les fichiers `/tmp` après usage (local **et** VPS).
 12. **PWA mobile** : le service worker peut servir une version en cache → recharger/rouvrir
     l'app après déploiement pour voir les changements.
 
+## Répartitions validées en double (nettoyage du 24/07/2026)
+
+Depuis que le **disponible déduit les répartitions validées** (cf. `08`/`10`), une même
+répartition **validée deux fois** compte **deux fois** et fait disparaître du stock à tort.
+
+- **Cas rencontré (AH26)** : deux sessions du **18/07** (16:20 et 18:58) portaient les **mêmes
+  460 couples boutique+produit** — séquelle d'une revalidation d'avant le correctif de
+  « mise à jour en place » (`sourceSessionId`, cf. `08`). Symptôme caractéristique :
+  **`engagé` = 2 × `reçu`** sur des produits entiers.
+- **Correction** : la plus **ancienne** est passée en **`status = 'CANCELLED'`** (réversible ;
+  la déduction ne lit que les `VALIDATED`), **pas supprimée**. Sauvegarde JSON préalable :
+  `/var/www/gestlog/AVANT-CANCEL-SESSION-DOUBLON-*.json`.
+  Revenir en arrière : `UPDATE "AllocationSession" SET status='VALIDATED' WHERE id='…';`
+- **Effet** : engagé 16 976 → **13 770**, disponible 8 971 → **9 268**, produits à dispo 0
+  149 → **134**.
+- **Contrôles à relancer** après ce type de nettoyage (script `pg` ad hoc) : **aucun produit
+  avec `engagé > reçu`** et **aucun recouvrement de couples boutique+produit entre deux
+  sessions `VALIDATED`** — les deux étaient à 0 après correction.
+
 ## Limites de l'environnement de dev local
 
 - **La base locale pointe encore sur un backup Supabase obsolète** : les données locales ne
