@@ -494,8 +494,15 @@ function ProductGroup({
   const totalSampled = sampled ? sumQuantities(sampled) : 0;
   // Pièces déjà engagées dans d'AUTRES répartitions validées → retirées du disponible.
   const totalElsewhere = allocatedElsewhere ? sumQuantities(allocatedElsewhere) : 0;
-  // Disponible = reçu − échantillons − déjà engagé ailleurs (jamais négatif).
-  const totalAvailable = Math.max(0, totalReceived - totalSampled - totalElsewhere);
+  // Disponible PAR TAILLE = reçu − échantillons − déjà engagé ailleurs (jamais négatif).
+  // ⚠️ C'est cette base — et non le reçu — qui doit servir au surplus : sinon on proposait
+  // de « répartir » des pièces déjà engagées (bouton « +117 » alors que Dispo = 0).
+  const availableBySize: SizeQuantities = {};
+  for (const [sz, n] of Object.entries(received || {})) {
+    const left = n - (sampled?.[sz] || 0) - (allocatedElsewhere?.[sz] || 0);
+    if (left > 0) availableBySize[sz] = left;
+  }
+  const totalAvailable = sumQuantities(availableBySize);
   // Surplus RÉPARTISSABLE = reçu − déjà alloué, uniquement sur les tailles commandées
   // (une taille reçue que personne n'a commandée n'est pas auto-répartissable).
   const allocBySize: Record<string, number> = {};
@@ -504,12 +511,10 @@ function ProductGroup({
     for (const [s, q] of Object.entries(l.allocated)) allocBySize[s] = (allocBySize[s] || 0) + q;
     for (const [s, q] of Object.entries(l.original)) orderedBySize[s] = (orderedBySize[s] || 0) + q;
   }
-  const surplusTotal = received
-    ? Object.entries(received).reduce(
-        (s, [sz, r]) => s + ((orderedBySize[sz] || 0) > 0 ? Math.max(0, r - (allocBySize[sz] || 0)) : 0),
-        0
-      )
-    : 0;
+  const surplusTotal = Object.entries(availableBySize).reduce(
+    (s, [sz, r]) => s + ((orderedBySize[sz] || 0) > 0 ? Math.max(0, r - (allocBySize[sz] || 0)) : 0),
+    0
+  );
   const hasReduction = totalOriginal > totalAllocated;
   const reductionPct = totalOriginal > 0
     ? Math.round(((totalOriginal - totalAllocated) / totalOriginal) * 100)
