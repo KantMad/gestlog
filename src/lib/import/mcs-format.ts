@@ -67,7 +67,10 @@ const isRefHeader = (h: string): boolean =>
   h === "REF" ||
   h === "CODE PRODUIT FINI" ||
   h.includes("PRODUCT REF") ||
-  /^R[EÉ]F[EÉ]RENCE\b/.test(h);
+  /^R[EÉ]F[EÉ]RENCE\b/.test(h) ||
+  // « REF PRODUIT », « REF PRODEUIT » (fautes de frappe fournisseur), « REF PF »… : un en-tête
+  // qui COMMENCE par REF et mentionne un produit. Tolérant aux libellés maison (template LVIE).
+  (/^REF\b/.test(h) && /PRODE?UIT|PRODUCT|\bPF\b/.test(h));
 // Colonnes du format « LONG » : une ligne PAR TAILLE (la taille et la quantité sont des
 // VALEURS, pas des colonnes). Ex. : REFERENCE | COULEUR | … | Taille | Quantité.
 const isSizeColHeader = (h: string): boolean => h === "TAILLE" || h === "SIZE";
@@ -468,7 +471,11 @@ export function parseMcsPackingList(buffer: ArrayBuffer): McsReceptionLine[] {
     // Sinon, une colonne de LIBELLÉ couleur distincte du code (« Coloris produit fini »).
     if (cName < 0)
       cName = header.findIndex(
-        (s, i) => i !== cCode && (s.includes("COLORIS") || (s.includes("COULEUR") && !s.includes("CODE")))
+        (s, i) =>
+          i !== cCode &&
+          !s.includes("CODE") &&
+          !s.includes("DESCR") &&
+          (s.includes("COLORIS") || s.includes("COULEUR") || s.includes("COLOR"))
       );
 
     // Lignes de détail : jusqu'au récapitulatif (2e en-tête) ; hors lignes TOTAL.
@@ -482,6 +489,12 @@ export function parseMcsPackingList(buffer: ArrayBuffer): McsReceptionLine[] {
       if (row.map(up).some(isRefHeader)) break;
       const refCell = norm(row[cRef]);
       if (!refCell || refCell.toUpperCase() === "TOTAL") continue;
+      // ⚠️ Un vrai code produit ne contient JAMAIS d'espace (« CCAH26_CH02 »). Certains
+      // fichiers finissent par un RÉCAPITULATIF par catégorie dont la colonne référence porte
+      // des libellés comme « CH 02 » ou « CH 10 12 13 … » (template LVIE) : sans en-tête pour
+      // stopper la lecture, ces lignes étaient lues comme du détail et gonflaient le total
+      // (3061 pièces au lieu de 921). On écarte donc toute « référence » contenant un espace.
+      if (/\s/.test(refCell)) continue;
       rows.push(row);
     }
     if (rows.length === 0) continue;

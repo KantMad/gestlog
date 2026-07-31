@@ -560,6 +560,19 @@ Les fichiers réels MCS ne sont pas des tableaux plats → l'import les **auto-d
   (`EPOMC-C001` → `EPOMC_C001`), **somme des lignes de colis** (hors `TOTAL`/récap), quantités
   ≤ 0 ignorées. Ancien format MCS
   (tailles en lettres sur la ligne **au-dessus** de l'en-tête) toujours supporté.
+  **En-têtes « maison » (template LVIE)** : la colonne référence peut s'appeler `REF PRODEUIT`
+  (faute de frappe de « PRODUIT ») — `isRefHeader` accepte tout en-tête **commençant par `REF`
+  et mentionnant un produit** (`PRODUIT`/`PRODEUIT`/`PRODUCT`/`PF`). Le libellé couleur est
+  aussi reconnu quand la colonne s'appelle simplement `COLOR` (hors colonne code/DESCR).
+  ⚠️ **Récapitulatif par catégorie en fin de fichier** : certains fichiers listent en bas des
+  totaux par « catégorie » dont la colonne référence porte des libellés comme `CH 02` ou
+  `CH 10 12 13 …` (avec **espaces**), et des nombres dans des colonnes décalées. Comme un vrai
+  code produit **ne contient jamais d'espace**, toute « référence » contenant un espace est
+  **ignorée** → sinon ces lignes étaient comptées (*cas réel LVIE : 3061 pièces au lieu de
+  920*). *Note : le total importé (**par taille**) peut différer d'1-2 pièces du total
+  **déclaré** par le fournisseur quand une ligne du fichier est elle-même incohérente (LVIE :
+  une ligne annonce 20 mais ses tailles font 19) — GestLog importe le détail des tailles, qui
+  fait foi.*
   Les libellés de tailles sont cherchés **sur l'en-tête ET sur la ligne au-dessus** — le
   template CITIME porte sa seule taille (`TU`) dans l'en-tête, l'ancien format MCS les porte
   au-dessus.

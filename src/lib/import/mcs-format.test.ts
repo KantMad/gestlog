@@ -10,6 +10,40 @@ function bufferFromRows(rows: (string | number | null)[][]): ArrayBuffer {
   return XLSX.write(wb, { type: "array", bookType: "xlsx" }) as ArrayBuffer;
 }
 
+describe("réception — template LVIE (en-tête « REF PRODEUIT », récap par catégorie en bas)", () => {
+  // En-tête maison : la colonne référence s'appelle « REF PRODEUIT » (faute de frappe),
+  // couleur = « code couleur » + libellé « COLOR ». Un RÉCAPITULATIF par catégorie termine
+  // le fichier, avec des « références » comme « CH 02 » / « CH 10 12 13 » (avec espaces) et
+  // des nombres dans des colonnes décalées → sans garde-fou ils gonflaient le total.
+  const rows: (string | number | null)[][] = [
+    ["", "COUNTRY W26 LVIE PACKING LIST", null, null, null, null, null, null, null, null, null, null, null],
+    ["commande fournisseur", "REF PRODEUIT ", "code couleur", "COLOR ", "S", "M", "L", "XL", "2XL", "3XL", "4XL", "", "TOTAL"],
+    [100773, "CCAH26_CH02 ", "752", "752 marine ", 1, 4, 5, 5, 4, 0, 0, "", 19],
+    [100773, "CCAH26_CH02 ", "811", "811 vert kaki ", 1, 5, 5, 5, 3, 0, 0, "", 19],
+    [100773, "CCAH26_CH04", "001", "001 BLANC", 1, 5, 5, 6, 3, 0, 0, "", 20],
+    // ── récapitulatif par catégorie (à ignorer) : « référence » avec espace, nombres décalés ──
+    ["", "CH 02  ", "", "", "", "", "=", 329, "", "", "", "", ""],
+    ["", "CH 10 12 13 14 ", "", "", "", "", "=", 1109, "", "", "", "", ""],
+    ["", "", "", "", "TOTAL : ", "", "", "", "", "", "", "", ""],
+  ];
+  const buffer = bufferFromRows(rows);
+
+  it("détecte le format packing-list malgré l'en-tête « REF PRODEUIT »", () => {
+    expect(detectMcsFormat(buffer)).toBe("packing-list");
+  });
+
+  it("ignore le récapitulatif (réf. avec espaces) et somme le détail par TAILLE", () => {
+    const lines = parseMcsPackingList(buffer);
+    // Seuls les vrais produits : CCAH26_CH02 (2 couleurs) + CCAH26_CH04.
+    expect(lines.map((l) => l.reference).sort()).toEqual(["CCAH26_CH02", "CCAH26_CH02", "CCAH26_CH04"]);
+    const total = lines.reduce((s, l) => s + Object.values(l.sizes).reduce((a, b) => a + b, 0), 0);
+    // 19 + 19 + 20 (sommes de tailles), PAS les 329/1109 du récap.
+    expect(total).toBe(58);
+    // Aucune « référence » fantôme issue du récap.
+    expect(lines.some((l) => l.reference.includes("CH 02") || /\s/.test(l.reference))).toBe(false);
+  });
+});
+
 describe("réception — template CLUB JU (détail par colis + récapitulatif décalé)", () => {
   // Le fichier porte DEUX blocs : le détail (une ligne par colis, précédé de
   // « CDE FOURNISSEUR / Box number / Client ») puis un RÉCAPITULATIF dont l'en-tête est
