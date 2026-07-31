@@ -10,6 +10,34 @@ function bufferFromRows(rows: (string | number | null)[][]): ArrayBuffer {
   return XLSX.write(wb, { type: "array", bookType: "xlsx" }) as ArrayBuffer;
 }
 
+describe("réception — template KESSLY (tailles GROUPÉES « S/M », « L/XL », « TU »)", () => {
+  // Accessoires : les colonnes de tailles sont groupées par « / ». Sans les reconnaître, une
+  // seule colonne (TU) était vue comme taille → moins de 2 → format non détecté, import KO.
+  const rows: (string | number | null)[][] = [
+    ["W26 COUNTRY KESSLY LOT 1 PL", null, null, null, null, null],
+    ["COMMANDE FOURNISSEUR", "Référence", "CODE COULEUR", "S/M", "L/XL", "TU"],
+    [100777, "CCAH26_CA01", "006-Beige", "", "", 56],
+    [100777, "CCAH26_CA02", "207-Camel", "", "", 38],
+    [100777, "CCAH26_CA13", "951-Gris Anthracite", 12, 12, ""],
+  ];
+  const buffer = bufferFromRows(rows);
+
+  it("détecte le format malgré les tailles groupées", () => {
+    expect(detectMcsFormat(buffer)).toBe("packing-list");
+  });
+
+  it("lit S/M, L/XL et TU comme des tailles distinctes", () => {
+    const lines = parseMcsPackingList(buffer);
+    const ca13 = lines.find((l) => l.reference === "CCAH26_CA13")!;
+    expect(ca13.sizes).toEqual({ "S/M": 12, "L/XL": 12 });
+    const ca01 = lines.find((l) => l.reference === "CCAH26_CA01")!;
+    expect(ca01.sizes).toEqual({ TU: 56 });
+    expect(ca01.colorCode).toBe("006");
+    const total = lines.reduce((s, l) => s + Object.values(l.sizes).reduce((a, b) => a + b, 0), 0);
+    expect(total).toBe(56 + 38 + 24);
+  });
+});
+
 describe("réception — template LVIE (en-tête « REF PRODEUIT », récap par catégorie en bas)", () => {
   // En-tête maison : la colonne référence s'appelle « REF PRODEUIT » (faute de frappe),
   // couleur = « code couleur » + libellé « COLOR ». Un RÉCAPITULATIF par catégorie termine

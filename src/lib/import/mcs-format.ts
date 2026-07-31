@@ -57,7 +57,15 @@ const SIZE_LETTERS = new Set([
 ]);
 const isSizeHeader = (h: string): boolean => {
   const u = h.replace(/\s+/g, "").toUpperCase();
-  return SIZE_LETTERS.has(u) || /^\d{2}$/.test(u) || /^\d{2}[-/]\d{2}$/.test(u);
+  if (SIZE_LETTERS.has(u) || /^\d{2}$/.test(u) || /^\d{2}[-/]\d{2}$/.test(u)) return true;
+  // Tailles GROUPÉES par « / » : « S/M », « L/XL », « XS/S », « 2XL/3XL »… (template KESSLY,
+  // accessoires). Chaque part doit être une taille LETTRE connue — on n'accepte pas « 60/40 »
+  // (dimension). La taille est conservée telle quelle (« S/M ») pour la grille produit.
+  if (u.includes("/")) {
+    const parts = u.split("/").filter(Boolean);
+    if (parts.length >= 2 && parts.every((p) => SIZE_LETTERS.has(p))) return true;
+  }
+  return false;
 };
 // Colonne « référence » d'une réception : plusieurs libellés possibles selon l'export.
 // Accepte aussi « REFERENCE produit fini » (template IMDER) — tout en-tête commençant par

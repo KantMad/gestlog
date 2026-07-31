@@ -546,7 +546,10 @@ Les fichiers réels MCS ne sont pas des tableaux plats → l'import les **auto-d
   `Coloris produit fini` distincte du `COLOR CODE` (le libellé couleur est repris comme nom).
   **Deux dispositions** reconnues :
   - **large** : **une colonne par taille**, repérée par son nom (`S,M,L,XL,2XL…` OU numériques
-    `36,38,40…`, **ordre indifférent**) ;
+    `36,38,40…` OU **groupées** `S/M`, `L/XL`, `TU` — template KESSLY, accessoires ; **ordre
+    indifférent**). ⚠️ Les tailles groupées ne sont acceptées que si **chaque part** est une
+    taille lettre connue (pas `60/40`, qui est une dimension). La taille est **conservée telle
+    quelle** (`S/M`) — le référentiel produit doit porter la même grille ;
   - **longue** : **une ligne par taille** — la taille et la quantité sont des *valeurs*, dans
     les colonnes `Taille` et `Quantité`/`Qté`/`Qty` (cas `FW26 TDH ARETEX PL`).
 
