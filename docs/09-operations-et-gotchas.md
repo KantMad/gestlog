@@ -114,6 +114,33 @@ répartition **validée deux fois** compte **deux fois** et fait disparaître du
   avec `engagé > reçu`** et **aucun recouvrement de couples boutique+produit entre deux
   sessions `VALIDATED`** — les deux étaient à 0 après correction.
 
+## Grilles de tailles abîmées (nettoyage du 04/08/2026)
+
+`Product.sizeScale` était écrit par la synchro TIO en **`variations.map(v => v.size).join(",")`**
+— **sans tri ni dédoublonnage**. L'ordre était donc celui, arbitraire, renvoyé par TIO.
+
+- **Audit** : **893 produits sur 8 887 (10 %)** abîmés — **846 désordonnés**
+  (`M,L,XL,S,2XL…` : le S en 4ᵉ position ; `42,30,31,…,28,44,29`) et **47 avec doublons**
+  (`TU,TU`, jusqu'à `S,S,S,S,S,S,M,M,…` sur **42 entrées**).
+- **Symptômes** : onglet à **42 colonnes** dans « Lancement de commande » (`S` répété 6 fois),
+  `S` rangé après `XL`. ⚠️ Et surtout, en répartition, la règle « pas de trou de taille »
+  raisonne sur l'**ordre** de la grille : elle plaçait le `S` après le `XL`.
+- **Impact données** : **aucune donnée faussée** — 805 des 893 n'étaient **jamais utilisées**,
+  et **0 ligne de commande** n'avait été décodée avec le motif `M,L,XL,S,…`.
+- **Correction en deux temps** :
+  1. **À la source** : la synchro assainit désormais à l'écriture (`sortSizeScale`,
+     `src/lib/size-order.ts`).
+  2. **Backfill unique** des 893 grilles, avec **simulation d'abord**, garde-fou « aucune
+     taille perdue » (bloquant) et sauvegarde JSON préalable :
+     `/var/www/gestlog/AVANT-FIX-SIZESCALE-*.json` (chaque entrée porte `before`/`after`).
+- **Après** : **0 doublon, 0 désordre** sur 8 887 grilles. Et en répartition AH26, l'alloué
+  passe de **7 494 à 9 749 pièces** (les trous de taille ne coupent plus à tort), tous les
+  invariants restant à 0 (dépassement, alloué > demande, trou de taille).
+- ⚠️ **Ne PAS brancher `sortSizeScale` dans `parseSizeScale`** : l'ORDRE de la grille sert
+  aussi à **décoder les quantités par position** à l'import (`quantities[scale[i]]` dans
+  `mcs-mapper`). Le tri s'applique à l'**écriture** et à l'affichage, pas en remplacement
+  global de la lecture.
+
 ## Limites de l'environnement de dev local
 
 - **La base locale pointe encore sur un backup Supabase obsolète** : les données locales ne

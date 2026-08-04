@@ -86,7 +86,9 @@ côté GestLog la route `/api/sync/products` **et** le modèle `Product`.
 Tous protégés par **`x-api-key === SYNC_API_KEY`** et **publics au sens session** (le
 middleware laisse passer `/api/sync/` sans cookie — cf. `PUBLIC_PATHS`). Principaux :
 
-- `/api/sync/products` — référentiel produit + EAN (depuis TIO).
+- `/api/sync/products` — référentiel produit + EAN (depuis TIO). ⚠️ `sizeScale` est **assaini
+  à l'écriture** (dédoublonnage + ordre d'habillage, `sortSizeScale`) : TIO renvoie les
+  variations dans un ordre arbitraire et parfois en double (cf. [`09`](09-operations-et-gotchas.md)).
 - `/api/sync/orders` — commandes clients (routage saison Réassort).
 - `/api/sync/stock` — stock.
 - `/api/sync/client-addresses` — **ville de livraison** des clients (`lng_shop.city`, PAS

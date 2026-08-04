@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { handleApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
+import { sortSizeScale } from "@/lib/size-order";
 
 // Allow up to 60s for sync operations
 export const maxDuration = 60;
@@ -76,8 +77,14 @@ export async function POST(request: NextRequest) {
         const mappedColor = converted.get(`${reference}__${rawColor}`);
         const colorStr = mappedColor || rawColor;
         const colorCodeStr = mappedColor || colorCode || null;
+        // ⚠️ TIO renvoie les variations dans un ordre ARBITRAIRE, et parfois en double :
+        // brut, on obtenait des grilles comme « M,L,XL,S,2XL… » (le S en 4e position),
+        // « 42,30,31,…,28,44,29 » ou « TU,TU », voire « S,S,S,S,S,S,M,M,… » sur 42 entrées.
+        // On assainit donc à l'ÉCRITURE (dédoublonnage + ordre d'habillage) : `sizeScale`
+        // sert ensuite à ordonner les colonnes de tailles ET à décoder les quantités par
+        // position à l'import — une grille fausse fausserait les deux.
         const sizeScale = variations
-          ? (variations as { size: string }[]).map((v) => v.size).join(",")
+          ? sortSizeScale((variations as { size: string }[]).map((v) => v.size)).join(",")
           : "";
         const extId = prod.externalId ? String(prod.externalId) : null;
 

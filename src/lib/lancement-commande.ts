@@ -12,6 +12,10 @@
 //
 // Fonctions PURES : pas de DB, pas de réseau → testables et utilisables côté écran.
 
+import { sortSizeScale } from "./size-order";
+
+export { sortSizeScale, sizeRank } from "./size-order";
+
 export interface LancementCsvRow {
   reference: string;
   productName: string;
@@ -142,63 +146,8 @@ export function parseLancementCsv(text: string): LancementCsvRow[] {
 }
 
 // ─── Ordre des tailles ───────────────────────────────────────────────────────
-//
-// ⚠️ On ne peut PAS se fier à l'ordre stocké dans `Product.sizeScale` : le référentiel
-// contient des grilles **désordonnées** (`M,L,XL,S,2XL…` — le S en 4e position),
-// **mélangées** (`42,30,31,…,28,44,29`) et même **avec doublons**
-// (`S,S,S,S,S,S,M,M,…` sur 42 entrées, `TU,TU`). S'y fier produisait des onglets à
-// 42 colonnes et un « S » rangé après « XL ».
-// On dédoublonne donc chaque grille et on la remet dans l'ORDRE D'HABILLAGE canonique.
-
-const LETTER_ORDER = ["XXS", "XS", "S", "M", "L", "XL", "2XL", "3XL", "4XL", "5XL", "6XL"];
-
-/** `XXL` → `2XL`, `XXXL` → `3XL`, espaces retirés. */
-const canonSize = (s: string): string => {
-  const u = norm(s).toUpperCase().replace(/\s+/g, "");
-  if (u === "XXL") return "2XL";
-  if (u === "XXXL") return "3XL";
-  return u;
-};
-
-/**
- * Rang d'une taille dans l'ordre d'habillage. Les familles restent groupées :
- * taille unique < tailles lettres < tailles numériques.
- */
-export function sizeRank(size: string): number {
-  const u = canonSize(size);
-  if (u === "TU" || u === "ONESIZE" || u === "U") return 0;
-
-  // Numériques : « 38 », et plages « 39-42 » (rangées sur leur borne basse).
-  const numeric = u.match(/^(\d+)(?:[-/](\d+))?$/);
-  if (numeric) return 1000 + parseInt(numeric[1], 10) + (numeric[2] ? 0.5 : 0);
-
-  const letter = LETTER_ORDER.indexOf(u);
-  if (letter >= 0) return 10 + letter;
-
-  // Groupées « S-M », « L/XL » : entre leurs deux bornes.
-  const grouped = u.match(/^([A-Z0-9]+)[-/]([A-Z0-9]+)$/);
-  if (grouped) {
-    const a = LETTER_ORDER.indexOf(grouped[1]);
-    const b = LETTER_ORDER.indexOf(grouped[2]);
-    if (a >= 0 && b >= 0) return 10 + (a + b) / 2;
-  }
-  return 900; // inconnue → après les tailles connues, avant les numériques
-}
-
-/** Dédoublonne une grille et la remet dans l'ordre d'habillage. */
-export function sortSizeScale(scale: string[]): string[] {
-  const seen = new Set<string>();
-  const clean: string[] = [];
-  for (const raw of scale) {
-    const s = norm(raw);
-    if (!s) continue;
-    const k = canonSize(s);
-    if (seen.has(k)) continue;
-    seen.add(k);
-    clean.push(s);
-  }
-  return clean.sort((a, b) => sizeRank(a) - sizeRank(b) || a.localeCompare(b, "fr"));
-}
+// La logique vit dans `size-order.ts` : elle sert AUSSI à assainir les grilles à
+// l'écriture (synchro produits). Cf. ce module pour le pourquoi (grilles TIO abîmées).
 
 /** Ordonne l'union des tailles de plusieurs grilles (ordre d'habillage, sans doublon). */
 export function mergeSizeOrder(scales: string[][]): string[] {
