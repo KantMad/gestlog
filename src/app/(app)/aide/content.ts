@@ -862,6 +862,49 @@ export const HELP_THEMES: HelpTheme[] = [
         ],
       },
       {
+        id: "lancement-commande",
+        icon: "🚀",
+        title: "Lancement de commande",
+        keywords: "lancement commande csv couleur categorie onglet taille rea site total achat tcd",
+        sections: [
+          {
+            lines: [
+              "Cet écran transforme l'export **« commandes à la couleur »** (le CSV sorti de TIO) en **tableaux de lancement** prêts pour le service achat.",
+              "Dépose le fichier : GestLog le lit, affiche un aperçu par catégorie, puis génère le classeur Excel.",
+            ],
+            tip: "C'est le remplaçant du tableau croisé dynamique fait à la main : même structure, mêmes en-têtes, mêmes formules. 📊",
+          },
+          {
+            h: "Ce que contient le fichier généré",
+            lines: [
+              "**Un onglet par catégorie** (Jersey, Chemise, Denim, Accessoires…), le plus gros volume en premier.",
+              "Dans chaque onglet : une ligne de **total catégorie**, puis les **produits triés de la plus grande à la plus petite quantité**, et sous chacun le détail **par couleur** (également trié).",
+              "Les colonnes de tailles s'adaptent à la catégorie : `S → 4XL` pour le haut, `29 → 44` pour les pantalons, `TU` pour les accessoires.",
+            ],
+          },
+          {
+            h: "Les colonnes de travail",
+            lines: [
+              "**Commandé** (bleu) : ce qui a été commandé par les boutiques, par taille, plus le total.",
+              "**site** (jaune) : **laissé vide, à toi de le remplir** dans Excel — les quantités destinées au site.",
+              "**% réa** (cyan) : la part de chaque taille dans le total de la ligne. Formule automatique.",
+              "**rea** : la proposition de réassort, calculée par `=ARRONDI.SUP((total × 10 %) × % réa ; 0,5)`. Tu peux écraser la formule si tu veux fixer une quantité.",
+              "**total** (orange) : `commandé + site + réa`. Il se recalcule tout seul dès que tu saisis une valeur dans « site » ou que tu modifies un réassort.",
+            ],
+            tip: "Les formules ne sont posées que sur les lignes **couleur** — c'est là que se fait le lancement. Les lignes produit et catégorie sont des totaux. ✍️",
+          },
+          {
+            h: "D'où viennent les tailles",
+            lines: [
+              "Dans le CSV, les quantités sont dans des colonnes `T0`, `T1`, `T2`… qui ne portent **aucun nom de taille** : ce sont des **positions**.",
+              "GestLog les traduit avec la **grille du produit** au référentiel : `T0` = 1ʳᵉ taille du produit, `T1` = 2ᵉ, etc. C'est pour ça que le même `T0` vaut `S` pour un polo et `29` pour un jean.",
+              "Si une référence est **introuvable au référentiel**, l'écran te le signale et laisse ses colonnes nommées `T0`, `T1`… : **aucune pièce n'est perdue**, mais les tailles ne sont pas nommées.",
+            ],
+            tip: "Une référence signalée = un produit pas encore synchronisé depuis TIO. Vérifie l'écran **Infos produits**. 🔎",
+          },
+        ],
+      },
+      {
         id: "integration-cc",
         icon: "🧾",
         title: "Fichier d'intégration CC",

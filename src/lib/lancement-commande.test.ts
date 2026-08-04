@@ -1,0 +1,181 @@
+import { describe, it, expect } from "vitest";
+import ExcelJS from "exceljs";
+import {
+  parseLancementCsv,
+  buildLancementSheets,
+  mergeSizeOrder,
+  safeSheetName,
+} from "./lancement-commande";
+import {
+  buildLancementWorkbook,
+  lancementLayout,
+  lancementHeader,
+  colLetter,
+} from "./lancement-commande-xlsx";
+
+// Mini-export « commandes à la couleur » : mêmes libellés que l'export TIO réel.
+const CSV = [
+  "Référence produit;Nom produit;Catégorie produit;Code couleur;Nom de la couleur;Type de taille;Quantité à la couleur;T0;T1;T2;T3",
+  // Jersey — 2 produits, le 2e plus gros pour vérifier le TRI
+  '"AMPOLO_1";"Polo uni";"Jersey";"752";"Bleu marine";"HAU";"10";"1";"3";"4";"2"',
+  '"AMPOLO_1";"Polo uni";"Jersey";"999";"Noir";"HAU";"6";"1";"2";"2";"1"',
+  '"AMPOLO_2";"Polo rayé";"Jersey";"006";"Beige";"HAU";"30";"5";"10";"10";"5"',
+  // Denim — grille numérique
+  '"RMJEAN_1";"Jean brut";"Denim";"213";"Chocolat";"PAN";"8";"2";"3";"3";"0"',
+  // ligne à quantité nulle → ignorée
+  '"RMJEAN_1";"Jean brut";"Denim";"850";"Taupe";"PAN";"0";"0";"0";"0";"0"',
+].join("\n");
+
+const SCALES: Record<string, string[]> = {
+  AMPOLO_1: ["S", "M", "L", "XL"],
+  AMPOLO_2: ["S", "M", "L", "XL"],
+  RMJEAN_1: ["29", "30", "31", "32"],
+};
+
+describe("lancement de commande — lecture du CSV", () => {
+  const rows = parseLancementCsv(CSV);
+
+  it("lit les lignes utiles et ignore les quantités nulles", () => {
+    expect(rows).toHaveLength(4);
+    expect(rows.map((r) => r.reference)).toEqual(["AMPOLO_1", "AMPOLO_1", "AMPOLO_2", "RMJEAN_1"]);
+  });
+
+  it("la somme des positions correspond à la quantité déclarée", () => {
+    for (const r of rows) {
+      expect(r.quantities.reduce((a, b) => a + b, 0)).toBe(r.totalQty);
+    }
+  });
+
+  it("rejette un fichier qui n'est pas un export commandes couleur", () => {
+    expect(parseLancementCsv("a;b;c\n1;2;3")).toEqual([]);
+  });
+});
+
+describe("lancement de commande — construction des onglets", () => {
+  const { sheets, warnings } = buildLancementSheets(parseLancementCsv(CSV), SCALES);
+
+  it("un onglet par catégorie, le plus gros volume en premier", () => {
+    expect(sheets.map((s) => s.category)).toEqual(["Jersey", "Denim"]);
+    expect(warnings).toEqual([]);
+  });
+
+  it("nomme les tailles d'après la grille du PRODUIT (T0 = 1re taille)", () => {
+    expect(sheets[0].sizes).toEqual(["S", "M", "L", "XL"]);
+    expect(sheets[1].sizes).toEqual(["29", "30", "31"]); // 32 jamais commandé → pas de colonne
+  });
+
+  it("trie les produits, puis les couleurs, par quantité décroissante", () => {
+    const jersey = sheets[0];
+    const products = jersey.lines.filter((l) => l.kind === "product");
+    expect(products.map((p) => p.label)).toEqual([
+      "AMPOLO_2 Polo rayé", // 30 pièces
+      "AMPOLO_1 Polo uni", // 16 pièces
+    ]);
+    const colors = jersey.lines.filter((l) => l.kind === "color").map((c) => c.label);
+    // Polo rayé (Beige) puis les couleurs du Polo uni, la plus grosse d'abord
+    expect(colors).toEqual(["006 Beige", "752 Bleu marine", "999 Noir"]);
+  });
+
+  it("la ligne catégorie totalise les produits, chaque produit ses couleurs", () => {
+    const jersey = sheets[0];
+    const cat = jersey.lines.find((l) => l.kind === "category")!;
+    expect(cat.total).toBe(46); // 30 + 10 + 6
+    expect(cat.bySize).toEqual({ S: 7, M: 15, L: 16, XL: 8 });
+    const uni = jersey.lines.find((l) => l.label === "AMPOLO_1 Polo uni")!;
+    expect(uni.total).toBe(16);
+  });
+
+  it("signale une référence absente du référentiel sans perdre ses quantités", () => {
+    const res = buildLancementSheets(parseLancementCsv(CSV), { AMPOLO_1: ["S", "M", "L", "XL"] });
+    expect(res.warnings.join(" ")).toContain("introuvable");
+    const total = res.sheets.reduce((s, x) => s + x.total, 0);
+    expect(total).toBe(54); // aucune pièce perdue : 46 + 8
+  });
+});
+
+describe("lancement de commande — ordre des tailles", () => {
+  it("fusionne des grilles différentes sans doublon", () => {
+    expect(mergeSizeOrder([["S", "M", "L"], ["M", "L", "XL"]])).toEqual(["S", "M", "L", "XL"]);
+  });
+
+  it("garde les tailles numériques triées", () => {
+    expect(mergeSizeOrder([["30", "32", "34"], ["29", "30"]])).toEqual(["29", "30", "32", "34"]);
+  });
+
+  it("tolère une grille vide", () => {
+    expect(mergeSizeOrder([[], ["TU"]])).toEqual(["TU"]);
+  });
+});
+
+describe("lancement de commande — classeur Excel", () => {
+  it("place les blocs de colonnes comme le modèle", () => {
+    // 7 tailles → A + 7 + 1 + 7 + 1 + 7 + 7 + 1 + 7 + 1 = 40 colonnes
+    const L = lancementLayout(7);
+    expect(L).toEqual({
+      qty: 2, qtyTotal: 9, site: 10, siteTotal: 17,
+      pct: 18, rea: 25, reaTotal: 32, total: 33, totalTotal: 40,
+    });
+    expect(lancementHeader(["S", "M"])).toEqual([
+      "Étiquettes de lignes", "S", "M", "Somme de Quantity",
+      "site S", "site M", "site Somme de Quantity",
+      "% réa S", "% réa M",
+      "rea S", "rea M", "rea Somme de Quantity",
+      "total S", "total M", "total Somme de Quantity",
+    ]);
+  });
+
+  it("convertit un index de colonne en lettres", () => {
+    expect([1, 26, 27, 40, 60].map(colLetter)).toEqual(["A", "Z", "AA", "AN", "BH"]);
+  });
+
+  it("écrit les formules et les couleurs attendues", async () => {
+    const { sheets } = buildLancementSheets(parseLancementCsv(CSV), SCALES);
+    const wb = buildLancementWorkbook(ExcelJS, sheets);
+    const buf = await wb.xlsx.writeBuffer();
+    const back = new ExcelJS.Workbook();
+    await back.xlsx.load(buf as ArrayBuffer);
+
+    const ws = back.getWorksheet("Jersey")!;
+    const L = lancementLayout(4); // S,M,L,XL
+    const formula = (r: number, c: number) => {
+      const v = ws.getCell(r, c).value;
+      return typeof v === "object" && v && "formula" in v ? (v as { formula: string }).formula : null;
+    };
+    const argb = (r: number, c: number) =>
+      (ws.getCell(r, c).fill as ExcelJS.FillPattern | undefined)?.fgColor?.argb;
+
+    // r2 = catégorie, r3 = produit, r4 = 1re couleur (formules ici seulement)
+    expect(ws.getCell(4, 1).value).toBe("006 Beige");
+    // 4 tailles : commandé B..E, total F | site G..J, total K | % réa L..O
+    //             réa P..S, total T | total U..X, total Y
+    expect(formula(4, L.pct)).toBe("B4/$F4"); // % réa S = S / total commandé
+    expect(formula(4, L.rea)).toBe("ROUNDUP(($F4*0.1)*L4,0.5)"); // réa = ARRONDI.SUP
+    expect(formula(4, L.total)).toBe("SUM(B4+G4+P4)"); // total = commandé + site + réa
+    expect(formula(4, L.reaTotal)).toBe("SUM(P4:S4)");
+    expect(formula(4, L.totalTotal)).toBe("SUM(U4:X4)");
+
+    // Les lignes de regroupement n'ont PAS de formule (le travail se fait à la couleur).
+    expect(formula(3, L.pct)).toBeNull();
+
+    // Couleurs : en-tête bleu / jaune / bleu / orange / vert
+    expect(argb(1, 1)).toBe("FF4472C4");
+    expect(argb(1, L.site)).toBe("FFFFFF00");
+    expect(argb(1, L.pct)).toBe("FF4472C4");
+    expect(argb(1, L.total)).toBe("FFFFC000");
+    expect(argb(1, L.totalTotal)).toBe("FF92D050");
+    // Cellules : site jaune (vide), % réa cyan, total orange
+    expect(ws.getCell(4, L.site).value).toBeNull();
+    expect(argb(4, L.site)).toBe("FFFFFF00");
+    expect(argb(4, L.pct)).toBe("FF00B0F0");
+    expect(argb(4, L.total)).toBe("FFFFC000");
+    expect(ws.getCell(4, L.pct).numFmt).toBe("0%");
+  }, 60000);
+
+  it("assainit les noms d'onglets (31 car. max, sans doublon)", () => {
+    const taken = new Set<string>();
+    expect(safeSheetName("Pièces à manches", taken)).toBe("Pièces à manches");
+    expect(safeSheetName("Pièces à manches", taken)).toBe("Pièces à manches (2)");
+    expect(safeSheetName("Cat/égorie: impossible*", taken)).toBe("Cat-égorie- impossible-");
+    expect(safeSheetName("A".repeat(40), taken)).toHaveLength(31);
+  });
+});

@@ -324,6 +324,31 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
   d'origine**, figée au moment du dépôt (pas à la génération, pour qu'un même import donne
   toujours le même nom). Ville inconnue → nom sans ville + alerte à l'écran.
 
+## Lancement de commande (`/lancement-commande`)
+- **Rôle** : transformer l'export TIO **« commandes à la couleur »** (CSV) en **tableaux de
+  lancement** pour le service achat : **un onglet par catégorie**, produits **triés par
+  quantité décroissante**, couleurs détaillées dessous, avec les colonnes de travail.
+- **Source** : fichier `.csv` déposé. Logique pure `src/lib/lancement-commande.ts` (parsing +
+  structure) et `src/lib/lancement-commande-xlsx.ts` (classeur), toutes deux **testées**.
+- ⚠️ **`T0..T11` sont des POSITIONS, pas des noms de tailles** : `T0` = **1ʳᵉ taille de la
+  grille du PRODUIT** (`Product.sizeScale`, via `POST /api/lancement-commande`).
+  **Ne PAS utiliser `SizeType`** : ses positions en base ne suivent pas l'ordre d'habillage
+  (`HAU` y commence par **M**, pas par S), et une déclinaison peut avoir une grille **plus
+  courte** que son type (`THSPT5P_201` = `29…44` alors que `PAN` = `28…44`) — le décalage
+  ferait glisser toutes les tailles d'un cran. Une référence introuvable au référentiel est
+  **signalée** et ses tailles restent nommées `T0, T1…` (aucune pièce perdue).
+- **Colonnes générées** (identiques au modèle du service achat) : `Étiquettes de lignes` ·
+  *tailles* + `Somme de Quantity` · `site …` + total · `% réa …` · `rea …` + total ·
+  `total …` + total.
+- **Formules** (sur les lignes **couleur** uniquement — c'est là que le travail se fait) :
+  `% réa` = taille ÷ total commandé · `rea` = `ARRONDI.SUP((total × 10 %) × % réa ; 0,5)` ·
+  `total` = commandé + site + réa · les `Somme` sont des `SOMME()`.
+- **Couleurs** : en-têtes **bleu** `4472C4` (commandé, % réa, réa), **jaune** `FFFF00` (site,
+  à remplir à la main → cellules laissées **vides**), **orange** `FFC000` (total),
+  **vert** `92D050` (total général) ; cellules `% réa` en **cyan** `00B0F0`.
+- **Écrit avec `exceljs`** (et non `xlsx`) : c'est la seule des deux à écrire **couleurs ET
+  formules**. Chargée en **import dynamique** pour ne pas alourdir le reste de l'app.
+
 ## BtoC (`/btoc`)
 - **Rôle** : piloter la boutique en ligne (stats, exports, clients, VIP Brevo).
 - **Source** : tables `Btoc*` (sync WooCommerce), `HistOrder` (historique autre Woo),
