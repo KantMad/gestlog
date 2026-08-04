@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { handleApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { parseSizeScale } from "@/lib/utils";
+import { sortSizeScale } from "@/lib/lancement-commande";
 
 export const maxDuration = 60;
 
@@ -36,9 +37,12 @@ export async function POST(request: NextRequest) {
       select: { reference: true, sizeScale: true },
     });
 
+    // ⚠️ On DÉDOUBLONNE et on remet dans l'ordre d'habillage avant de comparer les
+    // longueurs : le référentiel contient des grilles corrompues (`S,S,S,S,S,S,M,M,…`
+    // sur 42 entrées, `TU,TU`) qui, brutes, gagneraient toujours le « plus complète ».
     const sizeScales: Record<string, string[]> = {};
     for (const p of products) {
-      const scale = parseSizeScale(p.sizeScale).filter(Boolean);
+      const scale = sortSizeScale(parseSizeScale(p.sizeScale));
       if (scale.length === 0) continue;
       const current = sizeScales[p.reference];
       if (!current || scale.length > current.length) sizeScales[p.reference] = scale;

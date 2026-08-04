@@ -337,6 +337,19 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
   courte** que son type (`THSPT5P_201` = `29…44` alors que `PAN` = `28…44`) — le décalage
   ferait glisser toutes les tailles d'un cran. Une référence introuvable au référentiel est
   **signalée** et ses tailles restent nommées `T0, T1…` (aucune pièce perdue).
+- 🔴 **…mais l'ORDRE de `Product.sizeScale` n'est pas fiable non plus** — audit du
+  24/07/2026 : **893 produits sur 8 887 (10 %)** ont une grille abîmée, dont **846
+  désordonnées** (`M,L,XL,S,2XL…` — le S en 4ᵉ position, l'ordre du `SizeType` ; ou
+  `42,30,31,…,28,44,29`) et **47 avec doublons** (`TU,TU`, et jusqu'à
+  `S,S,S,S,S,S,M,M,…` sur **42 entrées**). Sans garde-fou, cela produisait un onglet Jersey
+  à **42 colonnes** (« S » répété 6 fois) et un « S » rangé après « XL » dans Chemise.
+  → `sortSizeScale()` **dédoublonne et remet chaque grille dans l'ordre d'habillage
+  canonique** (`sizeRank` : taille unique < lettres < numériques, `XXL`≡`2XL`), à la fois
+  côté API (choix de la grille la plus complète **après** nettoyage) et côté construction
+  des onglets. Testé sur les grilles réellement corrompues.
+  ⚠️ **La cause est en amont (synchro TIO) et n'est pas corrigée** : d'autres écrans lisant
+  `sizeScale` peuvent être affectés (notamment la **règle des trous de taille** en
+  répartition, qui dépend de l'ordre de la grille).
 - **Colonnes générées** (identiques au modèle du service achat) : `Étiquettes de lignes` ·
   *tailles* + `Somme de Quantity` · `site …` + total · `% réa …` · `rea …` + total ·
   `total …` + total.

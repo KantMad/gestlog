@@ -142,60 +142,67 @@ export function parseLancementCsv(text: string): LancementCsvRow[] {
 }
 
 // ─── Ordre des tailles ───────────────────────────────────────────────────────
+//
+// ⚠️ On ne peut PAS se fier à l'ordre stocké dans `Product.sizeScale` : le référentiel
+// contient des grilles **désordonnées** (`M,L,XL,S,2XL…` — le S en 4e position),
+// **mélangées** (`42,30,31,…,28,44,29`) et même **avec doublons**
+// (`S,S,S,S,S,S,M,M,…` sur 42 entrées, `TU,TU`). S'y fier produisait des onglets à
+// 42 colonnes et un « S » rangé après « XL ».
+// On dédoublonne donc chaque grille et on la remet dans l'ORDRE D'HABILLAGE canonique.
 
-// Ordre d'habillage de référence, pour départager des tailles qu'aucune grille ne
-// met côte à côte. Les tailles NUMÉRIQUES (jeans, vestes) se trient entre elles.
-const CANONICAL = [
-  "TU", "ONE SIZE", "XS", "S", "S/M", "S-M", "M", "M/L", "L", "L/XL", "L-XL",
-  "XL", "XL/2XL", "2XL", "2XL-3XL", "3XL", "3XL/4XL", "4XL", "5XL", "6XL",
-];
-const canonRank = (s: string) => {
-  const i = CANONICAL.indexOf(s.toUpperCase());
-  return i >= 0 ? i : 999;
-};
-const numOf = (s: string) => {
-  const m = s.match(/^(\d+)/);
-  return m ? parseInt(m[1], 10) : NaN;
+const LETTER_ORDER = ["XXS", "XS", "S", "M", "L", "XL", "2XL", "3XL", "4XL", "5XL", "6XL"];
+
+/** `XXL` → `2XL`, `XXXL` → `3XL`, espaces retirés. */
+const canonSize = (s: string): string => {
+  const u = norm(s).toUpperCase().replace(/\s+/g, "");
+  if (u === "XXL") return "2XL";
+  if (u === "XXXL") return "3XL";
+  return u;
 };
 
 /**
- * Ordonne l'union des tailles d'une catégorie. On part de la grille la plus longue
- * (elle porte l'ordre d'habillage réel), puis on insère les tailles des autres grilles
- * à leur place relative. Repli : ordre canonique, puis valeur numérique.
+ * Rang d'une taille dans l'ordre d'habillage. Les familles restent groupées :
+ * taille unique < tailles lettres < tailles numériques.
  */
-export function mergeSizeOrder(scales: string[][]): string[] {
-  const nonEmpty = scales.filter((s) => s.length > 0);
-  if (nonEmpty.length === 0) return [];
-  const base = [...nonEmpty].sort((a, b) => b.length - a.length)[0].slice();
+export function sizeRank(size: string): number {
+  const u = canonSize(size);
+  if (u === "TU" || u === "ONESIZE" || u === "U") return 0;
 
-  for (const scale of nonEmpty) {
-    for (let i = 0; i < scale.length; i++) {
-      const size = scale[i];
-      if (base.includes(size)) continue;
-      // Insérer juste après la taille précédente de SA grille si on la connaît,
-      // sinon juste avant la suivante ; à défaut, à la fin (trié ensuite).
-      let at = -1;
-      for (let j = i - 1; j >= 0 && at < 0; j--) {
-        const k = base.indexOf(scale[j]);
-        if (k >= 0) at = k + 1;
-      }
-      if (at < 0) {
-        for (let j = i + 1; j < scale.length && at < 0; j++) {
-          const k = base.indexOf(scale[j]);
-          if (k >= 0) at = k;
-        }
-      }
-      if (at < 0) at = base.length;
-      base.splice(at, 0, size);
-    }
+  // Numériques : « 38 », et plages « 39-42 » (rangées sur leur borne basse).
+  const numeric = u.match(/^(\d+)(?:[-/](\d+))?$/);
+  if (numeric) return 1000 + parseInt(numeric[1], 10) + (numeric[2] ? 0.5 : 0);
+
+  const letter = LETTER_ORDER.indexOf(u);
+  if (letter >= 0) return 10 + letter;
+
+  // Groupées « S-M », « L/XL » : entre leurs deux bornes.
+  const grouped = u.match(/^([A-Z0-9]+)[-/]([A-Z0-9]+)$/);
+  if (grouped) {
+    const a = LETTER_ORDER.indexOf(grouped[1]);
+    const b = LETTER_ORDER.indexOf(grouped[2]);
+    if (a >= 0 && b >= 0) return 10 + (a + b) / 2;
   }
+  return 900; // inconnue → après les tailles connues, avant les numériques
+}
 
-  // Les tailles numériques restent triées entre elles (36 avant 38…), sans toucher
-  // à l'ordre des tailles lettres qui vient des grilles.
-  const nums = base.filter((s) => !isNaN(numOf(s)));
-  const sortedNums = [...nums].sort((a, b) => numOf(a) - numOf(b) || canonRank(a) - canonRank(b));
-  let n = 0;
-  return base.map((s) => (isNaN(numOf(s)) ? s : sortedNums[n++]));
+/** Dédoublonne une grille et la remet dans l'ordre d'habillage. */
+export function sortSizeScale(scale: string[]): string[] {
+  const seen = new Set<string>();
+  const clean: string[] = [];
+  for (const raw of scale) {
+    const s = norm(raw);
+    if (!s) continue;
+    const k = canonSize(s);
+    if (seen.has(k)) continue;
+    seen.add(k);
+    clean.push(s);
+  }
+  return clean.sort((a, b) => sizeRank(a) - sizeRank(b) || a.localeCompare(b, "fr"));
+}
+
+/** Ordonne l'union des tailles de plusieurs grilles (ordre d'habillage, sans doublon). */
+export function mergeSizeOrder(scales: string[][]): string[] {
+  return sortSizeScale(scales.flat());
 }
 
 // ─── Construction des onglets ────────────────────────────────────────────────
@@ -229,10 +236,18 @@ export function buildLancementSheets(
   const missingScale = new Set<string>();
   const shortScale = new Set<string>();
 
+  // Grilles nettoyées (dédoublonnées + remises dans l'ordre d'habillage) : le
+  // référentiel en contient de désordonnées et de doublonnées, cf. sortSizeScale.
+  const cleanScales: Record<string, string[]> = {};
+  for (const [ref, scale] of Object.entries(sizeScales)) {
+    const clean = sortSizeScale(scale || []);
+    if (clean.length > 0) cleanScales[ref] = clean;
+  }
+
   // Nom de la taille pour une position donnée, selon la grille du produit.
   const sizeAt = (reference: string, pos: number): string => {
-    const scale = sizeScales[reference];
-    if (!scale || scale.length === 0) {
+    const scale = cleanScales[reference];
+    if (!scale) {
       missingScale.add(reference);
       return `T${pos}`;
     }
@@ -300,7 +315,7 @@ export function buildLancementSheets(
   const sheets: LancementSheet[] = [];
   for (const [category, products] of byCategory) {
     const sorted = [...products.values()].sort((a, b) => b.total - a.total || a.label.localeCompare(b.label, "fr"));
-    const sizes = mergeSizeOrder(sorted.map((p) => sizeScales[p.reference] || Object.keys(p.bySize)));
+    const sizes = mergeSizeOrder(sorted.map((p) => cleanScales[p.reference] || Object.keys(p.bySize)));
     // Tailles réellement utilisées, dans l'ordre — une colonne vide n'a pas d'intérêt.
     const used = new Set<string>();
     for (const p of sorted) for (const s of Object.keys(p.bySize)) used.add(s);

@@ -4,6 +4,7 @@ import {
   parseLancementCsv,
   buildLancementSheets,
   mergeSizeOrder,
+  sortSizeScale,
   safeSheetName,
 } from "./lancement-commande";
 import {
@@ -104,6 +105,30 @@ describe("lancement de commande — ordre des tailles", () => {
 
   it("tolère une grille vide", () => {
     expect(mergeSizeOrder([[], ["TU"]])).toEqual(["TU"]);
+  });
+
+  // ⚠️ Le référentiel contient de VRAIES grilles corrompues : s'y fier produisait un
+  // onglet Jersey à 42 colonnes (« S » répété 6 fois) et un « S » rangé après « XL ».
+  it("répare les grilles corrompues du référentiel", () => {
+    // doublons (cas réel JMPOMC_C012, 42 entrées)
+    expect(sortSizeScale("S,S,S,S,M,M,M,M,L,L,L,L".split(","))).toEqual(["S", "M", "L"]);
+    // ordre d'habillage faux (le S en 4e position — ordre du SizeType HAU en base)
+    expect(sortSizeScale("M,L,XL,S,2XL,3XL,4XL".split(","))).toEqual([
+      "S", "M", "L", "XL", "2XL", "3XL", "4XL",
+    ]);
+    // numériques mélangées (cas réel GMD101_D040)
+    expect(sortSizeScale("42,30,31,32,33,34,36,38,40,28,44,29".split(","))).toEqual([
+      "28", "29", "30", "31", "32", "33", "34", "36", "38", "40", "42", "44",
+    ]);
+    expect(sortSizeScale(["TU", "TU"])).toEqual(["TU"]);
+    // XXL/XXXL sont des synonymes de 2XL/3XL → pas de doublon
+    expect(sortSizeScale(["XXL", "2XL", "L"])).toEqual(["L", "XXL"]);
+  });
+
+  it("groupe les familles : taille unique, puis lettres, puis numériques", () => {
+    expect(mergeSizeOrder([["39-42", "43-46"], ["M", "L"], ["TU"], ["S-M", "L-XL"]])).toEqual([
+      "TU", "S-M", "M", "L", "L-XL", "39-42", "43-46",
+    ]);
   });
 });
 
