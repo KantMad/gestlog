@@ -888,8 +888,9 @@ export const HELP_THEMES: HelpTheme[] = [
             h: "Simuler une remise",
             lines: [
               "Saisis un pourcentage : les prix et le montant total se recalculent instantanément.",
-              "La remise s'applique au **prix public**. Le **prix de gros** reste affiché tel quel — il ne se brade pas, c'est ton coût : tu vois donc tout de suite ce qui reste comme marge.",
-              "Le montant total tient compte de la remise, ce qui donne directement la valeur de l'opération.",
+              "La remise s'applique au **prix de gros** — celui auquel les boutiques sont facturées, donc celui qu'on brade pour écouler du stock.",
+              "Le **prix public** reste affiché au plein tarif : il ne bouge pas, il sert de repère pour situer le positionnement du produit.",
+              "Le **Montant** est donc directement ce que rapporterait l'opération, remise déduite.",
             ],
           },
           {
@@ -898,7 +899,7 @@ export const HELP_THEMES: HelpTheme[] = [
               "Le stock affiché est le **stock physique de l'entrepôt**, synchronisé depuis TIO.",
               "⚠️ Ce n'est **pas** le même « disponible » que dans la Répartition : là-bas, c'est ce qui reste à distribuer aux boutiques (reçu moins ce qui est déjà réparti). Ici, c'est ce qu'il y a réellement en stock. Les deux chiffres n'ont pas à être identiques.",
               "Le filtre **saison** retient les produits **commandés** dans les saisons choisies. Un produit permanent, commandé sur plusieurs saisons, peut donc apparaître dans plusieurs.",
-              "Quelques produits n'ont pas de prix public : leurs pièces sont comptées mais **non valorisées**, et l'écran te le signale.",
+              "Tous les produits en stock ont un prix de gros, donc le montant est complet. Si un produit venait à en manquer, ses pièces seraient comptées mais **non valorisées**, et l'écran te le signalerait.",
             ],
           },
         ],

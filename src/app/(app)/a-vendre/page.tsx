@@ -129,11 +129,12 @@ export default function AVendrePage() {
     const header = [
       "Référence", "Couleur", "Désignation", "Catégorie", "Sous-catégorie",
       ...sizeCols, "Total dispo", "Trous",
-      "Prix public", pct > 0 ? `Prix remisé (-${pct}%)` : "Prix remisé",
-      "Valeur remisée", "Prix de gros", "Valeur au coût",
+      "Prix de gros", pct > 0 ? `Prix de gros remisé (-${pct}%)` : "Prix de gros remisé",
+      "Montant", "Prix public", "Valeur au prix public",
     ];
+    const remiseCol = header[header.length - 4];
     const data = visible.map((r) => {
-      const sale = discounted(r.salePrice, pct);
+      const wholesale = discounted(r.costPrice, pct);
       const row: Record<string, string | number> = {
         "Référence": r.reference,
         "Couleur": colorText(r.color, r.colorLabel),
@@ -144,19 +145,20 @@ export default function AVendrePage() {
       for (const s of sizeCols) row[s] = r.stock[s] ?? "";
       row["Total dispo"] = r.total;
       row["Trous"] = r.gaps;
-      row["Prix public"] = r.salePrice ?? "";
-      row[header[header.length - 4]] = sale ?? "";
-      row["Valeur remisée"] = sale != null ? Math.round(sale * r.total * 100) / 100 : "";
       row["Prix de gros"] = r.costPrice ?? "";
-      row["Valeur au coût"] = r.costPrice != null ? Math.round(r.costPrice * r.total * 100) / 100 : "";
+      row[remiseCol] = wholesale ?? "";
+      row["Montant"] = wholesale != null ? Math.round(wholesale * r.total * 100) / 100 : "";
+      row["Prix public"] = r.salePrice ?? "";
+      row["Valeur au prix public"] =
+        r.salePrice != null ? Math.round(r.salePrice * r.total * 100) / 100 : "";
       return row;
     });
     // Ligne de totaux, pour retrouver les chiffres de l'écran dans le fichier.
     const totalRow: Record<string, string | number> = { "Référence": "TOTAL" };
     for (const s of sizeCols) totalRow[s] = visible.reduce((a, r) => a + (r.stock[s] || 0), 0);
     totalRow["Total dispo"] = totals.pieces;
-    totalRow["Valeur remisée"] = totals.saleValue;
-    totalRow["Valeur au coût"] = totals.costValue;
+    totalRow["Montant"] = totals.wholesaleValue;
+    totalRow["Valeur au prix public"] = totals.retailValue;
     data.push(totalRow);
 
     const ws = XLSX.utils.json_to_sheet(data, { header });
@@ -236,7 +238,8 @@ export default function AVendrePage() {
                   className="h-9"
                 />
                 <p className="text-[11px] text-muted-foreground">
-                  Appliquée au prix public. Le prix de gros n&apos;est pas remisé.
+                  Appliquée au <strong>prix de gros</strong> (facturé aux boutiques). Le prix
+                  public reste au plein tarif.
                 </p>
               </div>
               <div className="space-y-1.5">
@@ -310,21 +313,21 @@ export default function AVendrePage() {
           </Card>
           <Card>
             <CardContent className="pt-6">
-              <div className="text-2xl font-bold text-emerald-600">{euro(totals.saleValue)}</div>
+              <div className="text-2xl font-bold text-emerald-600">{euro(totals.wholesaleValue)}</div>
               <p className="text-sm text-muted-foreground">
-                Montant {pct > 0 ? `remise ${pct} % déduite` : "au prix public"}
+                Montant {pct > 0 ? `remise ${pct} % déduite` : "au prix de gros"}
               </p>
               {totals.piecesWithoutPrice > 0 && (
                 <p className="mt-1 text-[11px] text-amber-600">
-                  {formatNumber(totals.piecesWithoutPrice)} pièce(s) sans prix public — non valorisées
+                  {formatNumber(totals.piecesWithoutPrice)} pièce(s) sans prix de gros — non valorisées
                 </p>
               )}
             </CardContent>
           </Card>
           <Card>
             <CardContent className="pt-6">
-              <div className="text-2xl font-bold">{euro(totals.costValue)}</div>
-              <p className="text-sm text-muted-foreground">Valeur au prix de gros</p>
+              <div className="text-2xl font-bold">{euro(totals.retailValue)}</div>
+              <p className="text-sm text-muted-foreground">Valeur au prix public (non remisée)</p>
             </CardContent>
           </Card>
         </div>
@@ -358,17 +361,17 @@ export default function AVendrePage() {
                       ))}
                       <TableHead className="text-right">Dispo</TableHead>
                       <TableHead className="text-right">Trous</TableHead>
-                      <TableHead className="text-right whitespace-nowrap">Prix public</TableHead>
+                      <TableHead className="text-right whitespace-nowrap">Prix gros</TableHead>
                       {pct > 0 && (
                         <TableHead className="text-right whitespace-nowrap">−{pct} %</TableHead>
                       )}
                       <TableHead className="text-right whitespace-nowrap">Montant</TableHead>
-                      <TableHead className="text-right whitespace-nowrap">Prix gros</TableHead>
+                      <TableHead className="text-right whitespace-nowrap">Prix public</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {visible.slice(0, 300).map((r) => {
-                      const sale = discounted(r.salePrice, pct);
+                      const wholesale = discounted(r.costPrice, pct);
                       return (
                         <TableRow key={r.productId}>
                           <TableCell className="whitespace-nowrap font-mono text-sm">
@@ -413,18 +416,18 @@ export default function AVendrePage() {
                             )}
                           </TableCell>
                           <TableCell className="text-right tabular-nums">
-                            {r.salePrice != null ? euro(r.salePrice) : <span className="text-amber-600">—</span>}
+                            {r.costPrice != null ? euro(r.costPrice) : <span className="text-amber-600">—</span>}
                           </TableCell>
                           {pct > 0 && (
                             <TableCell className="text-right tabular-nums text-emerald-700">
-                              {sale != null ? euro(sale) : "—"}
+                              {wholesale != null ? euro(wholesale) : "—"}
                             </TableCell>
                           )}
                           <TableCell className="text-right font-medium tabular-nums">
-                            {sale != null ? euro(sale * r.total) : "—"}
+                            {wholesale != null ? euro(wholesale * r.total) : "—"}
                           </TableCell>
                           <TableCell className="text-right tabular-nums text-muted-foreground">
-                            {r.costPrice != null ? euro(r.costPrice) : "—"}
+                            {r.salePrice != null ? euro(r.salePrice) : "—"}
                           </TableCell>
                         </TableRow>
                       );

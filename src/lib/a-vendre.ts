@@ -60,32 +60,38 @@ export function discounted(price: number | null, percent: number): number | null
 export interface AVendreTotals {
   products: number;
   pieces: number;
-  /** Valeur au prix public, remise déduite. */
-  saleValue: number;
-  /** Valeur au prix de gros (non remisée : c'est un coût). */
-  costValue: number;
-  /** Pièces dont le prix public est inconnu → non valorisées. */
+  /** Montant de l'opération : valeur au **prix de gros**, remise déduite. */
+  wholesaleValue: number;
+  /** Valeur au prix public, **jamais remisée** — sert de repère de positionnement. */
+  retailValue: number;
+  /** Pièces sans prix de gros → non valorisées. */
   piecesWithoutPrice: number;
 }
 
-/** Totaux d'une liste, remise appliquée au prix public uniquement. */
+/**
+ * Totaux d'une liste.
+ *
+ * ⚠️ La remise s'applique au **PRIX DE GROS** : c'est le prix auquel les boutiques sont
+ * facturées, donc celui qu'on brade pour écouler du stock. Le prix public reste au plein
+ * tarif — il ne sert que de repère (positionnement, coefficient).
+ */
 export function computeTotals(rows: AVendreRow[], discountPercent: number): AVendreTotals {
   let pieces = 0;
-  let saleValue = 0;
-  let costValue = 0;
+  let wholesaleValue = 0;
+  let retailValue = 0;
   let piecesWithoutPrice = 0;
   for (const r of rows) {
     pieces += r.total;
-    const sale = discounted(r.salePrice, discountPercent);
-    if (sale == null) piecesWithoutPrice += r.total;
-    else saleValue += sale * r.total;
-    if (r.costPrice != null) costValue += r.costPrice * r.total;
+    const wholesale = discounted(r.costPrice, discountPercent);
+    if (wholesale == null) piecesWithoutPrice += r.total;
+    else wholesaleValue += wholesale * r.total;
+    if (r.salePrice != null) retailValue += r.salePrice * r.total;
   }
   return {
     products: rows.length,
     pieces,
-    saleValue: Math.round(saleValue * 100) / 100,
-    costValue: Math.round(costValue * 100) / 100,
+    wholesaleValue: Math.round(wholesaleValue * 100) / 100,
+    retailValue: Math.round(retailValue * 100) / 100,
     piecesWithoutPrice,
   };
 }

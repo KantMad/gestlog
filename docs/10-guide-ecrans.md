@@ -383,11 +383,15 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
   rattachables ; 60 ne le sont pas). **1 118 produits appartiennent à plusieurs saisons**
   (produits permanents) → le filtre saison est **facultatif et multi-saisons**, un même
   produit peut ressortir sur plusieurs.
-- **Valorisation** : deux colonnes — **prix public** (`salePrice`) et **prix de gros**
-  (`costPrice`). La **remise s'applique au prix public uniquement** (le coût n'est pas
-  remisé). Les pièces **sans prix public** ne sont pas valorisées et sont **signalées**
-  (7 produits aujourd'hui).
-- **Tri** : par **valeur décroissante** (stock × prix public) — le plus gros dormant d'abord.
+- **Valorisation** : la **remise s'applique au PRIX DE GROS** (`costPrice`) — c'est le prix
+  facturé aux boutiques, donc celui qu'on brade pour déstocker. Le **prix public**
+  (`salePrice`) est affiché **au plein tarif**, comme repère de positionnement, et n'est
+  jamais remisé. Les pièces sans prix de gros ne sont pas valorisées et sont **signalées**
+  (aujourd'hui : **0** — les 1 560 produits en stock ont tous un prix de gros, alors que 7
+  n'ont pas de prix public).
+  *Valeur du stock actuel : **1 412 856 €** au gros (4 209 138 € au public).*
+- **Tri** : par **valeur décroissante au prix de gros** — ce qui immobilise le plus d'argent
+  d'abord.
 - **Export Excel** : toute la liste filtrée (l'écran n'affiche que les 300 premières lignes),
   avec une **ligne TOTAL** pour retrouver les chiffres de l'écran.
 

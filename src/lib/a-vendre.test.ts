@@ -51,16 +51,25 @@ describe("à vendre — remise et totaux", () => {
       sizeScale: ["TU"], stock: { TU: 10 }, total: 10, gaps: 0, salePrice: null, costPrice: 20 },
   ];
 
-  it("totalise pièces, valeur remisée et valeur au coût", () => {
+  it("totalise pièces, montant remisé (prix de GROS) et valeur au public", () => {
     const t = computeTotals(rows, 30);
     expect(t.products).toBe(2);
     expect(t.pieces).toBe(15);
-    expect(t.saleValue).toBe(350); // 5 × 70 ; le produit sans prix n'est pas valorisé
-    expect(t.costValue).toBe(400); // 5×40 + 10×20 — le coût n'est PAS remisé
-    expect(t.piecesWithoutPrice).toBe(10);
+    // Remise sur le prix de GROS : 5 × (40 × 0,7) + 10 × (20 × 0,7) = 140 + 140
+    expect(t.wholesaleValue).toBe(280);
+    // Le prix public n'est JAMAIS remisé ; le produit sans prix public n'est pas valorisé
+    expect(t.retailValue).toBe(500);
+    expect(t.piecesWithoutPrice).toBe(0); // les deux ont un prix de gros
   });
 
-  it("sans remise, la valeur publique est le plein tarif", () => {
-    expect(computeTotals(rows, 0).saleValue).toBe(500);
+  it("signale les pièces sans prix de GROS", () => {
+    const sansGros: AVendreRow[] = [{ ...rows[0], costPrice: null }];
+    const t = computeTotals(sansGros, 30);
+    expect(t.wholesaleValue).toBe(0);
+    expect(t.piecesWithoutPrice).toBe(5);
+  });
+
+  it("sans remise, le montant est le plein tarif de gros", () => {
+    expect(computeTotals(rows, 0).wholesaleValue).toBe(400); // 5×40 + 10×20
   });
 });
