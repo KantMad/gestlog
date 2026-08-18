@@ -862,6 +862,48 @@ export const HELP_THEMES: HelpTheme[] = [
         ],
       },
       {
+        id: "a-vendre",
+        icon: "🏷️",
+        title: "À vendre : écouler le stock",
+        keywords: "a vendre stock ecouler destockage trou taille remise pourcentage disponible entrepot solde",
+        sections: [
+          {
+            lines: [
+              "Cet écran répond à une question simple : **qu'est-ce qu'on a en stock, et qu'est-ce qui partira le plus facilement ?**",
+              "Tu poses tes critères, la liste s'affiche avec les tailles disponibles, et tu vois immédiatement **combien de pièces** et **quel montant** ça représente.",
+            ],
+            tip: "Tout est exportable en Excel — l'écran n'affiche que les 300 premières lignes, l'export contient tout. 📄",
+          },
+          {
+            h: "Le critère clé : les trous de tailles",
+            lines: [
+              "Un produit dont il reste **toutes les tailles à la suite** se vend bien. Un produit dépareillé — du S, plus de M, un peu de L — beaucoup moins.",
+              "Un **trou**, c'est une taille à zéro **encadrée** par des tailles en stock. Exemple : `S:15 · M:0 · L:7 · XL:6` → **1 trou** (le M manque au milieu).",
+              "⚠️ Les tailles absentes **en bout de gamme ne comptent pas** : `S:5 · M:13 · L:17 · XL:14 · 3XL:0` → **0 trou**. La gamme s'arrête simplement plus tôt, elle n'est pas trouée.",
+              "Mets **0** pour ne voir que les gammes impeccables, **1 ou 2** pour élargir, ou laisse vide pour tout voir.",
+            ],
+            tip: "Sur le stock actuel, environ **2 produits sur 3** n'ont aucun trou. 👍",
+          },
+          {
+            h: "Simuler une remise",
+            lines: [
+              "Saisis un pourcentage : les prix et le montant total se recalculent instantanément.",
+              "La remise s'applique au **prix public**. Le **prix de gros** reste affiché tel quel — il ne se brade pas, c'est ton coût : tu vois donc tout de suite ce qui reste comme marge.",
+              "Le montant total tient compte de la remise, ce qui donne directement la valeur de l'opération.",
+            ],
+          },
+          {
+            h: "Bon à savoir",
+            lines: [
+              "Le stock affiché est le **stock physique de l'entrepôt**, synchronisé depuis TIO.",
+              "⚠️ Ce n'est **pas** le même « disponible » que dans la Répartition : là-bas, c'est ce qui reste à distribuer aux boutiques (reçu moins ce qui est déjà réparti). Ici, c'est ce qu'il y a réellement en stock. Les deux chiffres n'ont pas à être identiques.",
+              "Le filtre **saison** retient les produits **commandés** dans les saisons choisies. Un produit permanent, commandé sur plusieurs saisons, peut donc apparaître dans plusieurs.",
+              "Quelques produits n'ont pas de prix public : leurs pièces sont comptées mais **non valorisées**, et l'écran te le signale.",
+            ],
+          },
+        ],
+      },
+      {
         id: "lancement-commande",
         icon: "🚀",
         title: "Lancement de commande",

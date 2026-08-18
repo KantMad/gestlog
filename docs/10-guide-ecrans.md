@@ -362,6 +362,35 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
 - **Écrit avec `exceljs`** (et non `xlsx`) : c'est la seule des deux à écrire **couleurs ET
   formules**. Chargée en **import dynamique** pour ne pas alourdir le reste de l'app.
 
+## À vendre (`/a-vendre`)
+- **Rôle** : repérer le **stock à écouler en priorité** — quels produits-couleurs sont
+  disponibles, en quelles tailles, ce qu'ils représentent en valeur, et simuler une remise.
+- **Source** : **`StockEntry`** (stock physique entrepôt, synchronisé depuis TIO) + `Product`
+  pour la grille, les catégories et les prix. Logique pure `src/lib/a-vendre.ts` (testée).
+  ⚠️ Jusqu'ici `StockEntry` n'était **exploité par aucun écran**.
+- 🔴 **« Disponible » ici ≠ « disponible » de la Répartition.** Ici c'est le **stock physique
+  en entrepôt** ; là-bas c'est `reçu − échantillons − déjà réparti`, qui répond à « que
+  puis-je encore distribuer aux boutiques ? ». Les deux chiffres n'ont pas à coïncider.
+- **Critères** : trous de tailles autorisés · quantité min. **à la couleur** · saisons ·
+  catégories · sous-catégories · recherche libre · **% de remise** (simulation).
+- ⚠️ **Définition d'un « trou »** : une taille à **0 encadrée par des tailles en stock**.
+  Les tailles absentes **en bout de gamme ne comptent pas** (`S:5 M:13 L:17 XL:14 3XL:0` = 0
+  trou : la gamme s'arrête, elle n'est pas trouée ; `S:15 M:0 L:7` = 1 trou). C'est ce qui
+  distingue un assortiment vendable d'un fond de série dépareillé.
+  *Sur le stock actuel : 1 038 produits sans trou sur 1 560.*
+- ⚠️ **Le lien produit → saison n'existe pas en base** (`Product` n'a pas de saison) : il est
+  reconstitué via les **commandes clients** (1 500 des 1 560 produits en stock y sont
+  rattachables ; 60 ne le sont pas). **1 118 produits appartiennent à plusieurs saisons**
+  (produits permanents) → le filtre saison est **facultatif et multi-saisons**, un même
+  produit peut ressortir sur plusieurs.
+- **Valorisation** : deux colonnes — **prix public** (`salePrice`) et **prix de gros**
+  (`costPrice`). La **remise s'applique au prix public uniquement** (le coût n'est pas
+  remisé). Les pièces **sans prix public** ne sont pas valorisées et sont **signalées**
+  (7 produits aujourd'hui).
+- **Tri** : par **valeur décroissante** (stock × prix public) — le plus gros dormant d'abord.
+- **Export Excel** : toute la liste filtrée (l'écran n'affiche que les 300 premières lignes),
+  avec une **ligne TOTAL** pour retrouver les chiffres de l'écran.
+
 ## BtoC (`/btoc`)
 - **Rôle** : piloter la boutique en ligne (stats, exports, clients, VIP Brevo).
 - **Source** : tables `Btoc*` (sync WooCommerce), `HistOrder` (historique autre Woo),

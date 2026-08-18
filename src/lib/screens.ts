@@ -20,6 +20,7 @@ export const APP_SCREENS: { key: string; label: string }[] = [
   { key: "/repartition", label: "Répartition magasin" },
   { key: "/integration-cc", label: "Fichier d'intégration CC" },
   { key: "/lancement-commande", label: "Lancement de commande" },
+  { key: "/a-vendre", label: "À vendre" },
   { key: "/controle-commandes", label: "Contrôle commandes" },
   { key: "/export", label: "Exports" },
   { key: "/btoc", label: "BtoC" },
@@ -52,6 +53,7 @@ export function parseScreenAccess(raw: unknown): string[] | null {
 // `/api/statistics/{season,charts}` ; une utilisatrice ayant « Tableau de bord » sans
 // « Statistiques » recevait 403 sur ses propres données et la page plantait.
 const API_SCREEN_MAP: [string, string[]][] = [
+  ["/api/a-vendre", ["/a-vendre"]],
   ["/api/allocation", ["/allocation"]],
   // Les échantillons retirent du disponible à la répartition → accessibles aussi à qui
   // gère la répartition, sans devoir cocher deux écrans.

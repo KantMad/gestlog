@@ -32,6 +32,7 @@ import {
   FlaskConical,
   FileSpreadsheet,
   Rocket,
+  Tags,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
@@ -58,6 +59,7 @@ const NAV_ITEMS = [
   { href: "/repartition", label: "Répartition magasin", icon: Store },
   { href: "/integration-cc", label: "Fichier d'intégration CC", icon: FileSpreadsheet },
   { href: "/lancement-commande", label: "Lancement de commande", icon: Rocket },
+  { href: "/a-vendre", label: "À vendre", icon: Tags },
   { href: "/controle-commandes", label: "Contrôle commandes", icon: ScanSearch },
   { href: "/export", label: "Exports", icon: Download },
   { href: "/btoc", label: "BtoC", icon: ShoppingBag },
