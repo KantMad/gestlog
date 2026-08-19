@@ -340,7 +340,7 @@ export default function AVendrePage() {
                 {loading ? "Chargement…" : `${formatNumber(visible.length)} produit(s)-couleur`}
               </CardTitle>
               <span className="text-xs text-muted-foreground">
-                Triés par valeur décroissante — le plus gros stock à écouler en premier
+                Triés par quantité décroissante — le plus gros stock à écouler en premier
               </span>
             </div>
           </CardHeader>

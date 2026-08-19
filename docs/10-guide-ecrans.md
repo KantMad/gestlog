@@ -390,8 +390,8 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
   (aujourd'hui : **0** — les 1 560 produits en stock ont tous un prix de gros, alors que 7
   n'ont pas de prix public).
   *Valeur du stock actuel : **1 412 856 €** au gros (4 209 138 € au public).*
-- **Tri** : par **valeur décroissante au prix de gros** — ce qui immobilise le plus d'argent
-  d'abord.
+- **Tri** : par **quantité décroissante** — ce qui encombre le plus l'entrepôt d'abord.
+  Départage : valeur au prix de gros, puis référence.
 - **Export Excel** : toute la liste filtrée (l'écran n'affiche que les 300 premières lignes),
   avec une **ligne TOTAL** pour retrouver les chiffres de l'écran.
 

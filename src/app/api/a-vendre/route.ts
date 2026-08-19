@@ -91,12 +91,12 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // « À vendre en priorité » : ce qui immobilise le plus d'argent d'abord. On valorise au
-    // PRIX DE GROS (celui facturé aux boutiques, et le seul renseigné à 100 %).
+    // « À vendre en priorité » : le plus gros VOLUME d'abord (ce qui encombre le plus
+    // l'entrepôt). Départage par valeur au prix de gros, puis par référence.
     rows.sort(
       (a, b) =>
-        (b.costPrice ?? 0) * b.total - (a.costPrice ?? 0) * a.total ||
         b.total - a.total ||
+        (b.costPrice ?? 0) * b.total - (a.costPrice ?? 0) * a.total ||
         a.reference.localeCompare(b.reference, "fr")
     );
 
