@@ -94,6 +94,16 @@ Nettoie les fichiers `/tmp` après usage (local **et** VPS).
     (`session.ts`) **et** `maxAge` (`auth.ts`) **et** `INACTIVITY_MS` (`auth-context.tsx`).
 12. **PWA mobile** : le service worker peut servir une version en cache → recharger/rouvrir
     l'app après déploiement pour voir les changements.
+13. **Changer les droits d'un utilisateur DÉJÀ CONNECTÉ** : `screenAccess` est **figé dans le
+    jeton de session** (`scr`) à la connexion, alors que `/api/auth/me` — qui alimente le
+    **menu** — le relit en **base**. Les deux divergeaient : le nouvel écran **apparaissait**
+    dans le menu, mais le **middleware** (qui ne lit que le jeton) le refusait et renvoyait
+    l'utilisateur sur son 1er écran autorisé. *Symptôme vécu (20/08/2026) : « j'ai donné
+    l'accès À vendre à Nathalie, elle clique dessus et retombe sur le dashboard ».*
+    → **Corrigé** : `/api/auth/me` **réémet le cookie** dès que le jeton est en retard sur la
+    base (rôle ou écrans). Un simple **rechargement de page** suffit désormais, plus besoin de
+    se déconnecter. ⚠️ Si tu ajoutes une autre donnée au jeton, pense à l'inclure dans cette
+    comparaison — sinon le même décalage réapparaîtra.
 
 ## Répartitions validées en double (nettoyage du 24/07/2026)
 

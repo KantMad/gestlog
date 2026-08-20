@@ -107,3 +107,20 @@ describe("écran Échantillons", () => {
     expect(canAccessScreen("USER", ["/import"], "/samples")).toBe(false);
   });
 });
+
+describe("écran « À vendre » — accès", () => {
+  it("est un écran restreignable, servi par son API", () => {
+    expect(screensForPath("/a-vendre")).toEqual(["/a-vendre"]);
+    expect(screensForPath("/api/a-vendre")).toEqual(["/a-vendre"]);
+  });
+
+  it("n'est accessible qu'aux utilisateurs qui l'ont", () => {
+    // Cas réel : Nathalie a /dashboard, /statistics, /btoc, /a-vendre
+    const nathalie = ["/dashboard", "/statistics", "/btoc", "/a-vendre"];
+    expect(canAccessScreen("USER", nathalie, "/a-vendre")).toBe(true);
+    // Un utilisateur sans le droit est refusé (et le middleware le renvoie sur son 1er écran)
+    expect(canAccessScreen("USER", ["/dashboard", "/statistics"], "/a-vendre")).toBe(false);
+    // Un admin passe toujours
+    expect(canAccessScreen("ADMIN", null, "/a-vendre")).toBe(true);
+  });
+});

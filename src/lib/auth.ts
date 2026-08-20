@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { signSession, verifySession } from "@/lib/session";
 
-const SESSION_COOKIE = "gestlog_session";
+export const SESSION_COOKIE = "gestlog_session";
 
 export async function getSession() {
   const cookieStore = await cookies();
