@@ -65,7 +65,8 @@ export default function AVendrePage() {
   const [categories, setCategories] = useState<string[]>([]);
   const [subCategories, setSubCategories] = useState<string[]>([]);
   const [minQty, setMinQty] = useState("10");
-  const [maxGaps, setMaxGaps] = useState("0");
+  // Trous de tailles : non = gammes continues seulement, oui = tout le stock.
+  const [allowGaps, setAllowGaps] = useState(false);
   const [discount, setDiscount] = useState("0");
   const [search, setSearch] = useState("");
 
@@ -83,7 +84,7 @@ export default function AVendrePage() {
       if (categories.length) p.set("categories", categories.join(","));
       if (subCategories.length) p.set("subCategories", subCategories.join(","));
       if (minQty.trim()) p.set("minQty", minQty.trim());
-      p.set("maxGaps", maxGaps.trim() === "" ? "-1" : maxGaps.trim());
+      p.set("maxGaps", allowGaps ? "-1" : "0");
       const res = await fetch(`/api/a-vendre?${p}`);
       const data = await res.json();
       if (res.ok) {
@@ -95,7 +96,7 @@ export default function AVendrePage() {
     } finally {
       setLoading(false);
     }
-  }, [seasonIds, categories, subCategories, minQty, maxGaps]);
+  }, [seasonIds, categories, subCategories, minQty, allowGaps]);
 
   useEffect(() => {
     load();
@@ -205,17 +206,30 @@ export default function AVendrePage() {
           <CardContent className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <div className="space-y-1.5">
-                <label className="block text-xs font-medium text-muted-foreground">
+                <span className="block text-xs font-medium text-muted-foreground">
                   Trous de tailles autorisés
-                </label>
-                <Input
-                  type="number" min={0} value={maxGaps}
-                  onChange={(e) => setMaxGaps(e.target.value)}
-                  placeholder="vide = illimité"
-                  className="h-9"
-                />
+                </span>
+                <div className="inline-flex rounded-lg border bg-muted/50 p-0.5 text-sm">
+                  {([[false, "Non"], [true, "Oui"]] as [boolean, string][]).map(([val, lbl]) => (
+                    <button
+                      key={lbl}
+                      type="button"
+                      onClick={() => setAllowGaps(val)}
+                      className={cn(
+                        "rounded-md px-4 py-1.5 font-medium transition-colors",
+                        allowGaps === val
+                          ? "bg-background text-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      {lbl}
+                    </button>
+                  ))}
+                </div>
                 <p className="text-[11px] text-muted-foreground">
-                  0 = gamme continue. Les tailles absentes en bout de gamme ne comptent pas.
+                  {allowGaps
+                    ? "Tout le stock, gammes dépareillées comprises."
+                    : "Gammes continues seulement (les tailles absentes en bout de gamme ne comptent pas)."}
                 </p>
               </div>
               <div className="space-y-1.5">

@@ -880,7 +880,7 @@ export const HELP_THEMES: HelpTheme[] = [
               "Un produit dont il reste **toutes les tailles à la suite** se vend bien. Un produit dépareillé — du S, plus de M, un peu de L — beaucoup moins.",
               "Un **trou**, c'est une taille à zéro **encadrée** par des tailles en stock. Exemple : `S:15 · M:0 · L:7 · XL:6` → **1 trou** (le M manque au milieu).",
               "⚠️ Les tailles absentes **en bout de gamme ne comptent pas** : `S:5 · M:13 · L:17 · XL:14 · 3XL:0` → **0 trou**. La gamme s'arrête simplement plus tôt, elle n'est pas trouée.",
-              "Mets **0** pour ne voir que les gammes impeccables, **1 ou 2** pour élargir, ou laisse vide pour tout voir.",
+              "Le réglage **Trous de tailles autorisés** fait le tri : **Non** ne garde que les gammes continues, **Oui** affiche tout le stock, dépareillé compris.",
             ],
             tip: "Sur le stock actuel, environ **2 produits sur 3** n'ont aucun trou. 👍",
           },

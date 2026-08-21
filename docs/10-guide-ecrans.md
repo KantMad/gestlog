@@ -371,8 +371,10 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
 - 🔴 **« Disponible » ici ≠ « disponible » de la Répartition.** Ici c'est le **stock physique
   en entrepôt** ; là-bas c'est `reçu − échantillons − déjà réparti`, qui répond à « que
   puis-je encore distribuer aux boutiques ? ». Les deux chiffres n'ont pas à coïncider.
-- **Critères** : trous de tailles autorisés · quantité min. **à la couleur** · saisons ·
-  catégories · sous-catégories · recherche libre · **% de remise** (simulation).
+- **Critères** : trous de tailles autorisés (**toggle Oui/Non**, « Non » par défaut →
+  `maxGaps=0` ; « Oui » → `maxGaps=-1`, aucune limite) · quantité min. **à la couleur** ·
+  saisons · catégories · sous-catégories · recherche libre · **% de remise** (simulation).
+  *L'API accepte toujours un `maxGaps` numérique (0, 1, 2…) si un besoin plus fin réapparaît.*
 - ⚠️ **Définition d'un « trou »** : une taille à **0 encadrée par des tailles en stock**.
   Les tailles absentes **en bout de gamme ne comptent pas** (`S:5 M:13 L:17 XL:14 3XL:0` = 0
   trou : la gamme s'arrête, elle n'est pas trouée ; `S:15 M:0 L:7` = 1 trou). C'est ce qui
