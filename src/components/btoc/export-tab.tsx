@@ -985,7 +985,7 @@ export function BtocExportTab() {
           {parentFacets.length > 0 && (
             <div className="mt-2 flex flex-wrap items-center gap-1.5">
               <span className="text-xs text-muted-foreground">Préfixes existants :</span>
-              {parentFacets.slice(0, 14).map((f) => (
+              {parentFacets.map((f) => (
                 <button
                   key={f.prefix}
                   type="button"

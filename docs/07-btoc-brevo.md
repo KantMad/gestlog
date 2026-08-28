@@ -104,7 +104,10 @@ Donc : **ne pas se fier à `total_spent` de Woo** ; utiliser le total recalculé
   - Filtre **statut** : Publiés (défaut) / Brouillons / Tous — le stock Woo compte **1 106
     parents publiés et 272 brouillons** ; le défaut évite d'embarquer les brouillons sans le
     vouloir.
-  - Les préfixes existants sont proposés sous le champ (cliquables) avec leur nombre.
+  - Les préfixes existants sont proposés sous le champ (cliquables) avec leur nombre,
+    **par ordre alphabétique** et **sans troncature** (28 préfixes max — un classement par
+    volume, ou une coupe, masquerait justement les plus utilisés : `PM`, `QM`, `RM`).
+    Les compteurs suivent le **statut** sélectionné.
   - ⚠️ **Seule la colonne `SKU` est remplie.** Les 4 autres — `SKU produits liés`,
     `SKU ventes croisées`, `ranking`, `slug de catégories` — n'ont que leur **en-tête**,
     volontairement vides : elles sont complétées dans Excel avant ré-import.

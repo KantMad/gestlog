@@ -59,9 +59,11 @@ export async function GET(request: NextRequest) {
       meta: {
         total: rows.length,
         returned: skus.length,
+        // Triés par ORDRE ALPHABÉTIQUE : on cherche un préfixe qu'on connaît déjà,
+        // pas le plus gros — un classement par volume oblige à balayer la liste.
         availablePrefixes: [...prefixCounts.entries()]
           .map(([prefix, count]) => ({ prefix, count }))
-          .sort((a, b) => b.count - a.count),
+          .sort((a, b) => a.prefix.localeCompare(b.prefix, "fr")),
       },
     });
   } catch (e) {
