@@ -11,6 +11,14 @@ export interface HelpArticle {
   icon: string;
   title: string;
   keywords: string;
+  /**
+   * Écran concerné (href du menu). Le centre d'aide en déduit l'emplacement exact
+   * (« Menu : Répartition & expédition › À vendre ») via `menuPath`, et l'ajoute à
+   * l'index de recherche. On stocke le href, JAMAIS le libellé du groupe : déplacer
+   * une entrée de menu met l'aide à jour toute seule.
+   * Absent = fiche transverse (concept, parcours) qui ne correspond à aucun écran.
+   */
+  screen?: string;
   sections: HelpSection[];
 }
 export interface HelpTheme {
@@ -46,8 +54,8 @@ export const HELP_THEMES: HelpTheme[] = [
             lines: [
               "**Marchandise** — Import, Correction réception, Comparaison, Échantillons, Infos produits. Tout ce qui concerne la marchandise qui arrive.",
               "**Commandes** — Commandes client, Lancement de commande, Contrôle commandes, Vente en conditionnelle.",
-              "**Répartition & expédition** — Répartition, Répartition magasin, Préparation, Livraisons, Vue dépôt, Récap clients. Le parcours du stock jusqu'à la boutique.",
-              "**Analyse** — Statistiques, Comparaison saisons / catalogues, Comparaison clients, À vendre.",
+              "**Répartition & expédition** — Répartition, Répartition magasin, Préparation, Livraisons, Vue dépôt, Récap clients, À vendre. Le parcours du stock jusqu'à la boutique.",
+              "**Analyse** — Statistiques, Comparaison saisons / catalogues, Comparaison clients.",
               "**Fichiers & exports** — Fichier d'intégration CC, Exports.",
               "**Réglages** — Configuration, et Utilisateurs pour les administrateurs.",
             ],
@@ -60,6 +68,14 @@ export const HELP_THEMES: HelpTheme[] = [
               "Quand un groupe replié contient la page courante, une **petite pastille** apparaît à droite de son nom.",
             ],
             tip: "Le **Centre d'aide** et **Mon compte** sont en bas du menu, séparés du reste : ils sont accessibles à tout le monde, tout le temps. 🆘",
+          },
+          {
+            h: "Tu ne sais pas où se trouve un écran ?",
+            lines: [
+              "Cherche-le ici : **chaque fiche d'aide affiche son emplacement dans le menu**, juste sous son titre — par exemple *Menu : Répartition & expédition › À vendre*.",
+              "Cet emplacement est **cliquable** : il t'emmène directement sur l'écran.",
+              "Tu peux même taper le nom du groupe dans la recherche (« répartition & expédition ») pour voir tout ce qu'il contient.",
+            ],
           },
           {
             h: "Tu ne vois pas tous ces écrans ?",
@@ -168,6 +184,7 @@ export const HELP_THEMES: HelpTheme[] = [
         icon: "🧾",
         title: "Importer les commandes clients (Texas)",
         keywords: "import commandes clients texas erp source vérité onglet tio synchro",
+        screen: "/import",
         sections: [
           {
             h: "Un seul onglet : Commandes clients (Texas)",
@@ -199,6 +216,7 @@ export const HELP_THEMES: HelpTheme[] = [
         icon: "🏭",
         title: "Importer les commandes fournisseurs",
         keywords: "import commande fournisseur statgen gamme saison code produit créé",
+        screen: "/import",
         sections: [
           {
             lines: [
@@ -214,6 +232,7 @@ export const HELP_THEMES: HelpTheme[] = [
         icon: "📦",
         title: "Importer les réceptions",
         keywords: "import réception packing list colisage tailles auto rattachement",
+        screen: "/import",
         sections: [
           {
             lines: [
@@ -240,6 +259,7 @@ export const HELP_THEMES: HelpTheme[] = [
         icon: "🧾",
         title: "Réceptions : choisir la commande et formats reconnus",
         keywords: "réception commande fournisseur rattacher recherche format packing list imder club ju récapitulatif colisage",
+        screen: "/import",
         sections: [
           {
             lines: [
@@ -271,6 +291,7 @@ export const HELP_THEMES: HelpTheme[] = [
         icon: "🏷️",
         title: "Importer le stock",
         keywords: "import stock mapping colonnes excel générique",
+        screen: "/import",
         sections: [
           {
             lines: [
@@ -284,6 +305,7 @@ export const HELP_THEMES: HelpTheme[] = [
         icon: "🛠️",
         title: "Corriger une réception",
         keywords: "corriger réception éditeur couleur échangée quantité total",
+        screen: "/import/receptions",
         sections: [
           {
             h: "À quoi ça sert",
@@ -307,6 +329,7 @@ export const HELP_THEMES: HelpTheme[] = [
         icon: "🔗",
         title: "Corriger une réception : lignes en double",
         keywords: "corriger réception doublon fusion même produit couleur addition quantités",
+        screen: "/import/receptions",
         sections: [
           {
             lines: [
@@ -322,6 +345,7 @@ export const HELP_THEMES: HelpTheme[] = [
         icon: "🗑️",
         title: "Annuler / supprimer un import",
         keywords: "supprimer import annuler récent erreur ratée écraser",
+        screen: "/import",
         sections: [
           {
             lines: [
@@ -346,6 +370,7 @@ export const HELP_THEMES: HelpTheme[] = [
         icon: "⚖️",
         title: "Comprendre la répartition",
         keywords: "répartition allocation simulation stock insuffisant règles priorité",
+        screen: "/allocation",
         sections: [
           {
             lines: [
@@ -367,6 +392,7 @@ export const HELP_THEMES: HelpTheme[] = [
         icon: "🥇",
         title: "Configurer les priorités (rang, plafonds, seuil)",
         keywords: "configuration rang ranking plafond pourcentage seuil rotation client saison",
+        screen: "/configuration",
         sections: [
           {
             h: "Dans l'écran Configuration",
@@ -385,6 +411,7 @@ export const HELP_THEMES: HelpTheme[] = [
         icon: "▶️",
         title: "Lancer et ajuster une simulation",
         keywords: "simulation lancer relancer ajuster manuel filtre vue produit boutique persistance",
+        screen: "/allocation",
         sections: [
           {
             lines: [
@@ -413,6 +440,7 @@ export const HELP_THEMES: HelpTheme[] = [
         icon: "🧮",
         title: "Ce qui reste vraiment à répartir",
         keywords: "reste à livrer disponible engagé déjà réparti deuxième réception partielle stock réel dispo",
+        screen: "/allocation",
         sections: [
           {
             lines: [
@@ -472,6 +500,7 @@ export const HELP_THEMES: HelpTheme[] = [
         icon: "🚫",
         title: "Écarter un produit d'une répartition",
         keywords: "exclure produit défectueux problème réception ne pas livrer coche case exclusion",
+        screen: "/allocation",
         sections: [
           {
             lines: [
@@ -504,6 +533,7 @@ export const HELP_THEMES: HelpTheme[] = [
         icon: "🧪",
         title: "Mettre des pièces de côté (échantillons)",
         keywords: "échantillon shipment sample contrôle qualité siège prélever retirer disponible",
+        screen: "/samples",
         sections: [
           {
             lines: [
@@ -541,6 +571,7 @@ export const HELP_THEMES: HelpTheme[] = [
         icon: "➕",
         title: "Répartir le surplus (pièces livrées en plus)",
         keywords: "surplus pièces en plus répartir bouton livré fournisseur exception taille",
+        screen: "/allocation",
         sections: [
           {
             lines: [
@@ -567,6 +598,7 @@ export const HELP_THEMES: HelpTheme[] = [
         icon: "✅",
         title: "Valider une répartition",
         keywords: "valider session répartition figée livraison génération périmètre fournisseur catalogue partielle",
+        screen: "/allocation",
         sections: [
           {
             lines: [
@@ -620,6 +652,7 @@ export const HELP_THEMES: HelpTheme[] = [
         icon: "📋",
         title: "Préparer les livraisons",
         keywords: "préparation livraison génération statut ean dépôt transporteur colis",
+        screen: "/deliveries",
         sections: [
           {
             lines: [
@@ -636,6 +669,7 @@ export const HELP_THEMES: HelpTheme[] = [
         icon: "🏬",
         title: "La vue dépôt",
         keywords: "dépôt réception physique colis anomalie valider entrepôt",
+        screen: "/depot",
         sections: [
           {
             lines: [
@@ -650,6 +684,7 @@ export const HELP_THEMES: HelpTheme[] = [
         icon: "📄",
         title: "Les livraisons (BL & factures)",
         keywords: "livraisons shipments bl facture fac pdf entrepôt ftp document",
+        screen: "/shipments",
         sections: [
           {
             lines: [
@@ -664,6 +699,7 @@ export const HELP_THEMES: HelpTheme[] = [
         icon: "🧮",
         title: "L'envoi à la caisse",
         keywords: "caisse expédiée réception stock magasin intégration automatique",
+        screen: "/shipments",
         sections: [
           {
             lines: [
@@ -688,6 +724,7 @@ export const HELP_THEMES: HelpTheme[] = [
         icon: "📈",
         title: "Le tableau de bord",
         keywords: "dashboard tableau bord kpi taux livraison facturation clients actifs",
+        screen: "/dashboard",
         sections: [
           {
             lines: [
@@ -708,6 +745,7 @@ export const HELP_THEMES: HelpTheme[] = [
         icon: "📉",
         title: "Les statistiques",
         keywords: "statistiques graphiques ca chiffre affaires facturé référence filtre",
+        screen: "/statistics",
         sections: [
           {
             lines: [
@@ -722,6 +760,7 @@ export const HELP_THEMES: HelpTheme[] = [
         icon: "🔍",
         title: "Comparaison commande / réception",
         keywords: "comparaison commande réception écart fournisseur conformité anomalie",
+        screen: "/comparison",
         sections: [
           {
             lines: [
@@ -738,6 +777,7 @@ export const HELP_THEMES: HelpTheme[] = [
         icon: "🧱",
         title: "Comparaison : une réception = un bloc",
         keywords: "comparaison réception bloc total séparé fournisseur plusieurs livraisons hors commande",
+        screen: "/comparison",
         sections: [
           {
             lines: [
@@ -767,6 +807,7 @@ export const HELP_THEMES: HelpTheme[] = [
         icon: "🔀",
         title: "Comparer deux saisons / catalogues",
         keywords: "comparaison saisons catalogues catégorie ca quantité évolution export",
+        screen: "/season-comparison",
         sections: [
           {
             lines: [
@@ -781,6 +822,7 @@ export const HELP_THEMES: HelpTheme[] = [
         icon: "🏢",
         title: "Comparer les clients",
         keywords: "comparaison clients boutique enseigne ca quantité catégorie détail",
+        screen: "/client-comparison",
         sections: [
           {
             lines: [
@@ -795,6 +837,7 @@ export const HELP_THEMES: HelpTheme[] = [
         icon: "📿",
         title: "Suivi & réassort (Commandes client)",
         keywords: "réassort suivi commande client livré facturé solder reste bl",
+        screen: "/reassort",
         sections: [
           {
             lines: [
@@ -810,6 +853,7 @@ export const HELP_THEMES: HelpTheme[] = [
         icon: "🔎",
         title: "Contrôle commandes (les « sélections »)",
         keywords: "contrôle commandes sélection une seule taille tio supprimer anomalie",
+        screen: "/controle-commandes",
         sections: [
           {
             h: "À quoi ça sert",
@@ -841,6 +885,7 @@ export const HELP_THEMES: HelpTheme[] = [
         icon: "🧑‍🤝‍🧑",
         title: "Récap clients",
         keywords: "récap clients commandé livré reste taux détail commande",
+        screen: "/recap",
         sections: [
           {
             lines: [
@@ -864,6 +909,7 @@ export const HELP_THEMES: HelpTheme[] = [
         icon: "🗂️",
         title: "Le menu Exports",
         keywords: "export menu regroupe hub réceptions comparaison",
+        screen: "/export",
         sections: [
           {
             lines: [
@@ -877,6 +923,7 @@ export const HELP_THEMES: HelpTheme[] = [
         icon: "🔢",
         title: "L'export des réceptions (EAN / quantité)",
         keywords: "export réception ean quantité csv saison commande sélecteur vide zip fournisseur fichier",
+        screen: "/export",
         sections: [
           {
             h: "Le format",
@@ -908,6 +955,7 @@ export const HELP_THEMES: HelpTheme[] = [
         icon: "\ud83e\udd1d",
         title: "Vente en conditionnelle (dépôt-vente)",
         keywords: "conditionnelle depot vente livraison declaration retour solde facturer ean ecart",
+        screen: "/conditionnelle",
         sections: [
           {
             lines: [
@@ -965,6 +1013,7 @@ export const HELP_THEMES: HelpTheme[] = [
         icon: "🏷️",
         title: "À vendre : écouler le stock",
         keywords: "a vendre stock ecouler destockage trou taille remise pourcentage disponible entrepot solde",
+        screen: "/a-vendre",
         sections: [
           {
             lines: [
@@ -1008,6 +1057,7 @@ export const HELP_THEMES: HelpTheme[] = [
         icon: "🚀",
         title: "Lancement de commande",
         keywords: "lancement commande csv couleur categorie onglet taille rea site total achat tcd",
+        screen: "/lancement-commande",
         sections: [
           {
             lines: [
@@ -1051,6 +1101,7 @@ export const HELP_THEMES: HelpTheme[] = [
         icon: "🧾",
         title: "Fichier d'intégration CC",
         keywords: "intégration cc client fichier ean bl texas document ville livraison prix revient",
+        screen: "/integration-cc",
         sections: [
           {
             lines: [
@@ -1090,6 +1141,7 @@ export const HELP_THEMES: HelpTheme[] = [
         icon: "🏪",
         title: "Répartition magasin (1 onglet par fournisseur)",
         keywords: "répartition magasin export onglet fournisseur excel tio grille tailles",
+        screen: "/repartition",
         sections: [
           {
             lines: [
@@ -1114,6 +1166,7 @@ export const HELP_THEMES: HelpTheme[] = [
         icon: "🛍️",
         title: "La boutique en ligne",
         keywords: "btoc woocommerce ventes ca statistiques export clients paramètres",
+        screen: "/btoc",
         sections: [
           {
             lines: [
@@ -1128,6 +1181,7 @@ export const HELP_THEMES: HelpTheme[] = [
         icon: "\ud83e\udde9",
         title: "Segmentation clientèle",
         keywords: "btoc segmentation client fidélité fréquence achat promo soldes black friday panier taille récurrent",
+        screen: "/btoc",
         sections: [
           {
             lines: [
@@ -1226,6 +1280,7 @@ export const HELP_THEMES: HelpTheme[] = [
         icon: "\ud83d\udce6",
         title: "Export Produits parents",
         keywords: "btoc export produits parents sku woocommerce reimport prefixe inclure exclure",
+        screen: "/btoc",
         sections: [
           {
             lines: [
@@ -1258,6 +1313,7 @@ export const HELP_THEMES: HelpTheme[] = [
         icon: "📍",
         title: "Export Ventes détaillées (adresses + paiement)",
         keywords: "btoc export ventes détaillées adresse facturation livraison paiement paypal monetico",
+        screen: "/btoc",
         sections: [
           {
             lines: [
@@ -1288,6 +1344,7 @@ export const HELP_THEMES: HelpTheme[] = [
         icon: "⭐",
         title: "Les clients VIP (Brevo)",
         keywords: "vip brevo marketing seuil client fidèle email",
+        screen: "/btoc",
         sections: [
           {
             lines: [
@@ -1311,6 +1368,7 @@ export const HELP_THEMES: HelpTheme[] = [
         icon: "🔖",
         title: "Infos produits (référentiel)",
         keywords: "infos produits référentiel ean types tailles fournisseur correspondance",
+        screen: "/product-info",
         sections: [
           {
             lines: [
@@ -1325,6 +1383,7 @@ export const HELP_THEMES: HelpTheme[] = [
         icon: "🎨",
         title: "Équivalences de code couleur (produit introuvable)",
         keywords: "équivalence couleur code sss 000 produit introuvable import texas tio ean",
+        screen: "/product-info",
         sections: [
           {
             h: "Le problème",
@@ -1356,6 +1415,7 @@ export const HELP_THEMES: HelpTheme[] = [
         icon: "👥",
         title: "Les utilisateurs & permissions",
         keywords: "utilisateurs admin permissions écran code connexion rôle accès",
+        screen: "/users",
         sections: [
           {
             lines: [
@@ -1379,6 +1439,7 @@ export const HELP_THEMES: HelpTheme[] = [
         icon: "🙋",
         title: "Mon compte",
         keywords: "compte code connexion nom déconnexion mot de passe",
+        screen: "/account",
         sections: [
           {
             lines: [

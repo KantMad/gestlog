@@ -79,6 +79,7 @@ export const NAV_TREE: NavEntry[] = [
       { href: "/shipments", label: "Livraisons", icon: Truck },
       { href: "/depot", label: "Vue dépôt", icon: Warehouse },
       { href: "/recap", label: "Récap clients", icon: Receipt },
+      { href: "/a-vendre", label: "À vendre", icon: Tags },
     ],
   },
   {
@@ -89,7 +90,6 @@ export const NAV_TREE: NavEntry[] = [
       { href: "/statistics", label: "Statistiques", icon: BarChart3 },
       { href: "/season-comparison", label: "Comparaison saisons / catalogues", icon: ArrowLeftRight },
       { href: "/client-comparison", label: "Comparaison clients", icon: Building2 },
-      { href: "/a-vendre", label: "À vendre", icon: Tags },
     ],
   },
   {
@@ -158,6 +158,27 @@ export function activeHref(entries: NavEntry[], pathname: string): string {
   return all
     .filter((i) => pathname === i.href || pathname.startsWith(i.href + "/"))
     .reduce((best, i) => (i.href.length > best.length ? i.href : best), "");
+}
+
+/**
+ * Emplacement d'un écran dans le menu, pour l'afficher ailleurs dans l'outil
+ * (« Menu : Répartition & expédition › À vendre »).
+ *
+ * Le centre d'aide s'en sert pour indiquer OÙ trouver chaque écran. Il lit
+ * `NAV_TREE`, jamais une chaîne recopiée : déplacer une entrée d'un groupe à l'autre
+ * met l'aide à jour toute seule, sans risque de laisser une indication fausse.
+ */
+export function menuPath(href: string): { group: string | null; label: string } | null {
+  for (const entry of NAV_TREE) {
+    if (!isGroup(entry)) {
+      if (entry.href === href) return { group: null, label: entry.label };
+      continue;
+    }
+    const item = entry.items.find((i) => i.href === href);
+    if (item) return { group: entry.label, label: item.label };
+  }
+  const footer = NAV_FOOTER.find((i) => i.href === href);
+  return footer ? { group: null, label: footer.label } : null;
 }
 
 /** Identifiant du groupe contenant le chemin courant (pour l'ouvrir automatiquement). */

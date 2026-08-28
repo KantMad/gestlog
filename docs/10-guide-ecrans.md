@@ -16,8 +16,8 @@ par étape du flux métier**, pas à plat : 26 entrées alignées devenaient ill
 | *(premier niveau)* | Tableau de bord |
 | **Marchandise** | Import, Correction réception, Comparaison, Échantillons, Infos produits |
 | **Commandes** | Commandes client, Lancement de commande, Contrôle commandes, Vente en conditionnelle |
-| **Répartition & expédition** | Répartition, Répartition magasin, Préparation, Livraisons, Vue dépôt, Récap clients |
-| **Analyse** | Statistiques, Comparaison saisons / catalogues, Comparaison clients, À vendre |
+| **Répartition & expédition** | Répartition, Répartition magasin, Préparation, Livraisons, Vue dépôt, Récap clients, À vendre |
+| **Analyse** | Statistiques, Comparaison saisons / catalogues, Comparaison clients |
 | **Fichiers & exports** | Fichier d'intégration CC, Exports |
 | *(premier niveau)* | **BtoC** |
 | **Réglages** | Configuration, Utilisateurs *(admin)* |
@@ -27,8 +27,18 @@ par étape du flux métier**, pas à plat : 26 entrées alignées devenaient ill
 jamais coûter un clic de plus. Le bas de menu (aide + compte) est séparé car accessible à
 tout utilisateur connecté, quelles que soient ses permissions.
 
+⚠️ **« À vendre » est dans Répartition & expédition**, pas dans Analyse : l'écran sert à
+écouler du stock, il appartient au parcours de la marchandise, pas au reporting.
+
 Comportement : groupes repliables mémorisés en `localStorage`, groupe de la page courante
-toujours ouvert, pastille sur un groupe replié contenant l'écran actif. Les garanties de
+toujours ouvert, pastille sur un groupe replié contenant l'écran actif.
+
+**Le centre d'aide indique l'emplacement de chaque écran** : chaque fiche porte un
+`screen` (le href), et `menuPath()` en déduit « Menu : Répartition & expédition › À vendre ».
+La page `/aide` affiche aussi un **plan complet du menu**, filtré par les droits. Ces
+libellés ne sont **jamais recopiés en dur** — déplacer une entrée de `NAV_TREE` met l'aide à
+jour toute seule. Un test vérifie que `menuPath` répond pour **chaque** écran de
+`APP_SCREENS` : sans emplacement, une fiche dirait quoi faire sans dire où. Les garanties de
 filtrage par droits (groupe vide masqué, groupe à un seul écran aplati) sont décrites dans
 [`05-authentification.md`](05-authentification.md) et verrouillées par `navigation.test.ts`.
 

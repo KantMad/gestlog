@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { NAV_TREE, NAV_FOOTER, visibleNav, activeHref, activeGroupId, isGroup } from "./navigation";
+import {
+  NAV_TREE, NAV_FOOTER, visibleNav, activeHref, activeGroupId, isGroup, menuPath,
+} from "./navigation";
 import { APP_SCREENS } from "./screens";
 
 const flat = NAV_TREE.flatMap((e) => (isGroup(e) ? e.items : [e]));
@@ -100,5 +102,33 @@ describe("élément actif", () => {
   it("désigne le groupe à ouvrir", () => {
     expect(activeGroupId(v, "/import/receptions")).toBe("marchandise");
     expect(activeGroupId(v, "/btoc")).toBeNull();
+  });
+});
+
+describe("menuPath", () => {
+  it("situe un écran dans son groupe", () => {
+    expect(menuPath("/a-vendre")).toEqual({
+      group: "Répartition & expédition",
+      label: "À vendre",
+    });
+  });
+  it("rend group: null pour une entrée de premier niveau", () => {
+    expect(menuPath("/btoc")).toEqual({ group: null, label: "BtoC" });
+  });
+  it("connaît aussi le bas de menu", () => {
+    expect(menuPath("/account")).toEqual({ group: null, label: "Mon compte" });
+  });
+  it("renvoie null pour un chemin hors menu", () => {
+    expect(menuPath("/nimporte-quoi")).toBeNull();
+  });
+});
+
+// Le centre d'aide affiche l'emplacement de chaque écran depuis NAV_TREE. Si un écran
+// perdait son entrée de menu, la fiche d'aide n'afficherait plus AUCUN emplacement —
+// l'utilisateur saurait quoi faire sans savoir où le faire.
+describe("emplacement disponible pour tous les écrans", () => {
+  it("menuPath répond pour chaque écran de APP_SCREENS", () => {
+    const sans = APP_SCREENS.map((s) => s.key).filter((k) => menuPath(k) === null);
+    expect(sans).toEqual([]);
   });
 });
