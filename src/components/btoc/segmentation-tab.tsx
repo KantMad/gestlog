@@ -160,7 +160,7 @@ export function BtocSegmentationTab() {
     <div className="space-y-6">
       {/* ── Période ── */}
       <Card>
-        <CardContent className="flex flex-wrap items-end gap-3 pt-6">
+        <CardContent className="flex flex-wrap items-end gap-3">
           <div className="space-y-1">
             <label className="block text-xs font-medium text-muted-foreground">Date début</label>
             <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="h-9 w-40" />
@@ -205,7 +205,7 @@ export function BtocSegmentationTab() {
             onClick={t.seg ? () => setDetail(t.seg) : undefined}
             className={cn(t.seg && "cursor-pointer transition-colors hover:border-primary/40 hover:bg-accent/40")}
           >
-            <CardContent className="pt-6">
+            <CardContent>
               <div className="text-2xl font-bold">{t.v}</div>
               <p className="text-sm text-muted-foreground">{t.l}</p>
             </CardContent>

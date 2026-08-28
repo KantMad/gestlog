@@ -372,7 +372,7 @@ export default function AllocationSessionDetailPage({
           <>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
               <Card>
-                <CardContent className="pt-6">
+                <CardContent>
                   <div className="flex items-center gap-2 mb-1">
                     <CheckCircle className="h-4 w-4 text-muted-foreground" />
                     <span className="text-sm text-muted-foreground">Statut</span>
@@ -390,7 +390,7 @@ export default function AllocationSessionDetailPage({
                 </CardContent>
               </Card>
               <Card>
-                <CardContent className="pt-6">
+                <CardContent>
                   <div className="flex items-center gap-2 mb-1">
                     <Users className="h-4 w-4 text-muted-foreground" />
                     <span className="text-sm text-muted-foreground">Boutiques</span>
@@ -399,7 +399,7 @@ export default function AllocationSessionDetailPage({
                 </CardContent>
               </Card>
               <Card>
-                <CardContent className="pt-6">
+                <CardContent>
                   <div className="flex items-center gap-2 mb-1">
                     <Package className="h-4 w-4 text-muted-foreground" />
                     <span className="text-sm text-muted-foreground">Produits</span>
@@ -408,7 +408,7 @@ export default function AllocationSessionDetailPage({
                 </CardContent>
               </Card>
               <Card>
-                <CardContent className="pt-6">
+                <CardContent>
                   <div className="flex items-center gap-2 mb-1">
                     <ArrowDown className="h-4 w-4 text-muted-foreground" />
                     <span className="text-sm text-muted-foreground">Commandé</span>
@@ -417,7 +417,7 @@ export default function AllocationSessionDetailPage({
                 </CardContent>
               </Card>
               <Card>
-                <CardContent className="pt-6">
+                <CardContent>
                   <div className="flex items-center gap-2 mb-1">
                     <CheckCircle className="h-4 w-4 text-muted-foreground" />
                     <span className="text-sm text-muted-foreground">Alloué</span>
@@ -442,7 +442,7 @@ export default function AllocationSessionDetailPage({
             )}
 
             <Card>
-              <CardContent className="pt-6">
+              <CardContent>
                 <div className="flex items-center gap-2 mb-3">
                   <Barcode className="h-4 w-4 text-muted-foreground" />
                   <span className="text-sm font-medium">Périmètre de l&apos;export EAN</span>

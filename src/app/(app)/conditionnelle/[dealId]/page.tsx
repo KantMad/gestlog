@@ -270,14 +270,14 @@ export default function ConditionnelleDetailPage() {
             { l: "Reste", v: s.remaining, c: s.remaining < 0 ? "text-red-600" : s.remaining === 0 ? "text-emerald-600" : "text-amber-600" },
           ].map((t) => (
             <Card key={t.l}>
-              <CardContent className="pt-6">
+              <CardContent>
                 <div className={cn("text-2xl font-bold", t.c)}>{formatNumber(t.v)}</div>
                 <p className="text-sm text-muted-foreground">{t.l}</p>
               </CardContent>
             </Card>
           ))}
           <Card>
-            <CardContent className="pt-6">
+            <CardContent>
               <div className="text-2xl font-bold">{euro(data.invoice.amount)}</div>
               <p className="text-sm text-muted-foreground">À facturer ({data.invoice.pieces} pcs)</p>
               {data.invoice.piecesWithoutPrice > 0 && (
@@ -292,7 +292,7 @@ export default function ConditionnelleDetailPage() {
         {/* ── Alertes ── */}
         {(hasAnomaly || warnings.length > 0 || (closed && s.remaining !== 0)) && (
           <Card className="border-amber-300 bg-amber-50/60">
-            <CardContent className="space-y-1.5 pt-6 text-sm">
+            <CardContent className="space-y-1.5 text-sm">
               {closed && s.remaining !== 0 && (
                 <p className="flex items-start gap-2 font-medium text-amber-900">
                   <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />

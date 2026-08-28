@@ -256,7 +256,7 @@ export default function IntegrationCcPage() {
           <>
             <div className="grid gap-4 sm:grid-cols-3">
               <Card>
-                <CardContent className="pt-6">
+                <CardContent>
                   <div className="text-2xl font-bold">
                     {chosenDocs.length}
                     {docs.length !== chosenDocs.length && (
@@ -270,7 +270,7 @@ export default function IntegrationCcPage() {
                 </CardContent>
               </Card>
               <Card>
-                <CardContent className="pt-6">
+                <CardContent>
                   <div className="text-2xl font-bold">
                     {chosenDocs.reduce((s, d) => s + d.rows.length, 0)}
                   </div>
@@ -278,7 +278,7 @@ export default function IntegrationCcPage() {
                 </CardContent>
               </Card>
               <Card>
-                <CardContent className="pt-6">
+                <CardContent>
                   <div className="text-2xl font-bold">
                     {chosenDocs.reduce((s, d) => s + d.totalQuantity, 0)}
                   </div>
@@ -289,7 +289,7 @@ export default function IntegrationCcPage() {
 
             {(missingCity.length > 0 || docs.length > 1) && (
               <Card className="border-amber-200 bg-amber-50/50">
-                <CardContent className="space-y-1 pt-6 text-sm">
+                <CardContent className="space-y-1 text-sm">
                   {docs.length > 1 && (
                     <p className="flex items-start gap-2 text-amber-800">
                       <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />

@@ -84,7 +84,7 @@ export default function RepartitionPage() {
         />
 
         <Card>
-          <CardContent className="pt-6 space-y-4">
+          <CardContent className="space-y-4">
             <div
               className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed py-10 cursor-pointer hover:bg-muted/40 transition-colors"
               onClick={() => inputRef.current?.click()}
@@ -143,7 +143,7 @@ export default function RepartitionPage() {
 
             {(result.totalDropped > 0 || result.missingRefs.length > 0) && (
               <Card className="border-amber-200 bg-amber-50/40">
-                <CardContent className="pt-6 text-sm space-y-1">
+                <CardContent className="text-sm space-y-1">
                   {result.totalDropped > 0 && (
                     <p>⚠️ {formatNumber(result.totalDropped)} pièce(s) avaient une taille absente de la grille de leur onglet fournisseur (fournisseur multi-familles) — vérifiez les onglets concernés.</p>
                   )}

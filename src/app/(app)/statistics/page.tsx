@@ -175,7 +175,7 @@ export default function StatisticsPage() {
           <>
             {/* Reference filter */}
             <Card>
-              <CardContent className="pt-6">
+              <CardContent>
                 <div className="flex flex-wrap items-end gap-3">
                   <div className="space-y-1">
                     <label className="block text-xs font-medium text-muted-foreground">
@@ -237,7 +237,7 @@ export default function StatisticsPage() {
                 {/* Summary badges */}
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                   <Card>
-                    <CardContent className="pt-6">
+                    <CardContent>
                       <div className="text-2xl font-bold">
                         {formatNumber(totalOrdered)}
                       </div>
@@ -262,7 +262,7 @@ export default function StatisticsPage() {
                     </CardContent>
                   </Card>
                   <Card>
-                    <CardContent className="pt-6">
+                    <CardContent>
                       <div className="text-2xl font-bold">
                         {formatEuro(data?.invoicedAmount || 0)}
                       </div>
@@ -286,7 +286,7 @@ export default function StatisticsPage() {
                     </CardContent>
                   </Card>
                   <Card>
-                    <CardContent className="pt-6">
+                    <CardContent>
                       <div
                         className={cn(
                           "text-2xl font-bold",
@@ -305,7 +305,7 @@ export default function StatisticsPage() {
                     </CardContent>
                   </Card>
                   <Card>
-                    <CardContent className="pt-6">
+                    <CardContent>
                       <div className="text-2xl font-bold">
                         {data!.clientBreakdown.length}
                       </div>

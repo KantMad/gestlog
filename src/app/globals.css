@@ -134,3 +134,23 @@
     overflow-x: clip;
   }
 }
+
+@layer base {
+  /*
+   * Anneau de focus clavier homogène sur TOUT l'outil.
+   * L'application compte ~90 `<button>` bruts (chips, lignes cliquables, onglets
+   * maison) qui n'avaient aucun état de focus : impossible de naviguer au clavier en
+   * sachant où l'on se trouve. Le composant <Button> a déjà son propre anneau, il est
+   * donc exclu pour ne pas en cumuler deux.
+   */
+  :is(button, a, summary, [role="button"], [tabindex]:not([tabindex="-1"])):not([data-slot="button"]):focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+    border-radius: var(--radius-md);
+  }
+
+  /* Césure propre des longs libellés (références, e-mails) dans les cellules étroites. */
+  body {
+    text-wrap: pretty;
+  }
+}

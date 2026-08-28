@@ -184,7 +184,7 @@ export default function ClientComparisonPage() {
 
         {/* Sélecteurs saisons + filtre enseigne */}
         <Card className="overflow-visible">
-          <CardContent className="pt-6 space-y-4">
+          <CardContent className="space-y-4">
             <div className="flex flex-wrap items-end gap-3">
               <div className="space-y-1">
                 <label className="block text-xs font-medium text-muted-foreground">Comparaison</label>

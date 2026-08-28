@@ -53,6 +53,7 @@ src/
     layout.tsx        ← root layout (viewport, metadata, providers, manifest PWA)
   components/
     layout/           ← sidebar, topbar, access-guard, page-header, season-selector…
+                        (l'arborescence du menu vit dans `src/lib/navigation.ts`)
     ui/               ← primitives shadcn (button, input, card, dialog, table, sonner…)
     btoc/ configuration/ …  ← composants par feature
   lib/

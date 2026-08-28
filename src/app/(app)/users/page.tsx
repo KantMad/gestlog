@@ -39,6 +39,7 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { APP_SCREENS } from "@/lib/screens";
+import { NAV_TREE, isGroup } from "@/lib/navigation";
 
 interface UserData {
   id: string;
@@ -50,7 +51,32 @@ interface UserData {
   createdAt: string;
 }
 
-// Toggle-chip grid for selecting which screens a user may access
+// Sélection des écrans autorisés, présentée dans les MÊMES groupes que le menu :
+// une liste à plat de 23 cases ne se relit pas, et l'administrateur ne retrouvait pas
+// l'écran qu'il cherchait.
+//
+// ⚠️ Les groupes ne servent qu'à l'affichage. Ce qui est enregistré reste la liste plate
+// des clés `APP_SCREENS`, identique à avant : les droits déjà en base restent valides.
+const SCREEN_GROUPS: { label: string; keys: string[] }[] = (() => {
+  const label = new Map(APP_SCREENS.map((s) => [s.key, s.label]));
+  const groups: { label: string; keys: string[] }[] = [];
+  const placed = new Set<string>();
+  for (const entry of NAV_TREE) {
+    const items = isGroup(entry) ? entry.items : [entry];
+    const keys = items.map((i) => i.href).filter((h) => label.has(h) && !placed.has(h));
+    if (keys.length === 0) continue;
+    keys.forEach((k) => placed.add(k));
+    groups.push({ label: isGroup(entry) ? entry.label : "Accès direct", keys });
+  }
+  // Filet de sécurité : un écran ajouté à APP_SCREENS sans entrée de menu reste
+  // attribuable (il resterait sinon invisible ici).
+  const orphans = APP_SCREENS.map((s) => s.key).filter((k) => !placed.has(k));
+  if (orphans.length) groups.push({ label: "Autres", keys: orphans });
+  return groups;
+})();
+
+const SCREEN_LABEL = new Map(APP_SCREENS.map((s) => [s.key, s.label]));
+
 function ScreenSelector({
   selected,
   onChange,
@@ -66,10 +92,20 @@ function ScreenSelector({
         ? selected.filter((k) => k !== key)
         : [...selected, key]
     );
+  const toggleGroup = (keys: string[]) => {
+    const on = keys.every((k) => selected.includes(k));
+    onChange(on ? selected.filter((k) => !keys.includes(k)) : [...new Set([...selected, ...keys])]);
+  };
+
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <Label>Écrans accessibles</Label>
+        <Label>
+          Écrans accessibles
+          <span className="ml-2 font-normal text-muted-foreground">
+            {selected.length}/{allKeys.length}
+          </span>
+        </Label>
         <button
           type="button"
           onClick={() => onChange(allSelected ? [] : allKeys)}
@@ -78,31 +114,55 @@ function ScreenSelector({
           {allSelected ? "Tout désélectionner" : "Tout sélectionner"}
         </button>
       </div>
-      <div className="grid grid-cols-2 gap-1.5">
-        {APP_SCREENS.map((s) => {
-          const isOn = selected.includes(s.key);
+
+      <div className="space-y-3">
+        {SCREEN_GROUPS.map((g) => {
+          const groupOn = g.keys.every((k) => selected.includes(k));
+          const partial = !groupOn && g.keys.some((k) => selected.includes(k));
           return (
-            <button
-              key={s.key}
-              type="button"
-              onClick={() => toggle(s.key)}
-              className={cn(
-                "flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-sm transition-colors text-left",
-                isOn
-                  ? "border-primary/40 bg-primary/10 text-foreground"
-                  : "border-border text-muted-foreground hover:bg-accent"
-              )}
-            >
-              <span
-                className={cn(
-                  "flex h-4 w-4 shrink-0 items-center justify-center rounded border",
-                  isOn ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/40"
-                )}
-              >
-                {isOn && <Check className="h-3 w-3" />}
-              </span>
-              <span className="truncate">{s.label}</span>
-            </button>
+            <div key={g.label} className="space-y-1.5">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                  {g.label}
+                  {partial && <span className="ml-1.5 font-normal normal-case">(partiel)</span>}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(g.keys)}
+                  className="text-xs text-muted-foreground hover:text-foreground hover:underline"
+                >
+                  {groupOn ? "Aucun" : "Tous"}
+                </button>
+              </div>
+              <div className="grid gap-1.5 sm:grid-cols-2">
+                {g.keys.map((key) => {
+                  const isOn = selected.includes(key);
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => toggle(key)}
+                      className={cn(
+                        "flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-left text-sm transition-colors",
+                                        isOn
+                          ? "border-primary/40 bg-primary/10 text-foreground"
+                          : "border-border text-muted-foreground hover:bg-accent"
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "flex h-4 w-4 shrink-0 items-center justify-center rounded border",
+                          isOn ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/40"
+                        )}
+                      >
+                        {isOn && <Check className="h-3 w-3" />}
+                      </span>
+                      <span className="truncate">{SCREEN_LABEL.get(key)}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           );
         })}
       </div>

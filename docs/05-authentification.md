@@ -62,10 +62,29 @@
   - écran `/users` → **ADMIN seulement**.
   - **`/account` → toujours autorisé** (whitelisté, jamais filtré par les permissions).
   - sinon : autorisé si `screenAccess` null, ou si le chemin est dans la liste.
-- **Sidebar** (`components/layout/sidebar.tsx`) filtre les liens via `canAccessScreen`.
-  `ADMIN_NAV_ITEMS` (ex. `/users`) n'apparaît qu'aux admins.
+- **Sidebar** (`components/layout/sidebar.tsx`) rend l'arborescence renvoyée par
+  **`visibleNav(role, screenAccess)`** (`src/lib/navigation.ts`), qui filtre via
+  `canAccessScreen`. Les entrées `adminOnly` (`/users`) n'apparaissent qu'aux admins.
 - **`AccessGuard`** (`components/layout/access-guard.tsx`) : garde **client** qui redirige un
   utilisateur hors d'un écran interdit (atteint par URL directe).
+
+### Menu groupé — ce qu'il ne faut PAS casser ⚠️
+Le menu est regroupé par étape du flux métier (`NAV_TREE`). Trois garanties, sinon un
+regroupement **fait disparaître** des écrans auxquels l'utilisateur a droit :
+1. un groupe dont **aucun** élément n'est visible n'est pas rendu ;
+2. un groupe réduit à **un seul** élément visible est **aplati** (l'écran remonte au premier
+   niveau — pas de sous-menu à une ligne) ;
+3. le groupe contenant la page courante s'ouvre **toujours** (`activeGroupId`).
+
+⚠️ **Les `href` de `NAV_TREE` sont les clés stockées dans `User.screenAccess`.** Les
+renommer révoquerait silencieusement les droits déjà accordés en base. Le regroupement est
+**purement visuel** : ce qui est enregistré reste la liste plate des clés `APP_SCREENS`,
+inchangée. L'écran `/users` présente d'ailleurs les cases à cocher dans les mêmes groupes,
+avec un repli « Autres » pour tout écran de `APP_SCREENS` qui n'aurait pas d'entrée de menu.
+
+`/import/receptions` n'est **pas** un écran restreignable : il est couvert par le préfixe
+`/import`. Accorder « Import » donne donc les deux lignes du menu — comportement verrouillé
+par un test.
 
 ## Middleware (Edge) — `src/middleware.ts`
 
@@ -90,6 +109,8 @@ Défense en profondeur, exécutée avant les pages/API :
 2. Ajoute la clé dans `APP_SCREENS` (`screens.ts`) **et** le mapping API dans
    `API_SCREEN_MAP` si l'API doit être gardée par écran. **Liste tous les écrans qui
    consomment cette API**, pas seulement celui du même nom (cf. avertissement ci-dessus).
-3. Ajoute l'item de nav dans la sidebar.
+3. Ajoute l'item dans **`NAV_TREE`** (`src/lib/navigation.ts`), dans le groupe qui
+   correspond. `navigation.test.ts` échoue si un écran de `APP_SCREENS` n'a pas d'entrée de
+   menu (il deviendrait inaccessible) ou si un href de menu n'existe pas dans `APP_SCREENS`.
 4. Si l'écran doit être **accessible à tous** (comme `/account`), whiteliste-le dans
    `canAccessScreen` au lieu de l'ajouter à `APP_SCREENS`.

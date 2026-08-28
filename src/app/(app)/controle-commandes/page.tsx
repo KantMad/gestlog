@@ -150,7 +150,7 @@ export default function ControleCommandesPage() {
           <>
             <div className="grid gap-4 sm:grid-cols-4">
               <Card>
-                <CardContent className="pt-6">
+                <CardContent>
                   <div className={summary?.lines ? "text-2xl font-bold text-amber-600" : "text-2xl font-bold text-emerald-600"}>
                     {summary?.lines ?? 0}
                   </div>
@@ -158,19 +158,19 @@ export default function ControleCommandesPage() {
                 </CardContent>
               </Card>
               <Card>
-                <CardContent className="pt-6">
+                <CardContent>
                   <div className="text-2xl font-bold">{summary?.orders ?? 0}</div>
                   <p className="text-sm text-muted-foreground">Commandes</p>
                 </CardContent>
               </Card>
               <Card>
-                <CardContent className="pt-6">
+                <CardContent>
                   <div className="text-2xl font-bold">{summary?.clients ?? 0}</div>
                   <p className="text-sm text-muted-foreground">Boutiques</p>
                 </CardContent>
               </Card>
               <Card>
-                <CardContent className="pt-6">
+                <CardContent>
                   <div className="text-2xl font-bold">{summary?.pieces ?? 0}</div>
                   <p className="text-sm text-muted-foreground">Pièces</p>
                 </CardContent>

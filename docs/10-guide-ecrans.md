@@ -5,6 +5,33 @@
 > Objectif : qu'une personne qui reprend le projet comprenne tout sans relire le code.
 > Le **centre d'aide utilisateur** (écran `/aide`) reprend ces infos en version grand public.
 
+
+## Menu de navigation
+
+Le menu (`src/lib/navigation.ts`, rendu par `components/layout/sidebar.tsx`) est **groupé
+par étape du flux métier**, pas à plat : 26 entrées alignées devenaient illisibles.
+
+| Groupe | Écrans |
+|---|---|
+| *(premier niveau)* | Tableau de bord |
+| **Marchandise** | Import, Correction réception, Comparaison, Échantillons, Infos produits |
+| **Commandes** | Commandes client, Lancement de commande, Contrôle commandes, Vente en conditionnelle |
+| **Répartition & expédition** | Répartition, Répartition magasin, Préparation, Livraisons, Vue dépôt, Récap clients |
+| **Analyse** | Statistiques, Comparaison saisons / catalogues, Comparaison clients, À vendre |
+| **Fichiers & exports** | Fichier d'intégration CC, Exports |
+| *(premier niveau)* | **BtoC** |
+| **Réglages** | Configuration, Utilisateurs *(admin)* |
+| *(bas de menu)* | Centre d'aide, Mon compte |
+
+⚠️ **Tableau de bord et BtoC restent hors groupe** : consultés en permanence, ils ne doivent
+jamais coûter un clic de plus. Le bas de menu (aide + compte) est séparé car accessible à
+tout utilisateur connecté, quelles que soient ses permissions.
+
+Comportement : groupes repliables mémorisés en `localStorage`, groupe de la page courante
+toujours ouvert, pastille sur un groupe replié contenant l'écran actif. Les garanties de
+filtrage par droits (groupe vide masqué, groupe à un seul écran aplati) sont décrites dans
+[`05-authentification.md`](05-authentification.md) et verrouillées par `navigation.test.ts`.
+
 ## Contexte : les 3 systèmes externes
 
 | Système | Éditeur | Rôle | Entrée dans GestLog |

@@ -291,7 +291,7 @@ export function BtocStatsTab() {
     <div className="space-y-6 mt-4">
       {/* ─── Filters ─────────────────────────────────── */}
       <Card>
-        <CardContent className="pt-6">
+        <CardContent>
           <div className="flex flex-wrap items-end gap-3">
             <div className="space-y-1">
               <label className="block text-xs font-medium text-muted-foreground">
@@ -401,7 +401,7 @@ export function BtocStatsTab() {
       {/* ─── KPI Cards ───────────────────────────────── */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <Card>
-          <CardContent className="pt-6">
+          <CardContent>
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50">
                 <ShoppingCart className="h-5 w-5 text-blue-600" />
@@ -416,7 +416,7 @@ export function BtocStatsTab() {
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="pt-6">
+          <CardContent>
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-50">
                 <Euro className="h-5 w-5 text-emerald-600" />
@@ -442,7 +442,7 @@ export function BtocStatsTab() {
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="pt-6">
+          <CardContent>
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-purple-50">
                 <Users className="h-5 w-5 text-purple-600" />
@@ -457,7 +457,7 @@ export function BtocStatsTab() {
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="pt-6">
+          <CardContent>
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-50">
                 <TrendingUp className="h-5 w-5 text-amber-600" />
@@ -472,7 +472,7 @@ export function BtocStatsTab() {
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="pt-6">
+          <CardContent>
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-rose-50">
                 <Package className="h-5 w-5 text-rose-600" />

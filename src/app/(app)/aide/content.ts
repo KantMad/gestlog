@@ -30,6 +30,48 @@ export const HELP_THEMES: HelpTheme[] = [
     blurb: "Comprendre l'outil et se repérer en 5 minutes.",
     articles: [
       {
+        id: "se-reperer",
+        icon: "\ud83e\udded",
+        title: "Se repérer dans le menu",
+        keywords: "menu navigation sidebar barre latérale groupe sous-menu écran accès trouver",
+        sections: [
+          {
+            lines: [
+              "Le menu de gauche est **rangé par étape du travail**, pas par ordre d'arrivée des fonctionnalités. Chaque groupe se déplie d'un clic.",
+              "**Tableau de bord** et **BtoC** restent au premier niveau : ce sont les deux écrans consultés en permanence, ils ne coûtent jamais un clic de plus.",
+            ],
+          },
+          {
+            h: "Les groupes",
+            lines: [
+              "**Marchandise** — Import, Correction réception, Comparaison, Échantillons, Infos produits. Tout ce qui concerne la marchandise qui arrive.",
+              "**Commandes** — Commandes client, Lancement de commande, Contrôle commandes, Vente en conditionnelle.",
+              "**Répartition & expédition** — Répartition, Répartition magasin, Préparation, Livraisons, Vue dépôt, Récap clients. Le parcours du stock jusqu'à la boutique.",
+              "**Analyse** — Statistiques, Comparaison saisons / catalogues, Comparaison clients, À vendre.",
+              "**Fichiers & exports** — Fichier d'intégration CC, Exports.",
+              "**Réglages** — Configuration, et Utilisateurs pour les administrateurs.",
+            ],
+          },
+          {
+            h: "Ce qui est retenu pour toi",
+            lines: [
+              "Les groupes que tu **replies restent repliés** d'une visite à l'autre : c'est ta préférence, l'outil s'en souvient.",
+              "Le groupe de la page où tu te trouves **s'ouvre toujours** — impossible de se perdre.",
+              "Quand un groupe replié contient la page courante, une **petite pastille** apparaît à droite de son nom.",
+            ],
+            tip: "Le **Centre d'aide** et **Mon compte** sont en bas du menu, séparés du reste : ils sont accessibles à tout le monde, tout le temps. 🆘",
+          },
+          {
+            h: "Tu ne vois pas tous ces écrans ?",
+            lines: [
+              "C'est normal : chaque utilisateur n'a accès qu'aux écrans qu'un administrateur lui a accordés. Le menu **masque** simplement le reste.",
+              "Un groupe dont tu n'as aucun écran **n'apparaît pas du tout**, et un groupe où tu n'as qu'un seul écran s'affiche **directement en ligne**, sans sous-menu.",
+              "Si un écran te manque pour travailler, demande-le à ton administrateur — il l'ajoute depuis **Réglages → Utilisateurs**.",
+            ],
+          },
+        ],
+      },
+      {
         id: "cest-quoi",
         icon: "👋",
         title: "C'est quoi GestLog ?",
@@ -1320,6 +1362,15 @@ export const HELP_THEMES: HelpTheme[] = [
               "Réservé aux **administrateurs** : créer des comptes (nom + **code de connexion** + rôle) et choisir **à quels écrans** chaque utilisateur a accès.",
             ],
             tip: "Un **administrateur voit tout**. Les restrictions d'écran ne s'appliquent qu'aux comptes **Utilisateur**.",
+          },
+          {
+            h: "Choisir les écrans",
+            lines: [
+              "Les cases à cocher sont rangées **dans les mêmes groupes que le menu** (Marchandise, Commandes, Répartition & expédition…), avec un compteur du type **12/23** en haut.",
+              "Chaque groupe a son raccourci **Tous / Aucun**, et la mention **(partiel)** signale un groupe où seuls certains écrans sont cochés.",
+              "Cocher **Import** donne aussi **Correction réception** : c'est le même écran, vu sous deux angles.",
+            ],
+            tip: "Côté utilisateur, le menu s'adapte tout seul : un groupe sans aucun écran autorisé disparaît, et un groupe à un seul écran s'affiche directement en ligne. 🧭",
           },
         ],
       },

@@ -422,13 +422,13 @@ export default function ComparisonPage() {
           <>
             <div className="grid gap-4 sm:grid-cols-3">
               <Card>
-                <CardContent className="pt-6">
+                <CardContent>
                   <div className="text-2xl font-bold">{filteredSummaries.length}</div>
                   <p className="text-sm text-muted-foreground">Fournisseurs</p>
                 </CardContent>
               </Card>
               <Card>
-                <CardContent className="pt-6">
+                <CardContent>
                   <div className="text-2xl font-bold">
                     {filteredSummaries.reduce((s, a) => s + a.lineCount, 0)}
                   </div>
@@ -436,7 +436,7 @@ export default function ComparisonPage() {
                 </CardContent>
               </Card>
               <Card>
-                <CardContent className="pt-6">
+                <CardContent>
                   <div className={cn("text-2xl font-bold", totalAnomaly > 0 ? "text-red-600" : "text-emerald-600")}>
                     {totalAnomaly}
                   </div>

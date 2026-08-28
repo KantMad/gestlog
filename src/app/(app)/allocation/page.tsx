@@ -2174,7 +2174,7 @@ export default function AllocationPage() {
                 {/* Périmètre de validation : la simulation porte sur toute la demande, mais
                     on ne valide que les fournisseurs / catalogues choisis. */}
                 <Card>
-                  <CardContent className="pt-6">
+                  <CardContent>
                     <div className="flex items-center gap-2 mb-3">
                       <CheckCircle className="h-4 w-4 text-muted-foreground" />
                       <span className="text-sm font-medium">Périmètre de validation</span>
@@ -2281,7 +2281,7 @@ export default function AllocationPage() {
                 {/* Périmètre de l'export EAN — distinct de celui de la validation. Mêmes
                     règles que sur une session validée : n'agit que sur le fichier. */}
                 <Card>
-                  <CardContent className="pt-6">
+                  <CardContent>
                     <div className="flex items-center gap-2 mb-3">
                       <Barcode className="h-4 w-4 text-muted-foreground" />
                       <span className="text-sm font-medium">Périmètre de l&apos;export EAN</span>
@@ -2386,7 +2386,7 @@ export default function AllocationPage() {
                 {summary && (
                   <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                     <Card>
-                      <CardContent className="pt-6">
+                      <CardContent>
                         <div className="flex items-center gap-2 mb-1">
                           <Users className="h-4 w-4 text-muted-foreground" />
                           <span className="text-sm text-muted-foreground">Boutiques</span>
@@ -2395,7 +2395,7 @@ export default function AllocationPage() {
                       </CardContent>
                     </Card>
                     <Card>
-                      <CardContent className="pt-6">
+                      <CardContent>
                         <div className="flex items-center gap-2 mb-1">
                           <Package className="h-4 w-4 text-muted-foreground" />
                           <span className="text-sm text-muted-foreground">Produits</span>
@@ -2404,7 +2404,7 @@ export default function AllocationPage() {
                       </CardContent>
                     </Card>
                     <Card>
-                      <CardContent className="pt-6">
+                      <CardContent>
                         <div className="flex items-center gap-2 mb-1">
                           <ArrowDown className="h-4 w-4 text-muted-foreground" />
                           <span className="text-sm text-muted-foreground">Pièces commandées</span>
@@ -2413,7 +2413,7 @@ export default function AllocationPage() {
                       </CardContent>
                     </Card>
                     <Card>
-                      <CardContent className="pt-6">
+                      <CardContent>
                         <div className="flex items-center gap-2 mb-1">
                           <TrendingDown className="h-4 w-4 text-muted-foreground" />
                           <span className="text-sm text-muted-foreground">Pièces allouées</span>

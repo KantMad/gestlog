@@ -415,7 +415,7 @@ export default function DepotPage() {
             {/* Stats */}
             <div className="grid gap-4 sm:grid-cols-4">
               <Card>
-                <CardContent className="pt-6">
+                <CardContent>
                   <div className="text-2xl font-bold">{stats.total}</div>
                   <p className="text-sm text-muted-foreground">
                     Total au dépôt
@@ -423,7 +423,7 @@ export default function DepotPage() {
                 </CardContent>
               </Card>
               <Card>
-                <CardContent className="pt-6">
+                <CardContent>
                   <div className="text-2xl font-bold text-amber-600">
                     {stats.pending}
                   </div>
@@ -431,7 +431,7 @@ export default function DepotPage() {
                 </CardContent>
               </Card>
               <Card>
-                <CardContent className="pt-6">
+                <CardContent>
                   <div className="text-2xl font-bold text-emerald-600">
                     {stats.validated}
                   </div>
@@ -439,7 +439,7 @@ export default function DepotPage() {
                 </CardContent>
               </Card>
               <Card>
-                <CardContent className="pt-6">
+                <CardContent>
                   <div className="text-2xl font-bold text-red-600">
                     {stats.anomaly}
                   </div>

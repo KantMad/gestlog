@@ -952,13 +952,13 @@ export default function DeliveriesPage() {
             {/* Stats */}
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
               <Card>
-                <CardContent className="pt-6">
+                <CardContent>
                   <div className="text-2xl font-bold">{stats.total}</div>
                   <p className="text-sm text-muted-foreground">Total</p>
                 </CardContent>
               </Card>
               <Card>
-                <CardContent className="pt-6">
+                <CardContent>
                   <div className="text-2xl font-bold text-blue-600">
                     {stats.planned}
                   </div>
@@ -966,7 +966,7 @@ export default function DeliveriesPage() {
                 </CardContent>
               </Card>
               <Card>
-                <CardContent className="pt-6">
+                <CardContent>
                   <div className="text-2xl font-bold text-amber-600">
                     {stats.inPrep}
                   </div>
@@ -976,7 +976,7 @@ export default function DeliveriesPage() {
                 </CardContent>
               </Card>
               <Card>
-                <CardContent className="pt-6">
+                <CardContent>
                   <div className="text-2xl font-bold text-purple-600">
                     {stats.atDepot}
                   </div>
@@ -984,7 +984,7 @@ export default function DeliveriesPage() {
                 </CardContent>
               </Card>
               <Card>
-                <CardContent className="pt-6">
+                <CardContent>
                   <div className="text-2xl font-bold text-emerald-600">
                     {stats.shipped}
                   </div>
@@ -992,7 +992,7 @@ export default function DeliveriesPage() {
                 </CardContent>
               </Card>
               <Card>
-                <CardContent className="pt-6">
+                <CardContent>
                   <div className="text-2xl font-bold">
                     {formatNumber(stats.totalPcs)}
                   </div>

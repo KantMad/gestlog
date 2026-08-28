@@ -314,19 +314,19 @@ export default function AVendrePage() {
         {/* ── Totaux ── */}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Card>
-            <CardContent className="pt-6">
+            <CardContent>
               <div className="text-2xl font-bold">{formatNumber(totals.products)}</div>
               <p className="text-sm text-muted-foreground">Produits-couleurs</p>
             </CardContent>
           </Card>
           <Card>
-            <CardContent className="pt-6">
+            <CardContent>
               <div className="text-2xl font-bold">{formatNumber(totals.pieces)}</div>
               <p className="text-sm text-muted-foreground">Pièces disponibles</p>
             </CardContent>
           </Card>
           <Card>
-            <CardContent className="pt-6">
+            <CardContent>
               <div className="text-2xl font-bold text-emerald-600">{euro(totals.wholesaleValue)}</div>
               <p className="text-sm text-muted-foreground">
                 Montant {pct > 0 ? `remise ${pct} % déduite` : "au prix de gros"}
@@ -339,7 +339,7 @@ export default function AVendrePage() {
             </CardContent>
           </Card>
           <Card>
-            <CardContent className="pt-6">
+            <CardContent>
               <div className="text-2xl font-bold">{euro(totals.retailValue)}</div>
               <p className="text-sm text-muted-foreground">Valeur au prix public (non remisée)</p>
             </CardContent>

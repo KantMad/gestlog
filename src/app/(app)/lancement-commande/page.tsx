@@ -186,19 +186,19 @@ export default function LancementCommandePage() {
           <>
             <div className="grid gap-4 sm:grid-cols-3">
               <Card>
-                <CardContent className="pt-6">
+                <CardContent>
                   <div className="text-2xl font-bold">{sheets.length}</div>
                   <p className="text-sm text-muted-foreground">Onglets (catégories)</p>
                 </CardContent>
               </Card>
               <Card>
-                <CardContent className="pt-6">
+                <CardContent>
                   <div className="text-2xl font-bold">{totalProducts}</div>
                   <p className="text-sm text-muted-foreground">Produits</p>
                 </CardContent>
               </Card>
               <Card>
-                <CardContent className="pt-6">
+                <CardContent>
                   <div className="text-2xl font-bold">{formatNumber(totalPieces)}</div>
                   <p className="text-sm text-muted-foreground">Pièces commandées</p>
                 </CardContent>
@@ -207,7 +207,7 @@ export default function LancementCommandePage() {
 
             {warnings.length > 0 && (
               <Card className="border-amber-200 bg-amber-50/50">
-                <CardContent className="space-y-1 pt-6 text-sm">
+                <CardContent className="space-y-1 text-sm">
                   {warnings.map((w, i) => (
                     <p key={i} className="flex items-start gap-2 text-amber-800">
                       <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />

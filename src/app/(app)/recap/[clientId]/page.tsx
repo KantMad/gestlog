@@ -249,7 +249,7 @@ export default function ClientRecapDetailPage() {
                   {/* Summary cards */}
                   <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                     <Card>
-                      <CardContent className="pt-6">
+                      <CardContent>
                         <div className="flex items-center gap-2 mb-1">
                           <Package className="h-4 w-4 text-muted-foreground" />
                           <span className="text-sm text-muted-foreground">
@@ -262,7 +262,7 @@ export default function ClientRecapDetailPage() {
                       </CardContent>
                     </Card>
                     <Card>
-                      <CardContent className="pt-6">
+                      <CardContent>
                         <div className="flex items-center gap-2 mb-1">
                           <Truck className="h-4 w-4 text-emerald-500" />
                           <span className="text-sm text-muted-foreground">
@@ -275,7 +275,7 @@ export default function ClientRecapDetailPage() {
                       </CardContent>
                     </Card>
                     <Card>
-                      <CardContent className="pt-6">
+                      <CardContent>
                         <div className="text-sm text-muted-foreground mb-1">
                           Reste à livrer
                         </div>
@@ -285,7 +285,7 @@ export default function ClientRecapDetailPage() {
                       </CardContent>
                     </Card>
                     <Card>
-                      <CardContent className="pt-6">
+                      <CardContent>
                         <div className="text-sm text-muted-foreground mb-1">
                           Taux livraison
                         </div>

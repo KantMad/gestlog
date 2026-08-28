@@ -2,88 +2,138 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  LayoutDashboard,
-  Upload,
-  GitCompareArrows,
-  Calculator,
-  Truck,
-  Settings,
-  BarChart3,
-  Package,
-  Users,
-  LogOut,
-  Shield,
-  User,
-  Tag,
-  ClipboardList,
-  Warehouse,
-  Receipt,
-  RefreshCw,
-  ShoppingBag,
-  Store,
-  ArrowLeftRight,
-  Building2,
-  UserCog,
-  Download,
-  LifeBuoy,
-  ScanSearch,
-  PackageCheck,
-  FlaskConical,
-  FileSpreadsheet,
-  Rocket,
-  Tags,
-  Handshake,
-} from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { ChevronRight, LogOut, Package, Shield, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
-import { canAccessScreen } from "@/lib/screens";
 import { useMobileNav } from "@/lib/mobile-nav";
+import {
+  NAV_FOOTER, activeGroupId, activeHref, isGroup, visibleNav,
+  type NavEntry, type NavItem,
+} from "@/lib/navigation";
 
-const NAV_ITEMS = [
-  { href: "/dashboard", label: "Tableau de bord", icon: LayoutDashboard },
-  { href: "/import", label: "Import", icon: Upload },
-  { href: "/import/receptions", label: "Correction réception", icon: PackageCheck },
-  { href: "/product-info", label: "Infos produits", icon: Tag },
-  { href: "/comparison", label: "Comparaison", icon: GitCompareArrows },
-  { href: "/reassort", label: "Commandes client", icon: ClipboardList },
-  { href: "/allocation", label: "Répartition", icon: Calculator },
-  { href: "/samples", label: "Échantillons", icon: FlaskConical },
-  { href: "/deliveries", label: "Préparation", icon: RefreshCw },
-  { href: "/depot", label: "Vue dépôt", icon: Warehouse },
-  { href: "/shipments", label: "Livraisons", icon: Truck },
-  { href: "/recap", label: "Récap clients", icon: Receipt },
-  { href: "/configuration", label: "Configuration", icon: Settings },
-  { href: "/statistics", label: "Statistiques", icon: BarChart3 },
-  { href: "/season-comparison", label: "Comparaison saisons / catalogues", icon: ArrowLeftRight },
-  { href: "/client-comparison", label: "Comparaison clients", icon: Building2 },
-  { href: "/repartition", label: "Répartition magasin", icon: Store },
-  { href: "/integration-cc", label: "Fichier d'intégration CC", icon: FileSpreadsheet },
-  { href: "/lancement-commande", label: "Lancement de commande", icon: Rocket },
-  { href: "/a-vendre", label: "À vendre", icon: Tags },
-  { href: "/conditionnelle", label: "Vente en conditionnelle", icon: Handshake },
-  { href: "/controle-commandes", label: "Contrôle commandes", icon: ScanSearch },
-  { href: "/export", label: "Exports", icon: Download },
-  { href: "/btoc", label: "BtoC", icon: ShoppingBag },
-  { href: "/aide", label: "Centre d'aide", icon: LifeBuoy },
-  { href: "/account", label: "Mon compte", icon: UserCog },
-];
+// Groupes ouverts, mémorisés d'une visite à l'autre : replier un groupe est une
+// préférence, elle ne doit pas être perdue à chaque navigation.
+const STORAGE_KEY = "gestlog.nav.open";
 
-const ADMIN_NAV_ITEMS = [
-  { href: "/users", label: "Utilisateurs", icon: Users },
-];
+function readOpen(): string[] | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    return Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function NavLink({
+  item, active, onNavigate, nested = false,
+}: { item: NavItem; active: boolean; onNavigate: () => void; nested?: boolean }) {
+  return (
+    <Link
+      href={item.href}
+      onClick={onNavigate}
+      aria-current={active ? "page" : undefined}
+      className={cn(
+        "group flex min-h-11 items-center gap-2.5 rounded-lg px-3 text-sm transition-colors lg:min-h-9",
+        nested && "pl-9",
+        active
+          ? "bg-primary/10 font-semibold text-primary"
+          : "font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
+      )}
+    >
+      <item.icon className={cn("h-[18px] w-[18px] shrink-0", nested && "h-4 w-4")} />
+      <span className="truncate">{item.label}</span>
+    </Link>
+  );
+}
 
 export function Sidebar() {
   const pathname = usePathname();
   const { user, logout } = useAuth();
   const { open, setOpen } = useMobileNav();
 
-  const allItems = [
-    ...NAV_ITEMS.filter((item) =>
-      canAccessScreen(user?.role, user?.screenAccess, item.href)
-    ),
-    ...(user?.role === "ADMIN" ? ADMIN_NAV_ITEMS : []),
-  ];
+  const entries = useMemo(
+    () => visibleNav(user?.role, user?.screenAccess),
+    [user?.role, user?.screenAccess]
+  );
+  const current = activeHref(entries, pathname);
+  const currentGroup = activeGroupId(entries, pathname);
+
+  // `null` tant que le localStorage n'a pas été lu : évite un rendu serveur/client
+  // divergent, et le repli visible d'un groupe au premier affichage.
+  const [openGroups, setOpenGroups] = useState<string[] | null>(null);
+  useEffect(() => setOpenGroups(readOpen() ?? []), []);
+
+  // Le groupe de la page courante s'ouvre toujours : on ne doit jamais se retrouver sur
+  // un écran dont l'entrée de menu est repliée.
+  useEffect(() => {
+    if (!currentGroup) return;
+    setOpenGroups((prev) => (prev && !prev.includes(currentGroup) ? [...prev, currentGroup] : prev));
+  }, [currentGroup]);
+
+  const toggleGroup = (id: string) =>
+    setOpenGroups((prev) => {
+      const next = (prev ?? []).includes(id)
+        ? (prev ?? []).filter((g) => g !== id)
+        : [...(prev ?? []), id];
+      try {
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      } catch {
+        /* navigation en privé : on garde l'état en mémoire */
+      }
+      return next;
+    });
+
+  const isOpen = (id: string) => (openGroups ?? []).includes(id) || currentGroup === id;
+  const close = () => setOpen(false);
+
+  const renderEntry = (entry: NavEntry) => {
+    if (!isGroup(entry)) {
+      return (
+        <NavLink key={entry.href} item={entry} active={entry.href === current} onNavigate={close} />
+      );
+    }
+    const expanded = isOpen(entry.id);
+    const hasCurrent = entry.items.some((i) => i.href === current);
+    return (
+      <div key={entry.id}>
+        <button
+          type="button"
+          onClick={() => toggleGroup(entry.id)}
+          aria-expanded={expanded}
+          className={cn(
+            "flex min-h-11 w-full items-center gap-2.5 rounded-lg px-3 text-sm font-medium transition-colors lg:min-h-9",
+                hasCurrent && !expanded
+              ? "bg-primary/10 text-primary"
+              : "text-muted-foreground hover:bg-accent hover:text-foreground"
+          )}
+        >
+          <entry.icon className="h-[18px] w-[18px] shrink-0" />
+          <span className="flex-1 truncate text-left">{entry.label}</span>
+          {/* Une pastille signale l'écran courant quand le groupe est replié. */}
+          {hasCurrent && !expanded && <span className="h-1.5 w-1.5 rounded-full bg-primary" />}
+          <ChevronRight
+            className={cn("h-4 w-4 shrink-0 transition-transform", expanded && "rotate-90")}
+          />
+        </button>
+        {expanded && (
+          <div className="mt-0.5 space-y-0.5 border-l border-border/70 pl-1.5 ml-4">
+            {entry.items.map((item) => (
+              <NavLink
+                key={item.href}
+                item={item}
+                active={item.href === current}
+                onNavigate={close}
+                nested
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <>
@@ -93,7 +143,7 @@ export function Sidebar() {
           "fixed inset-0 z-40 bg-black/40 transition-opacity lg:hidden",
           open ? "opacity-100" : "pointer-events-none opacity-0"
         )}
-        onClick={() => setOpen(false)}
+        onClick={close}
         aria-hidden
       />
       <aside
@@ -103,78 +153,54 @@ export function Sidebar() {
           open ? "translate-x-0" : "-translate-x-full"
         )}
       >
-      <div className="flex h-16 items-center gap-3 border-b border-border px-6">
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary">
-          <Package className="h-5 w-5 text-primary-foreground" />
+        {/* h-14 : même hauteur que la Topbar, pour que les deux filets se rejoignent. */}
+        <div className="flex h-14 shrink-0 items-center gap-3 border-b border-border px-4">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary">
+            <Package className="h-5 w-5 text-primary-foreground" />
+          </div>
+          <div className="min-w-0">
+            <h1 className="truncate text-base font-semibold tracking-tight">GestLog</h1>
+            <p className="truncate text-xs text-muted-foreground">Gestion logistique</p>
+          </div>
         </div>
-        <div>
-          <h1 className="text-base font-semibold tracking-tight">GestLog</h1>
-          <p className="text-xs text-muted-foreground">Gestion logistique</p>
-        </div>
-      </div>
 
-      <nav className="flex-1 min-h-0 overflow-y-auto space-y-1 px-3 py-4">
-        {/* Item actif = le href le PLUS SPÉCIFIQUE qui préfixe le chemin courant (sinon
-            « Import » et « Correction réception » s'allumeraient tous deux sur
-            /import/receptions). */}
-        {(() => {
-          const activeHref = allItems
-            .filter((i) => pathname === i.href || pathname.startsWith(i.href + "/"))
-            .reduce((best, i) => (i.href.length > best.length ? i.href : best), "");
-          return allItems.map((item) => {
-          const isActive = item.href === activeHref;
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              onClick={() => setOpen(false)}
-              className={cn(
-                "flex min-h-11 items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150",
-                isActive
-                  ? "bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:bg-accent hover:text-foreground"
-              )}
-            >
-              <item.icon
-                className={cn(
-                  "h-[18px] w-[18px] shrink-0",
-                  isActive ? "text-primary" : ""
-                )}
-              />
-              {item.label}
-            </Link>
-          );
-        });
-        })()}
-      </nav>
+        <nav className="min-h-0 flex-1 space-y-0.5 overflow-y-auto px-3 py-3">
+          {entries.map(renderEntry)}
 
-      <div className="border-t border-border p-4 space-y-3">
+          <div className="!mt-3 space-y-0.5 border-t border-border pt-3">
+            {NAV_FOOTER.map((item) => (
+              <NavLink key={item.href} item={item} active={item.href === current} onNavigate={close} />
+            ))}
+          </div>
+        </nav>
+
         {user && (
-          <div className="flex items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-100">
-              {user.role === "ADMIN" ? (
-                <Shield className="h-4 w-4 text-zinc-600" />
-              ) : (
-                <User className="h-4 w-4 text-zinc-600" />
-              )}
+          <div className="shrink-0 border-t border-border p-3">
+            <div className="flex items-center gap-3">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted">
+                {user.role === "ADMIN" ? (
+                  <Shield className="h-4 w-4 text-muted-foreground" />
+                ) : (
+                  <User className="h-4 w-4 text-muted-foreground" />
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium">{user.name}</p>
+                <p className="text-xs text-muted-foreground">
+                  {user.role === "ADMIN" ? "Administrateur" : "Utilisateur"}
+                </p>
+              </div>
+              <button
+                onClick={() => logout()}
+                className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                title="Se déconnecter"
+                aria-label="Se déconnecter"
+              >
+                <LogOut className="h-4 w-4" />
+              </button>
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">{user.name}</p>
-              <p className="text-xs text-muted-foreground">
-                {user.role === "ADMIN" ? "Administrateur" : "Utilisateur"}
-              </p>
-            </div>
-            <button
-              onClick={() => logout()}
-              className="flex h-11 w-11 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-              title="Se déconnecter"
-              aria-label="Se déconnecter"
-            >
-              <LogOut className="h-4 w-4" />
-            </button>
           </div>
         )}
-      </div>
       </aside>
     </>
   );

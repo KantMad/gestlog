@@ -229,7 +229,7 @@ export function BtocClientsTab() {
     <div className="space-y-6 mt-4">
       {/* ─── Filters ─────────────────────────────────── */}
       <Card>
-        <CardContent className="pt-6">
+        <CardContent>
           <div className="flex flex-wrap items-end gap-3">
             <div className="space-y-1">
               <label className="block text-xs font-medium text-muted-foreground">

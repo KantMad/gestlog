@@ -353,7 +353,7 @@ function SizeTypesTab() {
       {/* ─── Import section (collapsible) ─────────── */}
       {showImport && (
         <Card className="border-dashed">
-          <CardContent className="pt-6 space-y-4">
+          <CardContent className="space-y-4">
             <div className="flex gap-2 items-center">
               <span className="text-sm font-medium">Format :</span>
               <Button
@@ -834,7 +834,7 @@ function SupplierRefsTab() {
 
       {showImport && (
         <Card className="border-dashed">
-          <CardContent className="pt-6 space-y-4">
+          <CardContent className="space-y-4">
             {result ? (
               <ImportResult result={result} onReset={reset} />
             ) : (
@@ -1127,7 +1127,7 @@ function EansTab() {
 
       {showImport && (
         <Card className="border-dashed">
-          <CardContent className="pt-6 space-y-4">
+          <CardContent className="space-y-4">
             {result ? (
               <ImportResult result={result} onReset={reset} />
             ) : (
