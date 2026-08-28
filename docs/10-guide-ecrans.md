@@ -444,6 +444,11 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
 - **Source** : tables `Btoc*` (sync WooCommerce), `HistOrder` (historique autre Woo),
   référentiel `Product` pour catégories/couleurs. Marketing VIP via **Brevo**. Détails :
   [`07-btoc-brevo.md`](07-btoc-brevo.md).
+- **Onglet Segmentation** : profil de la clientèle sur une période — nb de clients,
+  commandes/client, panier moyen, **fréquence d'achat** (1/2/3/4/5+ achats), **achats en
+  promo** (deux lectures : fenêtres commerciales *et* remise réellement appliquée — ⚠️ ne
+  pas confondre), répartition des paniers, tailles commandées. Export Excel 5 onglets.
+  ⚠️ Le **client = e-mail**, pas compte (moitié des commandes sont passées sans compte).
 - **Note** : hors périmètre du **menu Exports** (`/export`) qui regroupe les exports **B2B**.
 
 ## Exports (`/export`)

@@ -10,9 +10,10 @@ produits, commandes, stock, remboursements) + **gestion VIP via Brevo**.
 - Synchro poussée via n8n vers **`/api/sync/btoc/*`** :
   `customers`, `orders`, `products`, `stock`, `refunds`, `order-countries`,
   `vip-recompute`. (Auth `x-api-key=SYNC_API_KEY` comme les autres `/api/sync`.)
-- Écran : **`/btoc`** (onglets clients, produits, commandes, stats…). API de lecture/exports
-  sous `/api/btoc/*` : `customers`, `stats`, `size-distribution`,
-  `export/{orders,products,best-sellers,top-clients,sales-details,parents}`, `settings`.
+- Écran : **`/btoc`** (onglets Statistiques, Export, **Segmentation**, Clients, Paramètres).
+  API de lecture/exports sous `/api/btoc/*` : `customers`, `stats`, `size-distribution`,
+  **`segmentation`**, `export/{orders,products,best-sellers,top-clients,sales-details,parents}`,
+  `settings`.
 
 ## Stats BtoC — Top 15 produits
 
@@ -22,6 +23,46 @@ produit**, toutes couleurs/tailles confondues (avant : 1 barre par variante → 
 occupait plusieurs barres). Une requête groupée par `(ref, color)` fournit aussi le **détail
 par coloris** (code) affiché dans l'infobulle au survol. Bascule **CA / Quantité** (re-classe
 le top + change l'axe) sur le Top 15 et le graphe par catégorie (`stats-tab.tsx`).
+
+## Segmentation clientèle (`/api/btoc/segmentation`)
+
+Onglet **Segmentation** de `/btoc` (`src/components/btoc/segmentation-tab.tsx`). Une seule
+route GET renvoie les 5 blocs : `overview`, `frequency`, `promo`, `baskets`, `sizes`.
+Filtres `dateFrom`/`dateTo` (bornes Paris via `parisRangeToUtc`) + `statuses` (CSV).
+
+### ⚠️ Le client est identifié par l'E-MAIL, pas par `customerId`
+**Une commande sur deux est passée sans compte** : la base compte **2 253 `BtocCustomer`
+pour 3 176 e-mails distincts** dans les commandes. Grouper par `customerId` ferait
+disparaître tous les acheteurs invités (et les fusionnerait sur le client « 0 »). Toutes les
+agrégations groupent donc sur **`LOWER(o."customerEmail")`**, les commandes sans e-mail étant
+écartées. C'est aussi ce qui rapproche le mieux du comportement réel : le même acheteur qui
+repasse commande sans se connecter est bien compté comme **récurrent**.
+
+### Deux lectures de la « promo », volontairement séparées
+- **Fenêtres de dates** (la définition métier demandée) : Black Friday `mois = 11 ET jour
+  20→30`, soldes `mois = 1 OU (mois = 6 ET jour ≥ 20) OU mois = 7`, fin de mois `jour ≥ 25`,
+  plus un cumul « au moins une fenêtre ». Le jour/mois sont extraits de `parisDayExpr`.
+- **Remise réelle** : `COALESCE("discountTotal",0) > 0 OR "couponCodes" IS NOT NULL`.
+
+⚠️ **Ne jamais additionner ni confondre les deux.** Une commande en période de soldes peut
+être au plein tarif, et une remise peut tomber hors période. *Mesure réelle sur 2026 :
+**2 709 commandes dans au moins une fenêtre** mais seulement **1 036 réellement remisées** —
+la lecture par fenêtre surestime d'un facteur 2,6.* Les deux sont affichées côte à côte,
+jamais agrégées. `promoOnlyClients` (toutes les commandes remisées) et `neverPromoClients`
+s'appuient sur la **remise réelle**, pas sur les fenêtres.
+
+### Autres points
+- CA = **`total − totalRefunded`** (encaissé). Statuts exclus par défaut :
+  `cancelled`/`refunded`/`failed`.
+- `frequency` : buckets `1`,`2`,`3`,`4`,`5+` (clients, commandes, CA).
+- `baskets` : `<50`, `50–100`, `100–150`, `150–250`, `250+` (le préfixe `1.`…`5.` sert
+  uniquement à l'`ORDER BY` SQL, il est retiré de la réponse).
+- `sizes` : ⚠️ **WooCommerce stocke les tailles en minuscules** (`l`, `xl`) →
+  `UPPER(TRIM(l.size))`, sinon `L` et `l` comptent pour deux tailles. Classées par pièces
+  décroissantes ; l'écran n'en montre que 14, l'export Excel les contient toutes.
+- ⚠️ **Black Friday affiche 0** tant que la base ne couvre pas un mois de novembre
+  (l'historique commence au 01/01/2026) — ce n'est pas un bug de la requête.
+- Export Excel client (xlsx) : 5 onglets, généré côté navigateur depuis la réponse JSON.
 
 ## VIP Brevo
 

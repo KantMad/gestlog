@@ -7,8 +7,9 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { BtocStatsTab } from "@/components/btoc/stats-tab";
 import { BtocClientsTab } from "@/components/btoc/clients-tab";
 import { BtocExportTab } from "@/components/btoc/export-tab";
+import { BtocSegmentationTab } from "@/components/btoc/segmentation-tab";
 import { BtocSettingsTab } from "@/components/btoc/settings-tab";
-import { BarChart3, Users, Download, Settings } from "lucide-react";
+import { BarChart3, Users, Download, Settings, PieChart } from "lucide-react";
 
 export default function BtocPage() {
   const [activeTab, setActiveTab] = useState("stats");
@@ -32,6 +33,10 @@ export default function BtocPage() {
               <Download className="h-4 w-4" />
               Export
             </TabsTrigger>
+            <TabsTrigger value="segmentation" className="gap-2">
+              <PieChart className="h-4 w-4" />
+              Segmentation
+            </TabsTrigger>
             <TabsTrigger value="clients" className="gap-2">
               <Users className="h-4 w-4" />
               Clients
@@ -48,6 +53,10 @@ export default function BtocPage() {
 
           <TabsContent value="export">
             <BtocExportTab />
+          </TabsContent>
+
+          <TabsContent value="segmentation">
+            <BtocSegmentationTab />
           </TabsContent>
 
           <TabsContent value="clients">

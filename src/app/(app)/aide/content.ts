@@ -1082,6 +1082,59 @@ export const HELP_THEMES: HelpTheme[] = [
         ],
       },
       {
+        id: "btoc-segmentation",
+        icon: "\ud83e\udde9",
+        title: "Segmentation clientèle",
+        keywords: "btoc segmentation client fidélité fréquence achat promo soldes black friday panier taille récurrent",
+        sections: [
+          {
+            lines: [
+              "L'onglet **Segmentation** répond à une question simple : **qui sont nos clients ?** Combien il y en a, combien de fois ils achètent, à quel prix, dans quelles tailles, et s'ils attendent les promos.",
+              "Un **client = une adresse e-mail**, pas un compte : environ **une commande sur deux est passée sans créer de compte**. Compter les comptes ferait disparaître tous ces acheteurs.",
+            ],
+            tip: "Choisis une **période** en haut de l'écran, ou laisse vide pour tout l'historique. Le bouton **Exporter Excel** sort les 5 tableaux en 5 onglets. 📊",
+          },
+          {
+            h: "Fréquence d'achat",
+            lines: [
+              "Le nombre de clients qui ont acheté **1 fois, 2 fois, 3 fois, 4 fois, 5 fois et plus**, avec le chiffre d'affaires de chaque groupe.",
+              "En bas, deux chiffres à surveiller : les **clients fidélisés** (2 achats et plus) et les **clients à achat unique**.",
+            ],
+            tip: "C'est l'indicateur de fidélité le plus parlant : faire repasser un client à l'achat unique coûte bien moins cher que d'en trouver un nouveau. 🎯",
+          },
+          {
+            h: "Achats en promotion — deux lectures ⚠️",
+            lines: [
+              "**Commandes réellement remisées** (encadré rose) : la commande porte un **code promo** ou une **remise**. C'est le chiffre fiable.",
+              "**Par période commerciale** : les commandes tombées pendant le **Black Friday** (20–30 nov.), les **soldes** (janvier, 20 juin → juillet) ou la **fin de mois** (du 25 au 31).",
+              "⚠️ Les deux ne disent pas la même chose : une commande passée pendant les soldes peut être **au plein tarif**, et une remise peut tomber **hors période**. Ne les additionne pas.",
+            ],
+          },
+          {
+            h: "Qui achète en promo ?",
+            lines: [
+              "**Clients qui n'achètent QUE en promo** : toutes leurs commandes sont remisées. Ils ne reviendront pas au plein tarif — inutile de leur pousser du nouveau produit au prix fort.",
+              "**Clients jamais en promo** : ils paient plein pot. C'est la clientèle à protéger, et à ne surtout pas habituer aux remises.",
+            ],
+          },
+          {
+            h: "Montants et tailles",
+            lines: [
+              "**Montant des commandes** : la répartition des paniers (moins de 50 €, 50–100, 100–150, 150–250, 250 € et plus), en nombre de commandes et en CA.",
+              "**Tailles commandées** : les tailles classées de la plus vendue à la moins vendue, en pièces. L'écran affiche les 14 premières, l'**export Excel contient tout**.",
+            ],
+          },
+          {
+            h: "Comment sont calculés les montants",
+            lines: [
+              "Le CA affiché est le montant **réellement encaissé** : total de la commande **moins les remboursements**.",
+              "Par défaut, les commandes **annulées, remboursées et en échec** sont exclues.",
+              "Les périodes sont calculées en **heure de Paris**, comme dans WooCommerce.",
+            ],
+          },
+        ],
+      },
+      {
         id: "btoc-parents",
         icon: "\ud83d\udce6",
         title: "Export Produits parents",
