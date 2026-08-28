@@ -875,6 +875,14 @@ export const HELP_THEMES: HelpTheme[] = [
             tip: "Une opération = **un client + un libellé** que tu choisis (ex. « TALANGE été 2026 »). Un même client peut en avoir plusieurs en parallèle. 🤝",
           },
           {
+            h: "Créer l'opération",
+            lines: [
+              "Le champ **Client** est une recherche : tape quelques lettres du nom ou du code, et choisis dans les suggestions.",
+              "Tant que tu n'as pas retenu une suggestion, GestLog te le signale — il faut un client de la liste, pas un texte libre.",
+              "Donne ensuite un **libellé** à l'opération pour la retrouver facilement.",
+            ],
+          },
+          {
             h: "Les trois imports",
             lines: [
               "**1. Livraison** — ce qu'on dépose chez le client. Tu peux en importer **plusieurs** : si tu recomplètes le dépôt en cours de route, les quantités s'ajoutent.",

@@ -8,10 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger,
-} from "@/components/ui/select";
-import { Handshake, Plus, ChevronRight, Loader2 } from "lucide-react";
+import { Handshake, Plus, ChevronRight, Loader2, Search } from "lucide-react";
 import { toast } from "sonner";
 import { cn, formatNumber } from "@/lib/utils";
 
@@ -21,12 +18,16 @@ interface DealRow {
   movements: number; delivered: number; sold: number; returned: number; remaining: number;
 }
 
+/** Libellé d'un client dans la liste de suggestions : « MCS Romans (MARKS02601) ». */
+const clientLabel = (c: { name: string; code: string }) => `${c.name} (${c.code})`;
+
 export default function ConditionnellePage() {
   const [deals, setDeals] = useState<DealRow[]>([]);
   const [clients, setClients] = useState<{ id: string; code: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [newClient, setNewClient] = useState("");
+  const [clientSearch, setClientSearch] = useState(""); // saisie du champ de recherche client
   const [newLabel, setNewLabel] = useState("");
 
   const load = useCallback(async () => {
@@ -66,6 +67,8 @@ export default function ConditionnellePage() {
       if (!res.ok) throw new Error(data.error || "Erreur");
       toast.success("Opération créée");
       setNewLabel("");
+      setClientSearch("");
+      setNewClient("");
       load();
     } catch (e) {
       toast.error("Création impossible", { description: String(e) });
@@ -101,21 +104,36 @@ export default function ConditionnellePage() {
           <CardContent>
             <div className="flex flex-wrap items-end gap-3">
               <div className="space-y-1.5">
-                <label className="block text-xs font-medium text-muted-foreground">Client</label>
-                <Select value={newClient} onValueChange={(v: string | null) => v && setNewClient(v)}>
-                  <SelectTrigger className="h-9 w-72">
-                    <span className={cn("truncate text-sm", !newClient && "text-muted-foreground")}>
-                      {clients.find((c) => c.id === newClient)?.name || "Choisir un client…"}
-                    </span>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {clients.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {c.name} ({c.code})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <label htmlFor="cond-client" className="block text-xs font-medium text-muted-foreground">
+                  Client
+                </label>
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    id="cond-client"
+                    list="conditional-clients"
+                    value={clientSearch}
+                    placeholder={`Rechercher parmi ${clients.length} clients…`}
+                    className={cn("h-9 w-72 pl-9", newClient && "border-primary")}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setClientSearch(v);
+                      // Une suggestion choisie → la valeur vaut exactement un libellé.
+                      const match = clients.find((c) => clientLabel(c) === v);
+                      setNewClient(match ? match.id : "");
+                    }}
+                  />
+                </div>
+                <datalist id="conditional-clients">
+                  {clients.map((c) => (
+                    <option key={c.id} value={clientLabel(c)} />
+                  ))}
+                </datalist>
+                {clientSearch && !newClient && (
+                  <p className="text-[11px] text-amber-600">
+                    Choisis un client dans la liste de suggestions.
+                  </p>
+                )}
               </div>
               <div className="space-y-1.5">
                 <label className="block text-xs font-medium text-muted-foreground">Libellé</label>

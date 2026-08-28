@@ -398,6 +398,10 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
   avec une **ligne TOTAL** pour retrouver les chiffres de l'écran.
 
 ## Vente en conditionnelle (`/conditionnelle`)
+- **Création d'une opération** : le client se choisit dans un **champ de recherche à
+  suggestions** (`<datalist>`, libellé « Nom (CODE) ») — il y a ~390 clients, un menu
+  déroulant était impraticable. Tant qu'aucune suggestion n'est retenue, le champ reste
+  neutre et un message le rappelle : seul un client **choisi dans la liste** est valide.
 - **Rôle** : suivre un **dépôt-vente** — on livre du stock chez un client, il déclare ses
   ventes au fil des mois, puis nous **rend le reliquat**. À tout instant :
   **`solde = LIVRAISON − VENTE − RETOUR`**, par produit **et taille**.
