@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { handleApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
-import { parisRangeToUtc } from "@/lib/btoc-dates";
+import { parisRangeToUtc, parisDayExpr } from "@/lib/btoc-dates";
 
 export const maxDuration = 60;
 
@@ -10,6 +10,9 @@ export const maxDuration = 60;
 //
 // Filtres : ?dateFrom&dateTo&statuses  ?minSpent&maxSpent  ?minOrders&maxOrders
 //           ?sizes=3XL,4XL&sizeMode=any|only|all   ?promo=all|discounted|only|never
+//           ?window=bf|soldes|fin_mois|any   ?basket=1..5   (clic sur un bloc de l'écran :
+//           « a AU MOINS une commande » dans cette période / cette tranche de panier)
+//           ?q=texte (e-mail ou nom)   ?limit=N
 //           ?countOnly=1 → seulement le décompte + 5 lignes d'aperçu (l'écran l'appelle à
 //           chaque changement de filtre ; la liste complète n'est chargée qu'à l'export).
 //
@@ -24,6 +27,10 @@ export async function GET(request: NextRequest) {
       .split(",").map((s) => s.trim().toUpperCase()).filter(Boolean);
     const sizeMode = p.get("sizeMode") || "any";
     const promo = p.get("promo") || "all";
+    const windowKey = p.get("window") || "";
+    const basket = p.get("basket") || "";
+    const q = (p.get("q") || "").trim();
+    const limit = Number(p.get("limit")) || 0;
     const num = (k: string) => {
       const v = p.get(k);
       if (v === null || v.trim() === "") return null;
@@ -59,6 +66,26 @@ export async function GET(request: NextRequest) {
     else if (promo === "only") where.push(`a.n_promo = a.n_orders`);
     else if (promo === "never") where.push(`a.n_promo = 0`);
 
+    // Fenêtres et tranches de panier sont des propriétés de la COMMANDE : au niveau client
+    // on retient « a au moins une commande qui correspond ».
+    const WINDOW_COL: Record<string, string> = {
+      bf: "a.n_bf > 0",
+      soldes: "a.n_soldes > 0",
+      fin_mois: "a.n_fin_mois > 0",
+      any: "(a.n_bf + a.n_soldes + a.n_fin_mois) > 0",
+    };
+    if (WINDOW_COL[windowKey]) where.push(WINDOW_COL[windowKey]);
+    if (/^[1-5]$/.test(basket)) where.push(`a.n_b${basket} > 0`);
+
+    if (q) {
+      const i = params.push(`%${q}%`);
+      where.push(
+        `(a.email ILIKE $${i} OR lo."billingFirstName" ILIKE $${i}
+          OR lo."billingLastName" ILIKE $${i} OR lo."customerName" ILIKE $${i}
+          OR (COALESCE(lo."billingFirstName",'') || ' ' || COALESCE(lo."billingLastName",'')) ILIKE $${i})`
+      );
+    }
+
     const countOnly = p.get("countOnly") === "1";
 
     // CTE commune : la sélection finale ne change que par ses colonnes (aperçu vs export).
@@ -70,7 +97,9 @@ export async function GET(request: NextRequest) {
                 o."billingPostcode", o."billingCity", o."billingCountry",
                 o."shippingFirstName", o."shippingLastName", o."shippingAddress1",
                 o."shippingPostcode", o."shippingCity", o."shippingCountry",
-                o."customerName"
+                o."customerName",
+                EXTRACT(DAY   FROM ${parisDayExpr('o."orderDate"')})::int AS d,
+                EXTRACT(MONTH FROM ${parisDayExpr('o."orderDate"')})::int AS m
          FROM "BtocOrder" o
          WHERE o."customerEmail" IS NOT NULL AND o."customerEmail" <> ''
            AND ${dateCond} AND ${statusCond}
@@ -91,6 +120,14 @@ export async function GET(request: NextRequest) {
        a AS (
          SELECT email, COUNT(*) AS n_orders, SUM(net) AS spent, SUM(disc) AS discount,
                 COUNT(*) FILTER (WHERE disc > 0 OR "couponCodes" IS NOT NULL) AS n_promo,
+                COUNT(*) FILTER (WHERE m = 11 AND d BETWEEN 20 AND 30) AS n_bf,
+                COUNT(*) FILTER (WHERE m = 1 OR (m = 6 AND d >= 20) OR m = 7) AS n_soldes,
+                COUNT(*) FILTER (WHERE d >= 25) AS n_fin_mois,
+                COUNT(*) FILTER (WHERE net < 50) AS n_b1,
+                COUNT(*) FILTER (WHERE net >= 50 AND net < 100) AS n_b2,
+                COUNT(*) FILTER (WHERE net >= 100 AND net < 150) AS n_b3,
+                COUNT(*) FILTER (WHERE net >= 150 AND net < 250) AS n_b4,
+                COUNT(*) FILTER (WHERE net >= 250) AS n_b5,
                 MIN("orderDate") AS first_order, MAX("orderDate") AS last_order
          FROM o GROUP BY email
        ),
@@ -128,7 +165,9 @@ export async function GET(request: NextRequest) {
     );
 
     const rows = await prisma.$queryRawUnsafe<Record<string, unknown>[]>(
-      `${FROM} SELECT * FROM matched ORDER BY spent DESC${countOnly ? " LIMIT 5" : ""}`,
+      `${FROM} SELECT * FROM matched ORDER BY spent DESC${
+        countOnly ? " LIMIT 5" : limit > 0 ? ` LIMIT ${Math.min(limit, 5000)}` : ""
+      }`,
       ...params
     );
 

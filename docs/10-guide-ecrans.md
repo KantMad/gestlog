@@ -451,6 +451,9 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
   ⚠️ Le **client = e-mail**, pas compte (moitié des commandes sont passées sans compte).
   **Export ciblé** : croiser montant dépensé / nb de commandes / promo / tailles (3 modes :
   au moins une, uniquement celles-ci, toutes) → fiche complète des clients retenus.
+  **Drill-down** : chaque ligne chiffrée est cliquable → liste des clients du segment avec
+  recherche e-mail/nom et export. ⚠️ Les blocs promo/panier comptent des **commandes**, le
+  détail liste des **clients** : les totaux diffèrent légitimement.
 - **Note** : hors périmètre du **menu Exports** (`/export`) qui regroupe les exports **B2B**.
 
 ## Exports (`/export`)

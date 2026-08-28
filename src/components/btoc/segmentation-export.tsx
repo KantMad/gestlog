@@ -6,23 +6,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Download, Loader2, Filter, RotateCcw } from "lucide-react";
 import { cn, formatNumber } from "@/lib/utils";
+import {
+  clientDisplayName, clientSheetRows,
+  type SegmentedClient, type SegmentedSummary,
+} from "@/lib/btoc-clients";
 import * as XLSX from "xlsx";
 
 const euro = (n: number) =>
   new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(n);
-const day = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("fr-FR") : "");
 
-interface Client {
-  email: string; firstName: string; lastName: string; customerName: string;
-  phone: string; company: string;
-  billingAddress: string; billingPostcode: string; billingCity: string; billingCountry: string;
-  shippingFirstName: string; shippingLastName: string; shippingAddress: string;
-  shippingPostcode: string; shippingCity: string; shippingCountry: string;
-  orders: number; spent: number; averageBasket: number; discount: number; promoOrders: number;
-  firstOrder: string | null; lastOrder: string | null;
-  pieces: number; sizes: string; isVip: boolean;
-}
-interface Summary { clients: number; orders: number; revenue: number; pieces: number }
 
 type SizeMode = "any" | "only" | "all";
 type PromoMode = "all" | "discounted" | "only" | "never";
@@ -74,8 +66,8 @@ export function SegmentationExport({
   const [sizeMode, setSizeMode] = useState<SizeMode>("any");
   const [promo, setPromo] = useState<PromoMode>("all");
 
-  const [summary, setSummary] = useState<Summary | null>(null);
-  const [preview, setPreview] = useState<Client[]>([]);
+  const [summary, setSummary] = useState<SegmentedSummary | null>(null);
+  const [preview, setPreview] = useState<SegmentedClient[]>([]);
   const [counting, setCounting] = useState(false);
   const [exporting, setExporting] = useState(false);
   const reqId = useRef(0);
@@ -126,27 +118,7 @@ export function SegmentationExport({
       const res = await fetch(`/api/btoc/segmentation/clients?${query}`);
       const d = await res.json();
       if (!res.ok) return;
-      const rows = (d.clients as Client[]).map((c) => ({
-        "E-mail": c.email,
-        Prénom: c.firstName, Nom: c.lastName,
-        "Nom (commande)": c.customerName,
-        Téléphone: c.phone, Société: c.company,
-        "Adresse facturation": c.billingAddress, "CP facturation": c.billingPostcode,
-        "Ville facturation": c.billingCity, "Pays facturation": c.billingCountry,
-        "Prénom livraison": c.shippingFirstName, "Nom livraison": c.shippingLastName,
-        "Adresse livraison": c.shippingAddress, "CP livraison": c.shippingPostcode,
-        "Ville livraison": c.shippingCity, "Pays livraison": c.shippingCountry,
-        "Nb commandes": c.orders,
-        "Total dépensé (€)": c.spent,
-        "Panier moyen (€)": c.averageBasket,
-        "Remises obtenues (€)": c.discount,
-        "Commandes en promo": c.promoOrders,
-        "Première commande": day(c.firstOrder),
-        "Dernière commande": day(c.lastOrder),
-        Pièces: c.pieces,
-        "Tailles achetées": c.sizes,
-        VIP: c.isVip ? "Oui" : "Non",
-      }));
+      const rows = clientSheetRows(d.clients as SegmentedClient[]);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Clients");
       // Onglet rappelant les critères : sans lui, un fichier exporté ne se relit pas.
@@ -295,7 +267,7 @@ export function SegmentationExport({
                     <tr key={c.email} className="border-t">
                       <td className="px-3 py-2">
                         <div className="font-medium">
-                          {[c.firstName, c.lastName].filter(Boolean).join(" ") || c.customerName || "—"}
+                          {clientDisplayName(c)}
                         </div>
                         <div className="text-xs text-muted-foreground">{c.email}</div>
                       </td>

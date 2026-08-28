@@ -1125,6 +1125,25 @@ export const HELP_THEMES: HelpTheme[] = [
             ],
           },
           {
+            h: "Cliquer pour voir QUI se cache derrière un chiffre",
+            lines: [
+              "**Chaque ligne chiffrée de l'écran est cliquable** : une fréquence d'achat, une période de promo, une tranche de panier, une taille, la tuile Clients… Le clic ouvre la **liste des clients concernés**.",
+              "Dans cette liste : nom, e-mail, téléphone, ville, nb de commandes, total dépensé, panier moyen, tailles achetées et date du dernier achat.",
+              "Un champ **Rechercher** permet de retrouver un **e-mail ou un nom** précis dans le segment — la recherche porte sur **tout le segment**, pas seulement sur les lignes affichées.",
+              "Le bouton **Exporter** sort ce sous-ensemble en Excel, avec les mêmes colonnes que l'export ciblé.",
+            ],
+            tip: "La liste s'affiche par 200 clients ; le bouton en bas en charge davantage. L'export, lui, contient **tout** le segment quoi qu'il arrive. 📄",
+          },
+          {
+            h: "Pourquoi le détail affiche moins que le bloc ⚠️",
+            lines: [
+              "Les blocs **Promotions** et **Montant des commandes** comptent des **commandes**. Le détail, lui, liste des **clients**.",
+              "Un client qui a commandé trois fois pendant les soldes compte pour **3 commandes** dans le bloc mais pour **1 client** dans le détail.",
+              "*Exemple réel : la fenêtre soldes affiche 2 373 commandes, et le détail 1 892 clients.* Ce n'est pas une erreur.",
+              "Pour les mêmes raisons, cliquer sur une tranche de panier donne les clients qui ont **au moins une** commande dans cette tranche — ils peuvent en avoir d'autres ailleurs.",
+            ],
+          },
+          {
             h: "Export ciblé — sortir SES clients",
             lines: [
               "Le bloc **Export ciblé** sert à ça : tu poses tes critères, GestLog te sort le **fichier complet des clients qui correspondent** (nom, e-mail, téléphone, adresses de facturation et de livraison, totaux, tailles achetées).",

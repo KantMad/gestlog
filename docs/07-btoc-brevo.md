@@ -97,6 +97,38 @@ qui ont acheté une pièce grande taille pour quelqu'un d'autre.
   **3 629** une adresse (le reste est vide dans WooCommerce aussi).
 - Le classeur contient un 2e onglet **« Critères »** rappelant le filtre appliqué — sans lui
   un export retrouvé plus tard est illisible.
+- Mapping Excel partagé : **`src/lib/btoc-clients.ts`** (`clientSheetRows`,
+  `clientDisplayName`, type `SegmentedClient`) — l'export ciblé ET le détail d'un bloc
+  doivent produire **les mêmes 26 colonnes**, sinon deux exports du même écran ne se
+  comparent plus. Couvert par `btoc-clients.test.ts`.
+
+### Détail d'un bloc (drill-down)
+Chaque ligne chiffrée de l'écran est **cliquable** et ouvre
+`segmentation-detail.tsx` (dialog) : liste des clients concernés, **recherche e-mail/nom**,
+et export du sous-ensemble. Les blocs se traduisent en filtres de la même route :
+
+| Bloc cliqué | Paramètres |
+|---|---|
+| Tuile « Clients » | *(aucun)* |
+| Fréquence `n` / `5+` | `minOrders`/`maxOrders` |
+| Fidélisés / achat unique | `minOrders=2` / `minOrders=1&maxOrders=1` |
+| Commandes remisées | `promo=discounted` |
+| Fenêtre commerciale | `window=bf\|soldes\|fin_mois\|any` |
+| QUE en promo / jamais | `promo=only` / `promo=never` |
+| Tranche de panier | `basket=1..5` |
+| Taille | `sizes=<taille>&sizeMode=any` |
+
+⚠️ **Fenêtres et tranches de panier sont des propriétés de la COMMANDE**, pas du client : au
+niveau client le filtre signifie « **a au moins une commande** qui correspond ». D'où des
+totaux différents de ceux du bloc, qui comptent des commandes. *Exemple : la fenêtre soldes
+affiche **2 373 commandes** dans le bloc mais **1 892 clients** dans le détail — un client
+peut avoir commandé plusieurs fois.* Ce n'est pas une incohérence.
+
+- **`q`** (e-mail ou nom) est appliqué **en SQL**, donc la recherche porte sur **tout** le
+  segment, pas seulement sur les lignes déjà chargées. Il compare aussi
+  `billingFirstName || ' ' || billingLastName` pour retrouver un « Jean Martin » tapé en entier.
+- **`limit`** (plafonné à 5 000) : le dialog charge 200 lignes puis 200 de plus à la demande ;
+  l'export, lui, part **sans limite**. Le `summary` reste calculé sur l'ensemble du segment.
 
 ## VIP Brevo
 
