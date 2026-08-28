@@ -21,6 +21,7 @@ export const APP_SCREENS: { key: string; label: string }[] = [
   { key: "/integration-cc", label: "Fichier d'intégration CC" },
   { key: "/lancement-commande", label: "Lancement de commande" },
   { key: "/a-vendre", label: "À vendre" },
+  { key: "/conditionnelle", label: "Vente en conditionnelle" },
   { key: "/controle-commandes", label: "Contrôle commandes" },
   { key: "/export", label: "Exports" },
   { key: "/btoc", label: "BtoC" },
@@ -54,6 +55,7 @@ export function parseScreenAccess(raw: unknown): string[] | null {
 // « Statistiques » recevait 403 sur ses propres données et la page plantait.
 const API_SCREEN_MAP: [string, string[]][] = [
   ["/api/a-vendre", ["/a-vendre"]],
+  ["/api/conditional", ["/conditionnelle"]],
   ["/api/allocation", ["/allocation"]],
   // Les échantillons retirent du disponible à la répartition → accessibles aussi à qui
   // gère la répartition, sans devoir cocher deux écrans.

@@ -862,6 +862,55 @@ export const HELP_THEMES: HelpTheme[] = [
         ],
       },
       {
+        id: "conditionnelle",
+        icon: "\ud83e\udd1d",
+        title: "Vente en conditionnelle (dépôt-vente)",
+        keywords: "conditionnelle depot vente livraison declaration retour solde facturer ean ecart",
+        sections: [
+          {
+            lines: [
+              "La conditionnelle, c'est du **dépôt-vente** : on livre de la marchandise chez un client, il déclare au fil des mois ce qu'il a vendu, et il nous **rend le reste** à la fin.",
+              "L'écran suit ce cycle en continu. À tout moment : **reste = livré − vendu − rendu**, produit par produit et taille par taille.",
+            ],
+            tip: "Une opération = **un client + un libellé** que tu choisis (ex. « TALANGE été 2026 »). Un même client peut en avoir plusieurs en parallèle. 🤝",
+          },
+          {
+            h: "Les trois imports",
+            lines: [
+              "**1. Livraison** — ce qu'on dépose chez le client. Tu peux en importer **plusieurs** : si tu recomplètes le dépôt en cours de route, les quantités s'ajoutent.",
+              "**2. Ventes déclarées** — le relevé que le client envoie. À importer à chaque fois qu'il en envoie un : les imports **se cumulent** et se déduisent du dépôt.",
+              "**3. Retour** — ce qu'il nous rend à la fin. Normalement, ça solde tout ce qui restait.",
+            ],
+            tip: "Erreur de fichier ? Chaque import se **supprime à l'unité** (l'icône corbeille) et le solde se recalcule tout seul. Rien n'est figé. 🗑️",
+          },
+          {
+            h: "Les fichiers acceptés",
+            lines: [
+              "Excel ou CSV. GestLog cherche les colonnes **par leur nom** : un identifiant produit (**EAN**, ou **référence + couleur + taille**) et une **quantité**.",
+              "L'**EAN est prioritaire** : il suffit à lui seul, puisqu'il désigne déjà la référence, la couleur et la taille. Sans EAN, GestLog utilise référence + couleur + taille.",
+              "L'en-tête n'a pas besoin d'être en première ligne — un titre au-dessus ne gêne pas.",
+            ],
+          },
+          {
+            h: "Les alertes",
+            lines: [
+              "**Produit jamais livré** : le client déclare un article qui n'a jamais fait partie du dépôt. La ligne apparaît en **rouge**.",
+              "**Déclaré en trop** : il annonce plus de pièces qu'il n'en a reçues — le reste passe en négatif. Ligne en **orange**.",
+              "**Clôture non soldée** : si le retour ne couvre pas tout, GestLog demande confirmation avant de clôturer et garde l'écart affiché.",
+            ],
+            tip: "Ces lignes sont **conservées**, jamais écartées : aucune quantité ne disparaît, tu gardes la main pour arbitrer avec le client. ⚠️",
+          },
+          {
+            h: "Ce que tu peux sortir",
+            lines: [
+              "**Ventes (EAN)** — le fichier de facturation : EAN, référence, couleur, taille, quantité vendue, prix de gros et montant, avec une ligne TOTAL.",
+              "**Rapport d'écarts** — tout ce qui n'est pas soldé, avec le motif : jamais livré, déclaré en trop, ou reste en dépôt.",
+              "Le **montant à facturer** affiché en haut correspond aux ventes déclarées valorisées au **prix de gros** du référentiel.",
+            ],
+          },
+        ],
+      },
+      {
         id: "a-vendre",
         icon: "🏷️",
         title: "À vendre : écouler le stock",

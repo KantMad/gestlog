@@ -33,6 +33,7 @@ import {
   FileSpreadsheet,
   Rocket,
   Tags,
+  Handshake,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
@@ -60,6 +61,7 @@ const NAV_ITEMS = [
   { href: "/integration-cc", label: "Fichier d'intégration CC", icon: FileSpreadsheet },
   { href: "/lancement-commande", label: "Lancement de commande", icon: Rocket },
   { href: "/a-vendre", label: "À vendre", icon: Tags },
+  { href: "/conditionnelle", label: "Vente en conditionnelle", icon: Handshake },
   { href: "/controle-commandes", label: "Contrôle commandes", icon: ScanSearch },
   { href: "/export", label: "Exports", icon: Download },
   { href: "/btoc", label: "BtoC", icon: ShoppingBag },

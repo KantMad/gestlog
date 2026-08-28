@@ -48,6 +48,7 @@ model Client {
   seasons      ClientSeason[]
   clientOrders ClientOrder[]
   deliveries   Delivery[]
+  conditionalDeals ConditionalDeal[]
 }
 
 model ClientSeason {
@@ -106,6 +107,7 @@ model Product {
   allocationLines    AllocationLine[]
   deliveryLines      DeliveryLine[]
   shipmentSamples    ShipmentSample[]
+  conditionalLines   ConditionalMovementLine[]
 
   @@unique([reference, color])
   @@index([reference])
@@ -774,4 +776,62 @@ model WarehouseDocumentLine {
   @@index([documentId])
   @@index([reference])
   @@index([ean])
+}
+
+// ─── Vente en conditionnelle (dépôt-vente) ────────────────────────────────────
+// On dépose du stock chez un client ; il déclare ses ventes au fil des mois, puis
+// nous rend le reliquat. Le solde d'une opération vaut à tout moment :
+//     LIVRAISON − VENTE − RETOUR    (par produit + taille)
+// Chaque import crée UN mouvement : l'historique reste auditable et annulable.
+model ConditionalDeal {
+  id        String   @id @default(cuid())
+  clientId  String
+  label     String   // libellé libre saisi à la création (ex. « TALANGE été 2026 »)
+  status    String   @default("EN_COURS") // EN_COURS, CLOTUREE
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  client    Client                @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  movements ConditionalMovement[]
+
+  @@unique([clientId, label])
+  @@index([clientId])
+  @@index([status])
+}
+
+model ConditionalMovement {
+  id       String   @id @default(cuid())
+  dealId   String
+  type     String   // LIVRAISON (+), VENTE (−), RETOUR (−)
+  fileName String?
+  // Nom de l'utilisateur ayant importé (audit) + date de l'opération déclarée.
+  importedBy String?
+  movementDate DateTime @default(now())
+  createdAt    DateTime @default(now())
+
+  deal  ConditionalDeal          @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  lines ConditionalMovementLine[]
+
+  @@index([dealId])
+  @@index([type])
+}
+
+model ConditionalMovementLine {
+  id         String  @id @default(cuid())
+  movementId String
+  // null quand le produit est inconnu du référentiel : la ligne est conservée pour
+  // ne rien perdre, et signalée en anomalie.
+  productId  String?
+  ean        String?
+  reference  String
+  color      String
+  size       String
+  quantity   Int
+
+  movement ConditionalMovement @relation(fields: [movementId], references: [id], onDelete: Cascade)
+  product  Product?            @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([movementId])
+  @@index([productId])
 }

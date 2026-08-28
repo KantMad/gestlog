@@ -397,6 +397,39 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
 - **Export Excel** : toute la liste filtrée (l'écran n'affiche que les 300 premières lignes),
   avec une **ligne TOTAL** pour retrouver les chiffres de l'écran.
 
+## Vente en conditionnelle (`/conditionnelle`)
+- **Rôle** : suivre un **dépôt-vente** — on livre du stock chez un client, il déclare ses
+  ventes au fil des mois, puis nous **rend le reliquat**. À tout instant :
+  **`solde = LIVRAISON − VENTE − RETOUR`**, par produit **et taille**.
+- **Modèle** : `ConditionalDeal` (client + **libellé libre**, `@@unique([clientId, label])`,
+  statut EN_COURS/CLOTUREE) → `ConditionalMovement` (un **par import** : LIVRAISON / VENTE /
+  RETOUR, avec `fileName`, `importedBy`, `movementDate`) → `ConditionalMovementLine`.
+  Logique pure `src/lib/conditional.ts` (**testée**, 13 tests).
+- **Un import = un mouvement** → l'historique est **auditable** et chaque import est
+  **annulable** à l'unité (le solde se recalcule seul). Aucun stock n'est stocké « en dur ».
+- **Plusieurs livraisons possibles** : on peut recompléter le dépôt en cours de route ; les
+  imports LIVRAISON **s'additionnent** (ils ne remplacent pas).
+- **Résolution produit : EAN d'abord**, repli sur référence + couleur + taille (les fichiers
+  clients sont hétérogènes). L'EAN fait autorité — il porte à lui seul les trois. Les clés
+  sont normalisées comme ailleurs dans le projet : réf **tiret→underscore**, couleur = **code
+  avant le tiret**, taille en majuscules.
+  ⚠️ Une ligne **non résolue est CONSERVÉE** (`productId = null`) : on ne perd aucune
+  quantité, mais elle est signalée et non valorisée.
+- **Lecture des fichiers** : colonnes repérées **par nom** (EAN / Code barre / Gencod ·
+  Référence / Code Produit Fini · Code couleur · Taille · Quantité / Qté / Qty), en-tête
+  cherché sur les **30 premières lignes**, `.xlsx` comme `.csv`. Lignes à quantité ≤ 0 et
+  lignes `TOTAL` ignorées.
+- **Alertes** (à l'import **et** en permanence sur l'écran) :
+  1. **Produits jamais livrés** — présents en VENTE/RETOUR mais absents des LIVRAISON ;
+  2. **Sur-déclaration** — plus vendu/rendu que livré (solde **négatif**) ;
+  3. **Clôture non soldée** — reste ≠ 0 au moment de clôturer (confirmation demandée).
+  Les lignes fautives sont **surlignées** dans le tableau et badgées.
+- **Exports** : **« Ventes (EAN) »** = le fichier de facturation (EAN, réf, couleur, taille,
+  quantité vendue, prix de gros, montant + ligne TOTAL) · **« Rapport d'écarts »** = tout ce
+  qui n'est pas soldé, avec le motif de l'anomalie.
+- **Montant à facturer** = ventes déclarées × **`Product.costPrice`** (prix de gros du
+  référentiel). Les pièces sans prix sont comptées et **signalées**.
+
 ## BtoC (`/btoc`)
 - **Rôle** : piloter la boutique en ligne (stats, exports, clients, VIP Brevo).
 - **Source** : tables `Btoc*` (sync WooCommerce), `HistOrder` (historique autre Woo),

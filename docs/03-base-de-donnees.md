@@ -54,6 +54,12 @@ colonne.
   `lng_shop.city`/`zipcode`, ⚠️ **pas** `billing_*`), synchronisée par n8n et utilisée pour
   nommer le **fichier d'intégration CC**.
 - **`ClientSeason`** — paramétrage d'un client **pour une saison** (rang, seuils, rotation).
+- **`ConditionalDeal` / `ConditionalMovement` / `ConditionalMovementLine`** — **vente en
+  conditionnelle** (dépôt-vente). Une opération = **client + libellé libre** ; chaque import
+  crée **un mouvement** (LIVRAISON / VENTE / RETOUR) avec ses lignes. Le stock déposé n'est
+  **jamais matérialisé** : il se recalcule (`livré − vendu − rendu`), ce qui rend chaque
+  import annulable sans reprise. `productId` peut être **null** (produit inconnu du
+  référentiel) : la quantité est conservée et signalée. Cf. `10`.
 
 ### Fournisseurs, commandes fournisseur, réceptions
 - **`ShipmentSample`** — pièces **prélevées sur une réception** pour le contrôle qualité du
