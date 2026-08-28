@@ -12,6 +12,7 @@ import {
   SelectTrigger,
 } from "@/components/ui/select";
 import {
+  Boxes,
   Crown,
   Download,
   Loader2,
@@ -162,6 +163,14 @@ export function BtocExportTab() {
   const [exportingTopClients, setExportingTopClients] = useState(false);
   const [exportingBestSellers, setExportingBestSellers] = useState(false);
   const [exportingSalesDetails, setExportingSalesDetails] = useState(false);
+  const [exportingParents, setExportingParents] = useState(false);
+
+  // Export « produits parents » : mode inclure/exclure + préfixes de SKU + statut.
+  const [parentMode, setParentMode] = useState<"include" | "exclude">("include");
+  const [parentPrefixes, setParentPrefixes] = useState("");
+  const [parentStatus, setParentStatus] = useState<"publish" | "draft" | "all">("publish");
+  const [parentPreview, setParentPreview] = useState<{ returned: number; total: number } | null>(null);
+  const [parentFacets, setParentFacets] = useState<{ prefix: string; count: number }[]>([]);
 
   // Export « Ventes détaillées » (adresses facturation/livraison + paiement) — plage de dates.
   const [sdDateFrom, setSdDateFrom] = useState("");
@@ -344,6 +353,57 @@ export function BtocExportTab() {
       console.error("Erreur export ventes:", e);
     } finally {
       setExportingOrders(false);
+    }
+  };
+
+  // ─── Export Produits parents (fichier de ré-import Woo) ──
+  const parentParams = useCallback(() => {
+    const p = new URLSearchParams();
+    p.set("mode", parentMode);
+    if (parentPrefixes.trim()) p.set("prefixes", parentPrefixes.trim());
+    p.set("status", parentStatus);
+    return p;
+  }, [parentMode, parentPrefixes, parentStatus]);
+
+  // Aperçu du nombre de parents retenus, rafraîchi à chaque changement de critère.
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/btoc/export/parents?${parentParams()}`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (cancelled || !d.meta) return;
+        setParentPreview({ returned: d.meta.returned, total: d.meta.total });
+        if (d.meta.availablePrefixes) setParentFacets(d.meta.availablePrefixes);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [parentParams]);
+
+  const handleExportParents = async () => {
+    setExportingParents(true);
+    try {
+      const res = await fetch(`/api/btoc/export/parents?${parentParams()}`);
+      const data = await res.json();
+      const skus: { sku: string }[] = data.skus || [];
+      if (skus.length === 0) {
+        alert("Aucun produit parent ne correspond à ces critères.");
+        return;
+      }
+      // En-têtes imposés par le fichier de ré-import : seule la 1re colonne est remplie,
+      // les 4 autres restent VIDES (elles seront complétées dans Excel).
+      const header = ["SKU", "SKU produits liés", "SKU ventes croisées", "ranking", "slug de catégories"];
+      const rows = skus.map((s) => ({
+        SKU: s.sku,
+        "SKU produits liés": "",
+        "SKU ventes croisées": "",
+        ranking: "",
+        "slug de catégories": "",
+      }));
+      downloadXLSX(rows, "Produits parents", `produits-parents-btoc-${today()}.xlsx`, header);
+    } catch (e) {
+      console.error("Erreur export parents:", e);
+    } finally {
+      setExportingParents(false);
     }
   };
 
@@ -823,6 +883,130 @@ export function BtocExportTab() {
               {orderColor && <Badge variant="secondary">Couleur : {orderColor}</Badge>}
               {orderSize && <Badge variant="secondary">Taille : {orderSize}</Badge>}
               {orderCustomer && <Badge variant="secondary">Client : {orderCustomer}</Badge>}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ─── Export Produits parents (fichier de ré-import Woo) ───── */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-50">
+              <Boxes className="h-5 w-5 text-indigo-600" />
+            </div>
+            <div>
+              <CardTitle className="text-base">Export Produits parents</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Liste des SKU parents WooCommerce. Seule la colonne <strong>SKU</strong> est
+                remplie — les 4 autres colonnes n&apos;ont que leur en-tête, à compléter dans
+                Excel.
+              </p>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="space-y-1">
+              <label className="block text-xs font-medium text-muted-foreground">
+                Références
+              </label>
+              <div className="inline-flex rounded-lg border bg-muted/50 p-0.5 text-sm">
+                {([["include", "Inclure"], ["exclude", "Exclure"]] as ["include" | "exclude", string][]).map(
+                  ([val, lbl]) => (
+                    <button
+                      key={val}
+                      type="button"
+                      onClick={() => setParentMode(val)}
+                      className={`rounded-md px-3 py-1.5 font-medium transition-colors ${
+                        parentMode === val
+                          ? "bg-background text-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {lbl}
+                    </button>
+                  )
+                )}
+              </div>
+            </div>
+            <div className="space-y-1">
+              <label className="block text-xs font-medium text-muted-foreground">
+                Préfixes de référence
+              </label>
+              <Input
+                placeholder="ex. RM, PM"
+                value={parentPrefixes}
+                onChange={(e) => setParentPrefixes(e.target.value)}
+                className="h-9 w-56"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="block text-xs font-medium text-muted-foreground">Statut</label>
+              <Select
+                value={parentStatus}
+                onValueChange={(v) => v && setParentStatus(v as "publish" | "draft" | "all")}
+              >
+                <SelectTrigger className="h-9 w-40">
+                  <span className="truncate text-sm">
+                    {parentStatus === "publish" ? "Publiés" : parentStatus === "draft" ? "Brouillons" : "Tous"}
+                  </span>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="publish">Publiés</SelectItem>
+                  <SelectItem value="draft">Brouillons</SelectItem>
+                  <SelectItem value="all">Tous</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <Button onClick={handleExportParents} disabled={exportingParents} className="gap-2 h-9">
+              {exportingParents ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="h-4 w-4" />
+              )}
+              Exporter Parents
+            </Button>
+          </div>
+
+          {parentPreview && (
+            <p className="mt-3 text-sm">
+              <strong>{formatNumber(parentPreview.returned)}</strong> produit(s) parent(s)
+              sélectionné(s)
+              <span className="text-muted-foreground">
+                {" "}sur {formatNumber(parentPreview.total)}
+                {parentMode === "exclude" && parentPrefixes.trim()
+                  ? " (tous sauf les préfixes saisis)"
+                  : ""}
+              </span>
+            </p>
+          )}
+
+          {parentFacets.length > 0 && (
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              <span className="text-xs text-muted-foreground">Préfixes existants :</span>
+              {parentFacets.slice(0, 14).map((f) => (
+                <button
+                  key={f.prefix}
+                  type="button"
+                  title={`${f.count} parent(s)`}
+                  onClick={() => {
+                    const cur = parentPrefixes.split(",").map((x) => x.trim()).filter(Boolean);
+                    const next = cur.includes(f.prefix)
+                      ? cur.filter((x) => x !== f.prefix)
+                      : [...cur, f.prefix];
+                    setParentPrefixes(next.join(", "));
+                  }}
+                  className={`rounded-md border px-1.5 py-0.5 text-xs transition-colors ${
+                    parentPrefixes.split(",").map((x) => x.trim()).includes(f.prefix)
+                      ? "border-primary bg-primary/10 font-medium text-primary"
+                      : "bg-background hover:bg-accent"
+                  }`}
+                >
+                  {f.prefix}
+                  <span className="ml-1 text-muted-foreground">{f.count}</span>
+                </button>
+              ))}
             </div>
           )}
         </CardContent>

@@ -1074,6 +1074,38 @@ export const HELP_THEMES: HelpTheme[] = [
         ],
       },
       {
+        id: "btoc-parents",
+        icon: "\ud83d\udce6",
+        title: "Export Produits parents",
+        keywords: "btoc export produits parents sku woocommerce reimport prefixe inclure exclure",
+        sections: [
+          {
+            lines: [
+              "Dans **BtoC → Export**, cet export sort la liste des **produits parents** de WooCommerce — le produit qui porte les déclinaisons de taille et de couleur, pas les variations elles-mêmes.",
+              "Il sert à préparer un **fichier de ré-import** : GestLog remplit les SKU, tu complètes le reste dans Excel.",
+            ],
+          },
+          {
+            h: "Choisir les références",
+            lines: [
+              "**Inclure** : tape un préfixe (ex. `RM`) et tu obtiens tous les parents qui commencent par RM.",
+              "**Exclure** : le même préfixe donne cette fois **tout sauf** ces références.",
+              "Tu peux en mettre plusieurs, séparés par des virgules (`RM, PM`). Les préfixes existants sont proposés juste en dessous avec leur nombre — clique dessus pour les ajouter.",
+              "Sans aucun préfixe, tu obtiens la liste complète.",
+            ],
+            tip: "Le compteur au-dessus du bouton t'annonce combien de produits seront exportés **avant** de télécharger. 🔢",
+          },
+          {
+            h: "Le fichier obtenu",
+            lines: [
+              "Cinq colonnes : **SKU**, *SKU produits liés*, *SKU ventes croisées*, *ranking*, *slug de catégories*.",
+              "⚠️ **Seule la colonne SKU est remplie** — c'est voulu. Les quatre autres n'ont que leur en-tête et sont à compléter dans Excel avant le ré-import.",
+              "Le filtre **Statut** est sur « Publiés » par défaut ; bascule sur « Tous » si tu veux aussi les brouillons.",
+            ],
+          },
+        ],
+      },
+      {
         id: "btoc-ventes-details",
         icon: "📍",
         title: "Export Ventes détaillées (adresses + paiement)",

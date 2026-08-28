@@ -12,7 +12,7 @@ produits, commandes, stock, remboursements) + **gestion VIP via Brevo**.
   `vip-recompute`. (Auth `x-api-key=SYNC_API_KEY` comme les autres `/api/sync`.)
 - Écran : **`/btoc`** (onglets clients, produits, commandes, stats…). API de lecture/exports
   sous `/api/btoc/*` : `customers`, `stats`, `size-distribution`,
-  `export/{orders,products,best-sellers,top-clients,sales-details}`, `settings`.
+  `export/{orders,products,best-sellers,top-clients,sales-details,parents}`, `settings`.
 
 ## Stats BtoC — Top 15 produits
 
@@ -95,6 +95,20 @@ Donc : **ne pas se fier à `total_spent` de Woo** ; utiliser le total recalculé
     complète qui supprime/réinsère les `BtocOrderLine`). Idempotent : une valeur vide n'écrase
     jamais une valeur existante (`COALESCE(NULLIF(…,''), …)`). Même principe que le backfill
     pays (`order-countries`), alimenté par un workflow n8n **ponctuel**.
+- **Export « Produits parents »** (`/api/btoc/export/parents`) : liste des **SKU parents**
+  WooCommerce (`type = 'variable'` — le produit qui porte les déclinaisons ; les variations
+  ne sont pas listées), pour un **fichier de ré-import**.
+  - Filtre **par préfixe de référence**, en mode **Inclure** (ex. `RM` → tous les parents
+    commençant par RM) ou **Exclure** (tous SAUF ceux-là). Plusieurs préfixes séparés par des
+    virgules. Sans préfixe : la liste complète, quel que soit le mode.
+  - Filtre **statut** : Publiés (défaut) / Brouillons / Tous — le stock Woo compte **1 106
+    parents publiés et 272 brouillons** ; le défaut évite d'embarquer les brouillons sans le
+    vouloir.
+  - Les préfixes existants sont proposés sous le champ (cliquables) avec leur nombre.
+  - ⚠️ **Seule la colonne `SKU` est remplie.** Les 4 autres — `SKU produits liés`,
+    `SKU ventes croisées`, `ranking`, `slug de catégories` — n'ont que leur **en-tête**,
+    volontairement vides : elles sont complétées dans Excel avant ré-import.
+  - Un SKU parent en double côté Woo ne sort **qu'une fois**.
 - **Deux montants affichés** (tuile CA de l'onglet Stats) :
   - **CA TTC encaissé** = `SUM(total − totalRefunded)` — TVA et frais de port **inclus**
     (montant réellement encaissé).
