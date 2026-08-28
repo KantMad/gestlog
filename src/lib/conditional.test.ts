@@ -53,6 +53,25 @@ describe("conditionnelle — lecture des fichiers clients", () => {
     expect(lines.map((l) => l.reference)).toEqual(["REF_A"]);
   });
 
+  it("lit le format RÉEL des livraisons (export EAN13 Texas)", () => {
+    // En-têtes exacts du fichier « EAN13CodesBarres_Livraison_… » fourni par le client :
+    // vérifié sur le fichier réel (270 lignes / 442 pièces, 270/270 EAN résolus).
+    const lines = parseConditionalFile(xlsx([
+      ["Saison Document", "N° Document", "Code Produit Fini", "Libellé 1 Produit Fini",
+       "Libellé 2 Produit Fini", "Code Coloris", "Libellé Coloris", "Taille", "Composition",
+       "Code Barre", "Prix Unitaire", "Qté", "Devise", "Prix Conseillé"],
+      ["S26", "142426", "OMCHMC_L082", "Chemise ml", "S25", "315", "Saumon", "M",
+       "70% coton", "3665249487547", 95, 1, "€", 31.67],
+      ["S26", "142426", "OMCHMC_L082", "Chemise ml", "S25", "752", "Bleu marine", "L",
+       "70% coton", "3665249456932", 95, 3, "€", 31.67],
+    ]));
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toEqual({
+      ean: "3665249487547", reference: "OMCHMC_L082", color: "315", size: "M", quantity: 1,
+    });
+    expect(lines[1].quantity).toBe(3);
+  });
+
   it("rejette un fichier sans quantité ni identifiant", () => {
     expect(parseConditionalFile(xlsx([["Client", "Ville"], ["X", "Y"]]))).toEqual([]);
   });

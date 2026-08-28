@@ -416,9 +416,14 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
   ⚠️ Une ligne **non résolue est CONSERVÉE** (`productId = null`) : on ne perd aucune
   quantité, mais elle est signalée et non valorisée.
 - **Lecture des fichiers** : colonnes repérées **par nom** (EAN / Code barre / Gencod ·
-  Référence / Code Produit Fini · Code couleur · Taille · Quantité / Qté / Qty), en-tête
-  cherché sur les **30 premières lignes**, `.xlsx` comme `.csv`. Lignes à quantité ≤ 0 et
-  lignes `TOTAL` ignorées.
+  Référence / Code Produit Fini · Code couleur / Code Coloris · Taille · Quantité / Qté /
+  Qty), en-tête cherché sur les **30 premières lignes**, `.xlsx` comme `.csv`. Lignes à
+  quantité ≤ 0 et lignes `TOTAL` ignorées.
+  ✅ **Format de livraison réel validé** : l'export **« EAN13CodesBarres_Livraison_… »**
+  (Texas — mêmes en-têtes que l'export EAN/BL) passe **sans adaptation**. Vérifié sur le
+  fichier du document *142426* : **270 lignes / 442 pièces** lues (= la somme du fichier),
+  **270/270 EAN** et **42/42 couples référence+couleur** résolus au référentiel. Une fixture
+  reprend ces en-têtes exacts dans les tests.
 - **Alertes** (à l'import **et** en permanence sur l'écran) :
   1. **Produits jamais livrés** — présents en VENTE/RETOUR mais absents des LIVRAISON ;
   2. **Sur-déclaration** — plus vendu/rendu que livré (solde **négatif**) ;
