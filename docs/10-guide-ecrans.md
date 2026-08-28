@@ -449,6 +449,8 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
   promo** (deux lectures : fenêtres commerciales *et* remise réellement appliquée — ⚠️ ne
   pas confondre), répartition des paniers, tailles commandées. Export Excel 5 onglets.
   ⚠️ Le **client = e-mail**, pas compte (moitié des commandes sont passées sans compte).
+  **Export ciblé** : croiser montant dépensé / nb de commandes / promo / tailles (3 modes :
+  au moins une, uniquement celles-ci, toutes) → fiche complète des clients retenus.
 - **Note** : hors périmètre du **menu Exports** (`/export`) qui regroupe les exports **B2B**.
 
 ## Exports (`/export`)

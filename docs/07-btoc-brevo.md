@@ -64,6 +64,40 @@ s'appuient sur la **remise réelle**, pas sur les fenêtres.
   (l'historique commence au 01/01/2026) — ce n'est pas un bug de la requête.
 - Export Excel client (xlsx) : 5 onglets, généré côté navigateur depuis la réponse JSON.
 
+### Export ciblé (`/api/btoc/segmentation/clients`)
+Bloc **Export ciblé** de l'onglet (`src/components/btoc/segmentation-export.tsx`) : on croise
+des critères et on sort la **fiche complète** des clients retenus (coordonnées facturation ET
+livraison, téléphone/société depuis `BtocCustomer`, nb de commandes, total dépensé, panier
+moyen, remises, 1re/dernière commande, pièces, tailles achetées, VIP).
+
+Filtres : `dateFrom`/`dateTo`/`statuses` (mêmes bornes que ci-dessus) + `minSpent`/`maxSpent`,
+`minOrders`/`maxOrders`, `promo=all|discounted|only|never`, `sizes` (CSV) avec
+**`sizeMode`** :
+
+| mode | opérateur SQL | sens |
+|---|---|---|
+| `any` | `sizes_arr && $n` | a acheté **au moins une** des tailles |
+| `only` | `sizes_arr <@ $n` | **n'a jamais acheté d'autre taille** que celles-ci |
+| `all` | `sizes_arr @> $n` | a acheté **chacune** des tailles |
+
+⚠️ **Les trois modes ne sont pas des variantes cosmétiques** : sur 2026, « au moins une taille
+3XL/4XL » = **315 clients**, « uniquement du 3XL/4XL » = **218**, « 3XL *et* 4XL » = **19**.
+Le `only` est celui qu'on veut pour cibler une morphologie ; le `any` ramène tous les foyers
+qui ont acheté une pièce grande taille pour quelqu'un d'autre.
+
+- **`?countOnly=1`** : ne renvoie que le décompte + **5 lignes** d'aperçu. L'écran l'appelle
+  (débounce 500 ms) à chaque changement de critère ; la liste complète n'est chargée qu'au
+  clic sur *Exporter*. ⚠️ Le `summary` est **toujours** calculé sur l'ensemble des clients
+  retenus (CTE `matched`), jamais sur les 5 lignes d'aperçu.
+- Les **coordonnées** viennent de la **dernière commande** du client (`DISTINCT ON (email)
+  … ORDER BY "orderDate" DESC`) — pas de la première, ni de `BtocCustomer` (qui n'existe pas
+  pour les commandes invité). `phone`/`company`/`isVip` sont récupérés en `LEFT JOIN LATERAL`
+  sur `BtocCustomer` par e-mail, donc **vides pour un acheteur sans compte**.
+- Couverture réelle des adresses : **4 163/4 185 commandes** ont un nom de facturation,
+  **3 629** une adresse (le reste est vide dans WooCommerce aussi).
+- Le classeur contient un 2e onglet **« Critères »** rappelant le filtre appliqué — sans lui
+  un export retrouvé plus tard est illisible.
+
 ## VIP Brevo
 
 - `src/lib/brevo.ts` + `/api/brevo/health`. Réglages via env : `BREVO_API_KEY`,

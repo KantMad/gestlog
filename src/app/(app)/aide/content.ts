@@ -1125,6 +1125,32 @@ export const HELP_THEMES: HelpTheme[] = [
             ],
           },
           {
+            h: "Export ciblé — sortir SES clients",
+            lines: [
+              "Le bloc **Export ciblé** sert à ça : tu poses tes critères, GestLog te sort le **fichier complet des clients qui correspondent** (nom, e-mail, téléphone, adresses de facturation et de livraison, totaux, tailles achetées).",
+              "Les critères se **cumulent** : *Total dépensé min 500 €* + tailles *3XL* et *4XL* en mode « Uniquement celles-ci » = les gros acheteurs qui ne prennent que ces deux tailles.",
+              "Le compteur se met à jour tout seul (**X clients · Y commandes · Z €**) et un aperçu montre les plus gros acheteurs de la sélection — tu vois le résultat **avant** de télécharger.",
+            ],
+            tip: "Le fichier contient un 2e onglet **Critères** qui rappelle le filtre utilisé. Retrouvé six mois plus tard, l'export reste lisible. 🗂️",
+          },
+          {
+            h: "Les trois modes de taille ⚠️",
+            lines: [
+              "**Au moins une** : le client a acheté au moins une des tailles cochées — mais il a pu en acheter d'autres.",
+              "**Uniquement celles-ci** : il n'a **jamais** acheté d'autre taille. C'est le bon mode pour cibler une morphologie.",
+              "**Toutes celles-ci** : il a acheté **chacune** des tailles cochées.",
+              "⚠️ L'écart est énorme : sur 2026, « au moins une 3XL/4XL » donne **315 clients**, « uniquement 3XL/4XL » **218**, et « 3XL et 4XL » seulement **19**. Le premier mode ramène aussi les gens qui ont commandé une grande taille **pour quelqu'un d'autre**.",
+            ],
+          },
+          {
+            h: "Ce qu'il faut savoir sur les coordonnées",
+            lines: [
+              "Les coordonnées sont celles de la **dernière commande** du client — les plus à jour.",
+              "**Téléphone**, **société** et **VIP** ne sont remplis que si le client a un **compte** sur le site. Un acheteur invité aura ces colonnes vides.",
+              "Quelques adresses manquent : elles sont **vides dans WooCommerce** aussi.",
+            ],
+          },
+          {
             h: "Comment sont calculés les montants",
             lines: [
               "Le CA affiché est le montant **réellement encaissé** : total de la commande **moins les remboursements**.",

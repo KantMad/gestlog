@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Download, Loader2, Users, Percent, Ruler, Wallet } from "lucide-react";
 import { cn, formatNumber } from "@/lib/utils";
 import * as XLSX from "xlsx";
+import { SegmentationExport } from "@/components/btoc/segmentation-export";
 
 const euro = (n: number) =>
   new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(n);
@@ -162,6 +163,12 @@ export function BtocSegmentationTab() {
           </div>
         </CardContent>
       </Card>
+
+      <SegmentationExport
+        availableSizes={data.sizes.map((s) => s.size)}
+        dateFrom={dateFrom}
+        dateTo={dateTo}
+      />
 
       {/* ── Vue d'ensemble ── */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
