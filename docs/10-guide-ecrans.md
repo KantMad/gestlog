@@ -499,6 +499,33 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
   exclues ; **saison lue dans le fichier commande fournisseur** = `SupplierOrder.tioSeason`) +
   **Comparaison** xlsx. Sélecteur de réceptions (recherche fournisseur). Liens vers les exports
   contextuels (répartition, comparaison saisons, magasin, livraisons).
+- **Quantités commandées — Excel** (`/api/export/quantites`,
+  `components/export/quantites-card.tsx`, logique pure dans `lib/export-quantites.ts`) :
+  tableau croisé des quantités commandées par les boutiques, **tailles en colonnes**.
+  - Filtres : saison, **catalogue**, **période** (dates de commande), **SKU/référence**
+    (plusieurs, séparés par des virgules ; préfixe de référence ou `RÉF_COLORIS`),
+    **boutiques** en deux modes exclusifs — *Aucune sauf…* (inclusion) / *Toutes sauf…*
+    (exclusion).
+  - Case **« Avec le détail boutique »** : décochée, une ligne par (référence, coloris) ;
+    cochée, une ligne par boutique **regroupée par (référence, coloris)** avec un
+    **sous-total par groupe**. Référence et coloris sont **répétés sur chaque ligne** (et
+    non laissés vides sous un en-tête de groupe) : c'est ce qui rend le fichier filtrable
+    et pivotable dans Excel.
+  - Trois totaux : **somme par taille** (dernière ligne), **somme par coloris** (colonne
+    `Total`), **somme totale**. ⚠️ En mode détail, la ligne TOTAL ne compte **pas** les
+    sous-totaux (vérifié par test), sinon tout serait doublé.
+  - 2e onglet **« Critères »** rappelant les filtres, la source et le périmètre.
+  - ⚠️ **Source** : `resolveOrderSource` (TEXAS si la saison a des commandes Texas, sinon
+    TIO). Sans ce filtre, AH26 — qui a **282 commandes TEXAS et 331 TIO** — sortirait des
+    quantités **doublées**. *AH26 : 69 925 pièces en TEXAS contre 88 646 en TIO.*
+  - ⚠️ **Commandes sans date** : les **282 commandes TEXAS d'AH26 ont `orderDate` NULL**.
+    Un filtre de période les écarterait TOUTES en silence → l'API renvoie
+    `meta.undatedOrders` et l'écran affiche un avertissement ambre.
+  - Périmètre : `orderType = COMMANDE` (hors VSS) et quantités **commandées** — les pièces
+    soldées (`cancelledBySize`) ne sont **pas** déduites. Écrit dans l'onglet Critères.
+  - Contrôles sur données réelles : *inclusion + exclusion = total* (465 + 69 460 = 69 925
+    sur AH26) ; Réassort = 14 064 lignes, 1 740 couples réf×coloris, 175 boutiques,
+    76 108 pièces, somme par coloris égale au total général.
 
 ## Utilisateurs (`/users`, ADMIN) & Mon compte (`/account`)
 - **Utilisateurs** : `User` (nom, code ≥4 chiffres, rôle, `isActive`, `screenAccess` JSON).

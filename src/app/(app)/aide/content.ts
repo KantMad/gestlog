@@ -919,6 +919,56 @@ export const HELP_THEMES: HelpTheme[] = [
         ],
       },
       {
+        id: "export-quantites",
+        icon: "\ud83d\udcca",
+        title: "Quantités commandées (tableau par taille)",
+        keywords: "export quantités commandées taille couleur coloris boutique catalogue période sku référence tableau croisé excel somme total",
+        screen: "/export",
+        sections: [
+          {
+            lines: [
+              "Dans **Exports**, cet export sort un **tableau des quantités commandées** par les boutiques : une ligne par **référence + coloris**, et **une colonne par taille**.",
+              "En bout de ligne, le **total du coloris**. En bas, la **somme par taille** et le **total général**.",
+            ],
+            tip: "Le compteur au-dessus du bouton annonce combien de références et de pièces sortiront — tu vois le résultat **avant** de télécharger. 🔢",
+          },
+          {
+            h: "Choisir ce qui sort",
+            lines: [
+              "**Saison** : celle choisie en haut de l'écran Exports.",
+              "**Catalogue** : tous, ou un seul.",
+              "**Période** : les dates de commande.",
+              "**SKU / référence** : tape une ou plusieurs références séparées par des virgules. Un début de référence suffit (`RM` sort tout ce qui commence par RM).",
+            ],
+          },
+          {
+            h: "Les deux règles de boutiques",
+            lines: [
+              "**Aucune sauf…** : seules les boutiques cochées sortent.",
+              "**Toutes sauf…** : toutes les boutiques sortent, sauf celles cochées.",
+              "Ne rien cocher = toutes les boutiques, quel que soit le mode.",
+            ],
+          },
+          {
+            h: "Avec ou sans détail boutique",
+            lines: [
+              "**Décoché** : le **global** — une ligne par référence et coloris, sans savoir qui a commandé.",
+              "**Coché** : **une ligne par boutique**, regroupée par référence + coloris, avec un **sous-total** à la fin de chaque groupe.",
+              "La référence et le coloris sont **répétés sur chaque ligne** : c'est fait exprès, ça permet de filtrer et de faire des tableaux croisés dans Excel.",
+            ],
+            tip: "La ligne **TOTAL** du bas ne compte pas les sous-totaux — elle donne bien le vrai total, pas le double. ✅",
+          },
+          {
+            h: "Deux choses à savoir ⚠️",
+            lines: [
+              "Ce sont les quantités **commandées** : les pièces **soldées** ne sont pas déduites, et les commandes VSS ne sont pas comptées.",
+              "**Certaines commandes n'ont pas de date** (c'est le cas de toutes les commandes Texas d'AH26). Si tu mets une période, elles disparaissent. L'écran te prévient en orange — vide les dates pour les récupérer.",
+              "L'onglet **Critères** du fichier rappelle tous les filtres utilisés, plus la source des commandes (TIO ou Texas).",
+            ],
+          },
+        ],
+      },
+      {
         id: "export-reception",
         icon: "🔢",
         title: "L'export des réceptions (EAN / quantité)",

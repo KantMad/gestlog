@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
+import { QuantitesCard } from "@/components/export/quantites-card";
 
 interface ReceptionRow {
   id: string;
@@ -393,6 +394,12 @@ export default function ExportPage() {
                 </Button>
               </CardContent>
             </Card>
+
+            {/* Carte large : ses filtres (catalogue, période, SKU, boutiques) ne tiennent
+                pas dans une demi-colonne. */}
+            <div className="sm:col-span-2">
+              <QuantitesCard seasonId={seasonId} seasonName={season?.name || ""} />
+            </div>
           </div>
         </div>
 
