@@ -4,6 +4,7 @@ import { buildQuantitySheet, parseQuantities, type QuantityLine } from "./export
 const line = (p: Partial<QuantityLine> & { quantitiesBySize: string }): QuantityLine => ({
   reference: "REF1",
   label: "Pull col rond",
+  category: "Maille",
   colorCode: "001",
   colorLabel: "Noir",
   clientCode: "B1",
@@ -39,21 +40,22 @@ describe("buildQuantitySheet — sans détail boutique", () => {
   it("met les tailles en colonnes, dans l'ordre des grilles", () => {
     expect(sheet.sizes).toEqual(["S", "M", "L"]);
     expect(sheet.header).toEqual([
-      "Référence", "Libellé 1", "Coloris", "Libellé coloris", "S", "M", "L", "Total",
+      "Référence", "Libellé 1", "Catégorie", "Coloris", "Libellé coloris",
+      "S", "M", "L", "Total",
     ]);
   });
 
   it("cumule plusieurs boutiques sur une même (référence, coloris)", () => {
     // REF1/001 : S=2, M=3+1=4, L=4 → total 10
-    expect(sheet.rows[0]).toEqual(["REF1", "Pull col rond", "001", "Noir", 2, 4, 4, 10]);
+    expect(sheet.rows[0]).toEqual(["REF1", "Pull col rond", "Maille", "001", "Noir", 2, 4, 4, 10]);
   });
 
   it("laisse la cellule VIDE (et non 0) quand la taille n'est pas commandée", () => {
-    expect(sheet.rows[1]).toEqual(["REF2", "Pull col rond", "002", "Rouge", 5, "", "", 5]);
+    expect(sheet.rows[1]).toEqual(["REF2", "Pull col rond", "Maille", "002", "Rouge", 5, "", "", 5]);
   });
 
   it("termine par la somme par taille et la somme totale", () => {
-    expect(sheet.rows.at(-1)).toEqual(["TOTAL", "", "", "", 7, 4, 4, 15]);
+    expect(sheet.rows.at(-1)).toEqual(["TOTAL", "", "", "", "", 7, 4, 4, 15]);
     expect(sheet.grandTotal).toBe(15);
   });
 
@@ -74,26 +76,29 @@ describe("buildQuantitySheet — avec détail boutique", () => {
 
   it("ajoute la colonne Boutique", () => {
     expect(sheet.header).toEqual([
-      "Référence", "Libellé 1", "Coloris", "Libellé coloris", "Boutique", "S", "M", "Total",
+      "Référence", "Libellé 1", "Catégorie", "Coloris", "Libellé coloris",
+      "Boutique", "S", "M", "Total",
     ]);
   });
 
   it("additionne deux commandes d'une même boutique", () => {
     expect(sheet.rows[0]).toEqual([
-      "REF1", "Pull col rond", "001", "Noir", "Boutique A", 2, 8, 10,
+      "REF1", "Pull col rond", "Maille", "001", "Noir", "Boutique A", 2, 8, 10,
     ]);
   });
 
   it("répète référence et coloris sur chaque ligne — fichier filtrable dans Excel", () => {
-    expect(sheet.rows[1].slice(0, 4)).toEqual(["REF1", "Pull col rond", "001", "Noir"]);
+    expect(sheet.rows[1].slice(0, 5)).toEqual([
+      "REF1", "Pull col rond", "Maille", "001", "Noir",
+    ]);
     expect(sheet.rows[1]).toEqual([
-      "REF1", "Pull col rond", "001", "Noir", "Boutique B", "", 1, 1,
+      "REF1", "Pull col rond", "Maille", "001", "Noir", "Boutique B", "", 1, 1,
     ]);
   });
 
   it("insère un sous-total par (référence, coloris)", () => {
     expect(sheet.rows[2]).toEqual([
-      "REF1", "Pull col rond", "001", "Noir", "Total REF1 001", 2, 9, 11,
+      "REF1", "Pull col rond", "Maille", "001", "Noir", "Total REF1 001", 2, 9, 11,
     ]);
   });
 
@@ -104,7 +109,7 @@ describe("buildQuantitySheet — avec détail boutique", () => {
   });
 
   it("le total général ne compte PAS deux fois les sous-totaux", () => {
-    expect(sheet.rows.at(-1)).toEqual(["TOTAL", "", "", "", "", 2, 9, 11]);
+    expect(sheet.rows.at(-1)).toEqual(["TOTAL", "", "", "", "", "", 2, 9, 11]);
     expect(sheet.grandTotal).toBe(11);
   });
 });
@@ -114,7 +119,7 @@ describe("cas limites", () => {
     const sheet = buildQuantitySheet([], { withBoutique: false });
     expect(sheet.groupCount).toBe(0);
     expect(sheet.grandTotal).toBe(0);
-    expect(sheet.rows).toEqual([["TOTAL", "", "", "", 0]]);
+    expect(sheet.rows).toEqual([["TOTAL", "", "", "", "", 0]]);
   });
 
   it("écarte une ligne dont toutes les quantités sont nulles", () => {
@@ -124,15 +129,16 @@ describe("cas limites", () => {
     expect(sheet.groupCount).toBe(0);
   });
 
-  it("récupère le libellé produit même s'il manque sur la première ligne", () => {
+  it("récupère libellé et catégorie même s'ils manquent sur la première ligne", () => {
     const sheet = buildQuantitySheet(
       [
-        line({ label: "", quantitiesBySize: '{"S":1}' }),
-        line({ label: "Pull col rond", quantitiesBySize: '{"S":1}' }),
+        line({ label: "", category: "", quantitiesBySize: '{"S":1}' }),
+        line({ label: "Pull col rond", category: "Maille", quantitiesBySize: '{"S":1}' }),
       ],
       { withBoutique: false }
     );
     expect(sheet.rows[0][1]).toBe("Pull col rond");
+    expect(sheet.rows[0][2]).toBe("Maille");
   });
 
   it("chaque ligne a exactement autant de cellules que l'en-tête", () => {

@@ -503,9 +503,14 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
   `components/export/quantites-card.tsx`, logique pure dans `lib/export-quantites.ts`) :
   tableau croisé des quantités commandées par les boutiques, **tailles en colonnes**.
   - Colonnes fixes : `Référence`, **`Libellé 1`** (= `Product.label`, la désignation
-    produit), `Coloris`, `Libellé coloris` [, `Boutique`], puis les tailles et `Total`.
-    *Couverture réelle : 709/709 produits commandés sur AH26 et 1 740/1 740 sur Réassort
-    ont un libellé.* Si une ligne l'a vide, on reprend le premier libellé connu du groupe.
+    produit), **`Catégorie`**, `Coloris`, `Libellé coloris` [, `Boutique`], puis les tailles
+    et `Total`. Si une ligne a un libellé ou une catégorie vide, on reprend la première
+    valeur connue du groupe.
+  - ⚠️ La catégorie vient **toujours de `Product.category`**, jamais de
+    `ClientOrderLine.category` : cette colonne existe dans le schéma mais n'est renseignée
+    **sur aucune ligne** en base (0 sur 22 428 vérifiées) — s'en servir, même en repli,
+    laisserait la colonne vide. *`Product.category` couvre 8 364/8 364 lignes AH26 et
+    14 064/14 064 lignes Réassort ; le libellé couvre 709/709 et 1 740/1 740 produits.*
   - Filtres : saison, **catalogue**, **période** (dates de commande), **SKU/référence**
     (plusieurs, séparés par des virgules ; préfixe de référence ou `RÉF_COLORIS`),
     **boutiques** en deux modes exclusifs — *Aucune sauf…* (inclusion) / *Toutes sauf…*

@@ -91,7 +91,7 @@ export async function GET(request: NextRequest) {
         quantitiesBySize: true,
         product: {
           select: {
-            reference: true, label: true,
+            reference: true, label: true, category: true,
             colorCode: true, color: true, colorLabel: true,
           },
         },
@@ -117,6 +117,7 @@ export async function GET(request: NextRequest) {
     const rows: QuantityLine[] = lines.map((l) => ({
       reference: l.product.reference,
       label: l.product.label || "",
+      category: l.product.category || "",
       colorCode: l.product.colorCode || l.product.color || "",
       colorLabel: l.product.colorLabel || "",
       clientCode: l.clientOrder.client.code || "",

@@ -132,8 +132,8 @@ export function QuantitesCard({
       }
       const wb = XLSX.utils.book_new();
       const ws = XLSX.utils.aoa_to_sheet([d.header, ...d.rows]);
-      // Réf / Libellé 1 / Coloris / Libellé coloris [/ Boutique], puis les tailles.
-      const WIDTHS = [18, 34, 9, 18, ...(withBoutique ? [28] : [])];
+      // Réf / Libellé 1 / Catégorie / Coloris / Libellé coloris [/ Boutique], puis tailles.
+      const WIDTHS = [18, 34, 16, 9, 18, ...(withBoutique ? [28] : [])];
       ws["!cols"] = d.header.map((_, i) => ({ wch: WIDTHS[i] ?? 7 }));
       ws["!freeze"] = { xSplit: WIDTHS.length, ySplit: 1 };
       XLSX.utils.book_append_sheet(wb, ws, "Quantités");

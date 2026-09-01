@@ -13,6 +13,12 @@ export interface QuantityLine {
   reference: string;
   /** Désignation du produit (Product.label) — le "Libellé 1" des fichiers métier. */
   label: string;
+  /**
+   * Catégorie produit — toujours celle du RÉFÉRENTIEL (`Product.category`).
+   * `ClientOrderLine.category` existe mais n'est renseignée nulle part en base
+   * (0 ligne) : s'en servir, même en repli, laisserait la colonne vide.
+   */
+  category: string;
   colorCode: string;
   colorLabel: string;
   clientCode: string;
@@ -69,6 +75,7 @@ export function buildQuantitySheet(
     {
       reference: string;
       label: string;
+      category: string;
       colorCode: string;
       colorLabel: string;
       total: Record<string, number>;
@@ -85,6 +92,7 @@ export function buildQuantitySheet(
       g = {
         reference: l.reference,
         label: l.label,
+        category: l.category,
         colorCode: l.colorCode,
         colorLabel: l.colorLabel,
         total: {},
@@ -92,8 +100,9 @@ export function buildQuantitySheet(
       };
       groups.set(key, g);
     }
-    // Les libellés peuvent manquer sur certaines lignes : on garde le premier connu.
+    // Libellé et catégorie peuvent manquer sur certaines lignes : on garde le premier connu.
     if (!g.label && l.label) g.label = l.label;
+    if (!g.category && l.category) g.category = l.category;
     if (!g.colorLabel && l.colorLabel) g.colorLabel = l.colorLabel;
     addInto(g.total, qty);
 
@@ -113,9 +122,10 @@ export function buildQuantitySheet(
   for (const g of groups.values()) for (const s of Object.keys(g.total)) allSizes.add(s);
   const sizes = sortSizeScale([...allSizes]);
 
+  const FIXED = ["Référence", "Libellé 1", "Catégorie", "Coloris", "Libellé coloris"];
   const header = withBoutique
-    ? ["Référence", "Libellé 1", "Coloris", "Libellé coloris", "Boutique", ...sizes, "Total"]
-    : ["Référence", "Libellé 1", "Coloris", "Libellé coloris", ...sizes, "Total"];
+    ? [...FIXED, "Boutique", ...sizes, "Total"]
+    : [...FIXED, ...sizes, "Total"];
 
   const ordered = [...groups.values()].sort(
     (a, b) => a.reference.localeCompare(b.reference) || a.colorCode.localeCompare(b.colorCode)
@@ -128,7 +138,7 @@ export function buildQuantitySheet(
     addInto(sizeTotals, g.total);
     if (!withBoutique) {
       rows.push([
-        g.reference, g.label, g.colorCode, g.colorLabel,
+        g.reference, g.label, g.category, g.colorCode, g.colorLabel,
         ...sizes.map((s) => g.total[s] ?? ""),
         sum(g.total),
       ]);
@@ -140,13 +150,13 @@ export function buildQuantitySheet(
     const clients = [...g.byClient.values()].sort((a, b) => a.name.localeCompare(b.name));
     for (const c of clients) {
       rows.push([
-        g.reference, g.label, g.colorCode, g.colorLabel, c.name,
+        g.reference, g.label, g.category, g.colorCode, g.colorLabel, c.name,
         ...sizes.map((s) => c.qty[s] ?? ""),
         sum(c.qty),
       ]);
     }
     rows.push([
-      g.reference, g.label, g.colorCode, g.colorLabel,
+      g.reference, g.label, g.category, g.colorCode, g.colorLabel,
       `Total ${g.reference} ${g.colorCode}`.trim(),
       ...sizes.map((s) => g.total[s] ?? ""),
       sum(g.total),
@@ -155,7 +165,8 @@ export function buildQuantitySheet(
 
   const grandTotal = sum(sizeTotals);
   rows.push([
-    "TOTAL", "", "", "",
+    "TOTAL",
+    ...Array(FIXED.length - 1).fill(""),
     ...(withBoutique ? [""] : []),
     ...sizes.map((s) => sizeTotals[s] ?? 0),
     grandTotal,
