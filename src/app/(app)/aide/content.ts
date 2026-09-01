@@ -1067,6 +1067,23 @@ export const HELP_THEMES: HelpTheme[] = [
         screen: "/a-vendre",
         sections: [
           {
+            h: "Les collections (plus de Réassort ni Hors-saison)",
+            lines: [
+              "Le filtre **Collections** ne propose que des saisons **PE** et **AH**. « Réassort » et « Hors-saison » ont disparu de cet écran : un stock à écouler appartient toujours à une collection.",
+              "Chaque produit affiche sa **collection de lancement** — la plus ancienne où il a été commandé. Un produit lancé en PE25 et recommandé en AH26 reste un produit PE25, mais il **ressort sur les deux filtres**.",
+              "Quand la collection n'est pas connue par les commandes, l'outil la retrouve via un **autre coloris de la même référence**, puis via la **lettre de la référence** (R = AH26, S = PE27, Q = PE26…).",
+            ],
+            tip: "Une collection **déduite** est affichée en orange avec un **?**, et suivie de « (déduit) » dans l'export. Une supposition ne doit jamais se lire comme une certitude. 🟠",
+          },
+          {
+            h: "Les produits marqués « — »",
+            lines: [
+              "Une trentaine de produits n'ont **aucune collection identifiable** : ce sont des collections antérieures à PE23, dont GestLog n'a pas l'historique.",
+              "Ils restent visibles dans la liste, mais ne ressortent sur **aucun filtre de collection**. Un compteur au-dessus des filtres te dit combien il y en a.",
+              "Ils ne sont volontairement pas rangés dans une collection au hasard : mieux vaut un « — » honnête qu'une saison inventée.",
+            ],
+          },
+          {
             lines: [
               "Cet écran répond à une question simple : **qu'est-ce qu'on a en stock, et qu'est-ce qui partira le plus facilement ?**",
               "Tu poses tes critères, la liste s'affiche avec les tailles disponibles, et tu vois immédiatement **combien de pièces** et **quel montant** ça représente.",

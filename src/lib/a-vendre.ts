@@ -11,6 +11,12 @@
 // Fonctions PURES : pas de DB, pas de réseau → testables et réutilisables côté écran.
 
 export interface AVendreRow {
+  /** Collection de LANCEMENT (PE/AH), jamais une saison sentinelle. null = indéterminable. */
+  season?: string | null;
+  /** Origine de `season` — « prefixe » et « reference-soeur » sont des saisons DÉDUITES. */
+  seasonOrigin?: "commande" | "reference-soeur" | "prefixe" | "inconnue";
+  /** Toutes les collections où le produit ressort (commandes + rattachement). */
+  seasons?: string[];
   productId: string;
   reference: string;
   color: string;

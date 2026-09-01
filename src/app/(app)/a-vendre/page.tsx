@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useSeason } from "@/lib/season-context";
 import { Topbar } from "@/components/layout/topbar";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -59,9 +58,11 @@ function MultiPicker({
 }
 
 export default function AVendrePage() {
-  const { seasons } = useSeason();
-
-  const [seasonIds, setSeasonIds] = useState<string[]>([]);
+  // Les saisons proposées ici ne viennent PAS du sélecteur global : cet écran ne connaît
+  // que des collections PE/AH, reconstituées produit par produit (cf. lib/a-vendre-season).
+  // Réassort et Hors-saison n'y ont pas leur place — un stock à écouler appartient
+  // toujours à une collection.
+  const [seasonNames, setSeasonNames] = useState<string[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
   const [subCategories, setSubCategories] = useState<string[]>([]);
   const [minQty, setMinQty] = useState("10");
@@ -71,16 +72,17 @@ export default function AVendrePage() {
   const [search, setSearch] = useState("");
 
   const [rows, setRows] = useState<AVendreRow[]>([]);
-  const [facets, setFacets] = useState<{ categories: string[]; subCategories: string[] }>({
-    categories: [], subCategories: [],
-  });
+  const [facets, setFacets] = useState<{
+    categories: string[]; subCategories: string[]; seasons: string[];
+  }>({ categories: [], subCategories: [], seasons: [] });
+  const [withoutSeason, setWithoutSeason] = useState(0);
   const [loading, setLoading] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const p = new URLSearchParams();
-      if (seasonIds.length) p.set("seasonIds", seasonIds.join(","));
+      if (seasonNames.length) p.set("seasons", seasonNames.join(","));
       if (categories.length) p.set("categories", categories.join(","));
       if (subCategories.length) p.set("subCategories", subCategories.join(","));
       if (minQty.trim()) p.set("minQty", minQty.trim());
@@ -89,14 +91,15 @@ export default function AVendrePage() {
       const data = await res.json();
       if (res.ok) {
         setRows(data.rows || []);
-        setFacets(data.facets || { categories: [], subCategories: [] });
+        setFacets(data.facets || { categories: [], subCategories: [], seasons: [] });
+        setWithoutSeason(data.meta?.withoutSeason ?? 0);
       }
     } catch {
       /* silencieux : l'écran reste utilisable, on peut relancer */
     } finally {
       setLoading(false);
     }
-  }, [seasonIds, categories, subCategories, minQty, allowGaps]);
+  }, [seasonNames, categories, subCategories, minQty, allowGaps]);
 
   useEffect(() => {
     load();
@@ -128,7 +131,7 @@ export default function AVendrePage() {
   const exportExcel = () => {
     if (visible.length === 0) return;
     const header = [
-      "Référence", "Couleur", "Désignation", "Catégorie", "Sous-catégorie",
+      "Référence", "Collection", "Couleur", "Désignation", "Catégorie", "Sous-catégorie",
       ...sizeCols, "Total dispo", "Trous",
       "Prix de gros", pct > 0 ? `Prix de gros remisé (-${pct}%)` : "Prix de gros remisé",
       "Montant", "Prix public", "Valeur au prix public",
@@ -138,6 +141,14 @@ export default function AVendrePage() {
       const wholesale = discounted(r.costPrice, pct);
       const row: Record<string, string | number> = {
         "Référence": r.reference,
+        // Une saison DÉDUITE (référence sœur ou préfixe) est signalée : sans ça, une
+        // hypothèse se lirait comme un fait dans le fichier.
+        "Collection":
+          r.season
+            ? r.seasonOrigin === "commande"
+              ? r.season
+              : `${r.season} (déduit)`
+            : "Indéterminée",
         "Couleur": colorText(r.color, r.colorLabel),
         "Désignation": r.label || "",
         "Catégorie": r.category || "",
@@ -272,13 +283,10 @@ export default function AVendrePage() {
 
             <div className="grid gap-3 lg:grid-cols-3">
               <MultiPicker
-                label="Saisons (produits commandés dedans)"
-                options={seasons.map((s) => s.name)}
-                selected={seasons.filter((s) => seasonIds.includes(s.id)).map((s) => s.name)}
-                onToggle={(name) => {
-                  const s = seasons.find((x) => x.name === name);
-                  if (s) toggle(seasonIds, setSeasonIds)(s.id);
-                }}
+                label="Collections"
+                options={facets.seasons}
+                selected={seasonNames}
+                onToggle={toggle(seasonNames, setSeasonNames)}
               />
               <MultiPicker
                 label="Catégories"
@@ -294,15 +302,25 @@ export default function AVendrePage() {
               />
             </div>
 
+            {/* Les produits qu'aucune règle ne rattache sont ANNONCÉS plutôt que rangés
+                d'office dans une collection au hasard. */}
+            {withoutSeason > 0 && (
+              <p className="text-xs text-muted-foreground">
+                <strong>{withoutSeason}</strong> produit(s) sans collection identifiable
+                (collections antérieures à PE23) — ils apparaissent avec «&nbsp;—&nbsp;» et
+                ne ressortent sur aucun filtre de collection.
+              </p>
+            )}
+
             <div className="flex items-center gap-2">
               <Button variant="outline" size="sm" onClick={load} disabled={loading} className="gap-2">
                 {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                 Actualiser
               </Button>
-              {(seasonIds.length > 0 || categories.length > 0 || subCategories.length > 0) && (
+              {(seasonNames.length > 0 || categories.length > 0 || subCategories.length > 0) && (
                 <Button
                   variant="ghost" size="sm"
-                  onClick={() => { setSeasonIds([]); setCategories([]); setSubCategories([]); }}
+                  onClick={() => { setSeasonNames([]); setCategories([]); setSubCategories([]); }}
                 >
                   Effacer les filtres
                 </Button>
@@ -369,6 +387,7 @@ export default function AVendrePage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead className="whitespace-nowrap">Référence</TableHead>
+                      <TableHead className="whitespace-nowrap">Collection</TableHead>
                       <TableHead className="whitespace-nowrap">Couleur</TableHead>
                       {sizeCols.map((s) => (
                         <TableHead key={s} className="text-right whitespace-nowrap">{s}</TableHead>
@@ -394,6 +413,30 @@ export default function AVendrePage() {
                               <span className="block text-[11px] font-sans text-muted-foreground">
                                 {r.label}
                               </span>
+                            )}
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap text-sm">
+                            {r.season ? (
+                              <span
+                                className={cn(
+                                  "rounded px-1.5 py-0.5 text-xs font-medium",
+                                  r.seasonOrigin === "commande"
+                                    ? "bg-muted text-foreground"
+                                    : "bg-amber-50 text-amber-800"
+                                )}
+                                title={
+                                  r.seasonOrigin === "commande"
+                                    ? "Collection constatée sur les commandes clients"
+                                    : r.seasonOrigin === "reference-soeur"
+                                      ? "Déduite d'un autre coloris de la même référence"
+                                      : "Déduite de la lettre de la référence"
+                                }
+                              >
+                                {r.season}
+                                {r.seasonOrigin !== "commande" && " ?"}
+                              </span>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">—</span>
                             )}
                           </TableCell>
                           <TableCell className="whitespace-nowrap text-sm">

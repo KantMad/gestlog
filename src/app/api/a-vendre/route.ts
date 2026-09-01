@@ -4,25 +4,36 @@ import { prisma } from "@/lib/prisma";
 import { parseSizeQuantities, parseSizeScale } from "@/lib/utils";
 import { sortSizeScale } from "@/lib/size-order";
 import { countSizeGaps, type AVendreRow } from "@/lib/a-vendre";
+import { resolveProductSeason, sortSeasons } from "@/lib/a-vendre-season";
 
 export const maxDuration = 60;
 
 // GET — Stock entrepôt à écouler, filtrable.
-//   ?seasonIds=a,b   (facultatif) produits COMMANDÉS dans ces saisons
-//   ?categories=…    ?subCategories=…   (CSV)
-//   ?minQty=10       quantité minimale À LA COULEUR
-//   ?maxGaps=0       trous de tailles autorisés (-1 = pas de limite)
+//   ?seasons=PE26,AH26   (facultatif) NOMS de saisons de collection
+//   ?categories=…        ?subCategories=…   (CSV)
+//   ?minQty=10           quantité minimale À LA COULEUR
+//   ?maxGaps=0           trous de tailles autorisés (-1 = pas de limite)
 //
 // ⚠️ Source = `StockEntry` (stock physique TIO), PAS le « disponible » de la Répartition.
-// Le lien produit→saison n'existe pas en base : il est reconstitué via les commandes
-// clients (1 500 des 1 560 produits en stock y sont rattachables) — un produit permanent
-// peut donc appartenir à plusieurs saisons, c'est voulu.
+//
+// ⚠️ SAISONS : le lien produit→saison n'existe pas en base, il est reconstitué. Cet écran
+// ne connaît QUE des collections PE/AH — les saisons sentinelles « Réassort » et
+// « Hors-saison » n'y apparaissent plus. Avant ce correctif, 1 087 produits sur 1 570
+// s'affichaient à la fois sous leur vraie collection ET sous une sentinelle.
+// Le rattachement suit la cascade de `lib/a-vendre-season.ts` (commande → référence
+// sœur → préfixe). Chaque produit porte UNE saison de rattachement (sa collection de
+// LANCEMENT = la plus ancienne) et la liste de toutes ses saisons de commande.
+// Le filtre par saison porte sur cette liste, complétée par la saison de rattachement :
+// un produit lancé en PE25 et recommandé en AH26 ressort donc sur les deux.
+//
+// ⚠️ Rien n'est écrit en base. Les commandes et la synchro TIO gardent leurs saisons
+// sentinelles, indispensables ailleurs (écran Commandes client, rapprochement BL/FAC).
 export async function GET(request: NextRequest) {
   try {
     const p = request.nextUrl.searchParams;
     const csv = (k: string) =>
       (p.get(k) || "").split(",").map((s) => s.trim()).filter(Boolean);
-    const seasonIds = csv("seasonIds");
+    const seasonNames = csv("seasons");
     const categories = csv("categories");
     const subCategories = csv("subCategories");
     const minQty = Math.max(0, parseInt(p.get("minQty") || "0", 10) || 0);
@@ -33,12 +44,39 @@ export async function GET(request: NextRequest) {
     const productWhere: Record<string, unknown> = {};
     if (categories.length > 0) productWhere.category = { in: categories };
     if (subCategories.length > 0) productWhere.subCategory = { in: subCategories };
-    if (seasonIds.length > 0) {
-      productWhere.clientOrderLines = {
-        some: { clientOrder: { seasonId: { in: seasonIds } } },
-      };
-    }
     if (Object.keys(productWhere).length > 0) where.product = productWhere;
+
+    // Couples (produit, saison de collection) et (référence, saison) constatés dans les
+    // commandes clients. Requêtes GROUPÉES : on ne remonte pas les lignes une par une.
+    const [byProduct, byReference] = await Promise.all([
+      prisma.$queryRawUnsafe<{ pid: string; name: string }[]>(
+        `SELECT DISTINCT l."productId" AS pid, s.name
+         FROM "ClientOrderLine" l
+         JOIN "ClientOrder" o ON o.id = l."clientOrderId"
+         JOIN "Season" s ON s.id = o."seasonId"
+         WHERE s.type IN ('AH', 'PE')`
+      ),
+      prisma.$queryRawUnsafe<{ reference: string; name: string }[]>(
+        `SELECT DISTINCT p.reference, s.name
+         FROM "ClientOrderLine" l
+         JOIN "ClientOrder" o ON o.id = l."clientOrderId"
+         JOIN "Season" s ON s.id = o."seasonId"
+         JOIN "Product" p ON p.id = l."productId"
+         WHERE s.type IN ('AH', 'PE')`
+      ),
+    ]);
+    const seasonsOfProduct = new Map<string, string[]>();
+    for (const r of byProduct) {
+      const list = seasonsOfProduct.get(r.pid);
+      if (list) list.push(r.name);
+      else seasonsOfProduct.set(r.pid, [r.name]);
+    }
+    const seasonsOfReference = new Map<string, string[]>();
+    for (const r of byReference) {
+      const list = seasonsOfReference.get(r.reference);
+      if (list) list.push(r.name);
+      else seasonsOfReference.set(r.reference, [r.name]);
+    }
 
     const entries = await prisma.stockEntry.findMany({
       where,
@@ -56,9 +94,26 @@ export async function GET(request: NextRequest) {
     });
 
     const rows: AVendreRow[] = [];
+    const seasonCount = new Map<string, number>();
+    let undated = 0;
     for (const e of entries) {
       if (e.totalQuantity < minQty) continue;
       const pr = e.product;
+
+      const resolved = resolveProductSeason({
+        reference: pr.reference,
+        orderSeasons: seasonsOfProduct.get(pr.id) ?? [],
+        siblingSeasons: seasonsOfReference.get(pr.reference) ?? [],
+      });
+      // Saisons interrogeables pour ce produit : celles où il a été commandé, plus sa
+      // collection de rattachement (sinon un produit déduit ne ressortirait sur aucun filtre).
+      const matchable = sortSeasons([
+        ...resolved.seasons,
+        ...(resolved.season ? [resolved.season] : []),
+      ]);
+      for (const n of matchable) seasonCount.set(n, (seasonCount.get(n) ?? 0) + 1);
+      if (!resolved.season) undated++;
+      if (seasonNames.length > 0 && !matchable.some((n) => seasonNames.includes(n))) continue;
       const stockRaw = parseSizeQuantities(e.quantitiesBySize);
 
       // Grille = celle du produit, complétée par d'éventuelles tailles présentes au stock
@@ -88,6 +143,9 @@ export async function GET(request: NextRequest) {
         gaps,
         salePrice: pr.salePrice,
         costPrice: pr.costPrice,
+        season: resolved.season,
+        seasonOrigin: resolved.origin,
+        seasons: matchable,
       });
     }
 
@@ -117,8 +175,18 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       rows,
-      facets: { categories: facetCategories, subCategories: facetSub },
-      meta: { stockedProducts: all.length, returned: rows.length },
+      facets: {
+        categories: facetCategories,
+        subCategories: facetSub,
+        // Uniquement des collections PE/AH, de la plus récente à la plus ancienne.
+        seasons: sortSeasons([...seasonCount.keys()]).reverse(),
+      },
+      meta: {
+        stockedProducts: all.length,
+        returned: rows.length,
+        // Produits qu'aucune règle ne rattache : collections antérieures à PE23.
+        withoutSeason: undated,
+      },
     });
   } catch (e) {
     return handleApiError(e, "api/a-vendre");

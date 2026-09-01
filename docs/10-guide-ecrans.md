@@ -410,8 +410,38 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
   puis-je encore distribuer aux boutiques ? ». Les deux chiffres n'ont pas à coïncider.
 - **Critères** : trous de tailles autorisés (**toggle Oui/Non**, « Non » par défaut →
   `maxGaps=0` ; « Oui » → `maxGaps=-1`, aucune limite) · quantité min. **à la couleur** ·
-  saisons · catégories · sous-catégories · recherche libre · **% de remise** (simulation).
+  **collections** · catégories · sous-catégories · recherche libre · **% de remise**.
   *L'API accepte toujours un `maxGaps` numérique (0, 1, 2…) si un besoin plus fin réapparaît.*
+- **Collections (PE/AH uniquement)** — `src/lib/a-vendre-season.ts`, testé.
+  - 🔴 **Cet écran ne connaît AUCUNE saison sentinelle.** « Réassort » et « Hors-saison »
+    n'apparaissent ni dans le filtre, ni comme rattachement : un stock à écouler appartient
+    toujours à une collection. *Avant : **1 087 produits sur 1 570** s'affichaient à la fois
+    sous leur vraie collection ET sous une sentinelle.*
+  - Le lien produit→saison n'existant pas en base, il est reconstitué par une **cascade**,
+    la règle la plus sûre d'abord :
+    1. **commandes clients** du produit (saisons PE/AH seulement) → la **plus ANCIENNE**
+       fait foi : c'est la collection de **lancement**, un produit recommandé plus tard ne
+       change pas de collection ;
+    2. **référence sœur** : un autre coloris de la même référence — une référence
+       appartient à une collection, ses coloris ne se dispersent pas ;
+    3. **lettre de la référence** (`SEASON_LETTERS`) ;
+    4. sinon **indéterminée** — affichée « — », jamais rangée d'office quelque part.
+  - Le **filtre** porte sur *toutes* les collections du produit (commandes + rattachement) :
+    un produit lancé en PE25 et recommandé en AH26 ressort sur les deux. La **colonne
+    Collection** montre, elle, la seule collection de lancement.
+  - ⚠️ **Une collection déduite est signalée** : pastille ambre + « ? » à l'écran, suffixe
+    `(déduit)` dans l'export. Sans ça une hypothèse se lirait comme un fait.
+  - ⚠️ **`SEASON_LETTERS` est limité à K→S** (K=PE23 … S=PE27) et ne doit pas être étendu
+    sans re-vérification : sur ces neuf lettres la règle retrouve la saison de lancement
+    quasi parfaitement (P 153/153, Q 136/136, R 123/123, S 139/139, O 148/149), mais
+    au-delà elle est **fausse** — `AM`, `CC`, `CM`, `TH`, `DM`, `ZZ`… désignent des **lignes
+    de produits**, pas des saisons (`AM` prédirait PE18 pour des accessoires lancés en AH26).
+  - **Résultat mesuré en production** : 1 570 produits en stock → 1 442 constatés sur
+    commandes, 26 déduits par référence sœur, 66 par préfixe, **36 indéterminés**
+    (974 pièces, dont **7 produits `DEMO_` totalisant 562 pièces**) = **97,7 % rattachés**.
+  - ⚠️ **Rien n'est écrit en base** : c'est un calcul de lecture propre à cet écran. Les
+    commandes et la synchro TIO gardent leurs saisons sentinelles, indispensables ailleurs
+    (écran Commandes client, rapprochement BL/FAC).
 - ⚠️ **Définition d'un « trou »** : une taille à **0 encadrée par des tailles en stock**.
   Les tailles absentes **en bout de gamme ne comptent pas** (`S:5 M:13 L:17 XL:14 3XL:0` = 0
   trou : la gamme s'arrête, elle n'est pas trouée ; `S:15 M:0 L:7` = 1 trou). C'est ce qui
