@@ -928,6 +928,7 @@ export const HELP_THEMES: HelpTheme[] = [
           {
             lines: [
               "Dans **Exports**, cet export sort un **tableau des quantités commandées** par les boutiques : une ligne par **référence + coloris**, et **une colonne par taille**.",
+              "Les premières colonnes : **Référence**, **Libellé 1** (le titre du produit), **Coloris** et **Libellé coloris**.",
               "En bout de ligne, le **total du coloris**. En bas, la **somme par taille** et le **total général**.",
             ],
             tip: "Le compteur au-dessus du bouton annonce combien de références et de pièces sortiront — tu vois le résultat **avant** de télécharger. 🔢",

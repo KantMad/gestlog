@@ -502,6 +502,10 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
 - **Quantités commandées — Excel** (`/api/export/quantites`,
   `components/export/quantites-card.tsx`, logique pure dans `lib/export-quantites.ts`) :
   tableau croisé des quantités commandées par les boutiques, **tailles en colonnes**.
+  - Colonnes fixes : `Référence`, **`Libellé 1`** (= `Product.label`, la désignation
+    produit), `Coloris`, `Libellé coloris` [, `Boutique`], puis les tailles et `Total`.
+    *Couverture réelle : 709/709 produits commandés sur AH26 et 1 740/1 740 sur Réassort
+    ont un libellé.* Si une ligne l'a vide, on reprend le premier libellé connu du groupe.
   - Filtres : saison, **catalogue**, **période** (dates de commande), **SKU/référence**
     (plusieurs, séparés par des virgules ; préfixe de référence ou `RÉF_COLORIS`),
     **boutiques** en deux modes exclusifs — *Aucune sauf…* (inclusion) / *Toutes sauf…*

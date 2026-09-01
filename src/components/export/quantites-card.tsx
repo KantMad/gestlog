@@ -132,12 +132,10 @@ export function QuantitesCard({
       }
       const wb = XLSX.utils.book_new();
       const ws = XLSX.utils.aoa_to_sheet([d.header, ...d.rows]);
-      // Colonnes larges pour la référence et le libellé, étroites pour les tailles.
-      ws["!cols"] = d.header.map((h, i) =>
-        i === 0 ? { wch: 18 } : i === 1 ? { wch: 9 } : i === 2 ? { wch: 18 } :
-        withBoutique && i === 3 ? { wch: 28 } : { wch: 7 }
-      );
-      ws["!freeze"] = { xSplit: withBoutique ? 4 : 3, ySplit: 1 };
+      // Réf / Libellé 1 / Coloris / Libellé coloris [/ Boutique], puis les tailles.
+      const WIDTHS = [18, 34, 9, 18, ...(withBoutique ? [28] : [])];
+      ws["!cols"] = d.header.map((_, i) => ({ wch: WIDTHS[i] ?? 7 }));
+      ws["!freeze"] = { xSplit: WIDTHS.length, ySplit: 1 };
       XLSX.utils.book_append_sheet(wb, ws, "Quantités");
 
       const boutiqueLabel =
