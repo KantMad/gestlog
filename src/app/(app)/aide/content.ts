@@ -287,6 +287,38 @@ export const HELP_THEMES: HelpTheme[] = [
         ],
       },
       {
+        id: "import-reception-multi",
+        icon: "\u2702\ufe0f",
+        title: "Un fichier, plusieurs commandes fournisseur",
+        keywords: "réception colisage packing list plusieurs commandes fournisseur séparer découper multiple",
+        screen: "/import",
+        sections: [
+          {
+            lines: [
+              "Un même fichier de colisage couvre souvent **plusieurs commandes fournisseur**. GestLog le détecte et crée **une réception par commande**.",
+              "Il se sert de la colonne **COMMANDE FOURNISSEUR** du fichier : chaque ligne part sur la commande qui est écrite en face d'elle.",
+            ],
+            tip: "Exemple réel : un colisage KATA contenant 990 pièces pour la commande 100748 et 5 pièces pour la 100747 donne bien deux réceptions distinctes. ✂️",
+          },
+          {
+            h: "Ce que tu vois à l'écran",
+            lines: [
+              "Dès que tu déposes le fichier, un encadré orange liste les commandes trouvées : **numéro, nombre de lignes, nombre de pièces et fournisseur**.",
+              "Une commande que GestLog ne connaît pas dans la saison est signalée « **commande inconnue de cette saison** » — importe-la d'abord.",
+              "La case **« Créer une réception par commande »** est cochée par défaut. Décochée, tout part sur une seule commande.",
+            ],
+          },
+          {
+            h: "Bon à savoir",
+            lines: [
+              "Quand le fichier porte les numéros de commande, **le champ de saisie disparaît** : le fichier fait autorité, il n'y a plus rien à choisir.",
+              "Chaque réception créée porte un numéro du type **RECEP-100748**, pour retrouver facilement laquelle vient de quelle commande.",
+              "S'il y a un avertissement (produit introuvable par exemple), il est **préfixé du numéro de commande** pour savoir d'où il vient.",
+            ],
+          },
+        ],
+      },
+      {
         id: "import-stock",
         icon: "🏷️",
         title: "Importer le stock",

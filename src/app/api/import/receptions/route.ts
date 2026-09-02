@@ -58,12 +58,14 @@ export async function POST(request: NextRequest) {
     const receptionNumber = formData.get("receptionNumber") as string | null;
     // N° de commande fournisseur saisi à l'import (format MCS : absent du fichier).
     const supplierOrderNumber = formData.get("supplierOrderNumber") as string | null;
-
+    // Une liste de colisage peut couvrir plusieurs commandes → une réception par commande.
+    const splitByOrder = formData.get("splitByOrder") !== "0";
     if (!file || !seasonId) {
       return NextResponse.json({ error: "Fichier et saison requis" }, { status: 400 });
     }
 
     const buffer = await file.arrayBuffer();
+
     const recNumber = receptionNumber || `REC-${Date.now()}`;
     const isMcs = detectMcsFormat(buffer) === "packing-list";
 
@@ -88,7 +90,9 @@ export async function POST(request: NextRequest) {
     let result;
     try {
       result = isMcs
-        ? await importMcsReceptions(buffer, seasonId, supplierOrderNumber || "", recNumber, log.id)
+        ? await importMcsReceptions(buffer, seasonId, supplierOrderNumber || "", recNumber, log.id, {
+            splitByOrder,
+          })
         : await importReception(sheet!, JSON.parse(mappingJson!), seasonId, recNumber, log.id);
     } catch (e) {
       await prisma.importLog.delete({ where: { id: log.id } }).catch(() => {});

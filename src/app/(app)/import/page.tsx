@@ -22,6 +22,7 @@ import {
   detectMcsFormat,
   parseMcsStatgen,
   parseMcsPackingList,
+  groupReceptionsByOrder,
   parseMcsClientOrders,
   parseTexasClientOrders,
   type McsFormat,
@@ -455,6 +456,12 @@ function ImportTab({
   const [mcsFormat, setMcsFormat] = useState<McsFormat | null>(null);
   const [mcsRowCount, setMcsRowCount] = useState(0);
   const [supplierOrderNumber, setSupplierOrderNumber] = useState("");
+  // Colisage couvrant PLUSIEURS commandes fournisseur : blocs détectés dans le fichier.
+  // Le fichier est déjà analysé ici, côté navigateur — pas d'aller-retour serveur.
+  const [receptionGroups, setReceptionGroups] = useState<
+    { orderNumber: string; lines: number; pieces: number }[]
+  >([]);
+  const [splitByOrder, setSplitByOrder] = useState(true);
   // Onglet Texas (ERP) : parsing dédié (le fichier Texas ne passe PAS par detectMcsFormat).
   const isTexas = tab.id === "texas-orders";
   const [texasCount, setTexasCount] = useState<number | null>(null);
@@ -489,6 +496,7 @@ function ImportTab({
       setResult(null);
       setMcsFormat(null);
       setMcsRowCount(0);
+    setReceptionGroups([]);
       setTexasCount(null);
       try {
         const buffer = await selectedFile.arrayBuffer();
@@ -504,13 +512,20 @@ function ImportTab({
         const fmt = detectMcsFormat(buffer);
         if (fmt) {
           setMcsFormat(fmt);
-          setMcsRowCount(
-            fmt === "statgen"
-              ? parseMcsStatgen(buffer).length
-              : fmt === "client-order"
-                ? parseMcsClientOrders(buffer).length
-                : parseMcsPackingList(buffer).length
-          );
+          if (fmt === "packing-list") {
+            const lines = parseMcsPackingList(buffer);
+            setMcsRowCount(lines.length);
+            setReceptionGroups(
+              groupReceptionsByOrder(lines)
+                .filter((g) => g.orderNumber)
+                .map((g) => ({ orderNumber: g.orderNumber, lines: g.lines.length, pieces: g.pieces }))
+            );
+          } else {
+            setMcsRowCount(
+              fmt === "statgen" ? parseMcsStatgen(buffer).length : parseMcsClientOrders(buffer).length
+            );
+            setReceptionGroups([]);
+          }
           setParsed({ headers: [], rows: [] });
           return;
         }
@@ -581,6 +596,8 @@ function ImportTab({
         // Réception : n° de commande facultatif (auto-rattachement sinon).
         if (mcsFormat === "packing-list" && supplierOrderNumber.trim())
           formData.append("supplierOrderNumber", supplierOrderNumber.trim());
+        if (mcsFormat === "packing-list" && !splitByOrder)
+          formData.append("splitByOrder", "0");
       } else {
         formData.append("mapping", JSON.stringify(mapping));
       }
@@ -617,6 +634,7 @@ function ImportTab({
     setResult(null);
     setMcsFormat(null);
     setMcsRowCount(0);
+    setReceptionGroups([]);
     setTexasCount(null);
     setSupplierOrderNumber("");
   };
@@ -735,7 +753,50 @@ function ImportTab({
             </span>
           </div>
 
-          {mcsFormat === "packing-list" && (
+          {/* Le fichier porte lui-même les n° de commande → il fait autorité, et le champ
+              de saisie ci-dessous devient inutile. */}
+          {mcsFormat === "packing-list" && receptionGroups.length > 1 && (
+            <div className="space-y-2 rounded-lg border border-amber-300 bg-amber-50 p-3">
+              <p className="text-sm font-medium text-amber-900">
+                Ce fichier couvre {receptionGroups.length} commandes fournisseur
+              </p>
+              <ul className="space-y-0.5 text-sm text-amber-900">
+                {receptionGroups.map((g) => {
+                  const known = seasonOrders.find((o) => o.orderNumber === g.orderNumber);
+                  return (
+                    <li key={g.orderNumber} className="flex flex-wrap items-baseline gap-x-2">
+                      <span className="font-mono font-medium">{g.orderNumber}</span>
+                      <span>
+                        {g.lines} ligne{g.lines > 1 ? "s" : ""} · {g.pieces} pièces
+                      </span>
+                      <span className="text-xs">
+                        {known ? `— ${known.supplierName}` : "— ⚠ commande inconnue de cette saison"}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+              <label className="flex cursor-pointer items-start gap-2 text-sm text-amber-900">
+                <input
+                  type="checkbox"
+                  checked={splitByOrder}
+                  onChange={(e) => setSplitByOrder(e.target.checked)}
+                  disabled={importing}
+                  className="mt-0.5 h-4 w-4"
+                />
+                <span>
+                  <strong>Créer une réception par commande</strong>
+                  <span className="mt-0.5 block text-xs">
+                    {splitByOrder
+                      ? `${receptionGroups.length} réceptions seront créées, chacune rattachée à sa commande.`
+                      : "Décoché : tout est rattaché à une seule commande — les pièces des autres commandes lui seront attribuées à tort."}
+                  </span>
+                </span>
+              </label>
+            </div>
+          )}
+
+          {mcsFormat === "packing-list" && receptionGroups.length <= 1 && (
             <div className="space-y-1.5">
               <label htmlFor="supplierOrderNumber" className="text-sm font-medium">
                 Commande fournisseur à rattacher{" "}

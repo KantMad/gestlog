@@ -3,6 +3,8 @@ import { stringifySizeQuantities, sumQuantities } from "@/lib/utils";
 import {
   parseMcsStatgen,
   parseMcsPackingList,
+  groupReceptionsByOrder,
+  type McsReceptionLine,
   pickReceptionSizes,
   parseMcsClientOrders,
   parseTexasClientOrders,
@@ -172,8 +174,12 @@ export async function importMcsSupplierOrders(
 }
 
 // ----------------------------------------------- Réception (Packing List)
-export async function importMcsReceptions(
-  buffer: ArrayBuffer,
+/**
+ * Importe UN bloc de colisage sur UNE commande fournisseur.
+ * `importMcsReceptions` l'appelle une fois par commande présente dans le fichier.
+ */
+async function importReceptionLines(
+  lines: McsReceptionLine[],
   seasonId: string,
   supplierOrderNumber: string,
   receptionNumber: string,
@@ -182,7 +188,6 @@ export async function importMcsReceptions(
   const errors: string[] = [];
   let imported = 0;
 
-  const lines = parseMcsPackingList(buffer);
   if (lines.length === 0) {
     return { imported, errors: ["Aucune ligne détectée (format liste de colisage MCS)."] };
   }
@@ -353,6 +358,63 @@ export async function importMcsReceptions(
     );
   }
 
+  return { imported, errors };
+}
+
+/**
+ * Import d'une liste de colisage.
+ *
+ * ⚠️ Un même fichier couvre souvent PLUSIEURS commandes fournisseur — il porte alors une
+ * colonne « COMMANDE FOURNISSEUR ». *Cas réel « W26 KATA LOT 4 PL » : 100748 (990 pièces)
+ * et 100747 (5 pièces).* Sans découpage, tout atterrissait sur la commande choisie à
+ * l'écran et les 5 pièces étaient attribuées à la mauvaise commande.
+ *
+ * `splitByOrder` (défaut : true) crée donc **une réception par commande** dès que le
+ * fichier en contient plusieurs. Le n° saisi à l'écran ne sert plus qu'aux fichiers SANS
+ * colonne de commande — le fichier fait autorité quand il porte l'information.
+ */
+export async function importMcsReceptions(
+  buffer: ArrayBuffer,
+  seasonId: string,
+  supplierOrderNumber: string,
+  receptionNumber: string,
+  importLogId?: string,
+  options?: { splitByOrder?: boolean }
+): Promise<ImportResult> {
+  const lines = parseMcsPackingList(buffer);
+  if (lines.length === 0) {
+    return { imported: 0, errors: ["Aucune ligne détectée (format liste de colisage MCS)."] };
+  }
+
+  const groups = groupReceptionsByOrder(lines).filter((g) => g.orderNumber);
+  const split = options?.splitByOrder !== false;
+
+  // Un seul bloc identifié, aucun, ou découpage refusé → comportement historique.
+  if (!split || groups.length <= 1) {
+    return importReceptionLines(lines, seasonId, supplierOrderNumber, receptionNumber, importLogId);
+  }
+
+  // Plusieurs commandes : une réception par commande, numérotée pour rester traçable.
+  const errors: string[] = [];
+  let imported = 0;
+  for (const group of groups) {
+    const res = await importReceptionLines(
+      group.lines,
+      seasonId,
+      group.orderNumber,
+      `${receptionNumber}-${group.orderNumber}`,
+      importLogId
+    );
+    imported += res.imported;
+    // Chaque diagnostic est préfixé du n° : sans cela on ne sait plus de quelle
+    // commande vient l'avertissement.
+    errors.push(...res.errors.map((e) => `[Commande ${group.orderNumber}] ${e}`));
+  }
+  errors.unshift(
+    `Le fichier couvre ${groups.length} commandes fournisseur (${groups
+      .map((g) => `${g.orderNumber} : ${g.pieces} pièces`)
+      .join(", ")}) → ${groups.length} réceptions créées.`
+  );
   return { imported, errors };
 }
 

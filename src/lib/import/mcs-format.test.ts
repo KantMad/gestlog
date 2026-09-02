@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import * as XLSX from "xlsx";
-import { detectMcsFormat, parseMcsPackingList } from "./mcs-format";
+import { detectMcsFormat, parseMcsPackingList, groupReceptionsByOrder } from "./mcs-format";
 
 // Construit un classeur xlsx en mémoire à partir d'une matrice (une ligne = un tableau).
 function bufferFromRows(rows: (string | number | null)[][]): ArrayBuffer {
@@ -143,5 +143,56 @@ describe("réception — template IMDER (en-tête « REFERENCE produit fini », 
 
     // La colonne « Total quantités » ne doit JAMAIS être lue comme une taille.
     expect(Object.keys(ct01!.sizes)).not.toContain("TOTALQUANTITÉS");
+  });
+});
+
+describe("réception — plusieurs commandes fournisseur dans UN fichier", () => {
+  // Reproduit « W26 KATA LOT 4 PL GESTLOG » : deux n° de commande dans la même liste.
+  const rows: (string | number | null)[][] = [
+    [null, null, null, null, null, null, null],
+    ["COMMANDE FOURNISEUR", "FULL MCS PRODUCT REF", "COLOR\r\nCODE", "DESCR COLOR", "S", "M", "L"],
+    [100748, "AMPOMC_C013", "001", "Blanc", 4, 38, 65],
+    [100748, "AMPOML_C013", "005", "Sable", 2, 19, 32],
+    [100747, "RMBLOU_W002", "752", "Bleu marine", null, 2, 2],
+  ];
+  const buffer = bufferFromRows(rows);
+
+  it("rattache chaque ligne à sa commande, malgré la coquille « FOURNISEUR »", () => {
+    const lines = parseMcsPackingList(buffer);
+    expect(lines.map((l) => l.orderNumber).sort()).toEqual(["100747", "100748", "100748"]);
+  });
+
+  it("découpe en un bloc par commande, le plus gros d'abord", () => {
+    const groups = groupReceptionsByOrder(parseMcsPackingList(buffer));
+    expect(groups.map((g) => [g.orderNumber, g.lines.length, g.pieces])).toEqual([
+      ["100748", 2, 160],
+      ["100747", 1, 4],
+    ]);
+  });
+
+  it("ne FUSIONNE pas deux commandes livrant la même référence et le même coloris", () => {
+    const lines = parseMcsPackingList(
+      bufferFromRows([
+        ["COMMANDE FOURNISSEUR", "Référence", "CODE COULEUR", "M"],
+        [1, "REF_A", "001", 5],
+        [2, "REF_A", "001", 3],
+      ])
+    );
+    expect(lines).toHaveLength(2);
+    expect(groupReceptionsByOrder(lines).map((g) => g.pieces).sort()).toEqual([3, 5]);
+  });
+
+  it("rend un seul bloc sans n° quand le fichier n'a pas la colonne", () => {
+    const groups = groupReceptionsByOrder(
+      parseMcsPackingList(
+        bufferFromRows([
+          ["Référence", "CODE COULEUR", "S", "M"],
+          ["REF_B", "001", 1, 2],
+        ])
+      )
+    );
+    expect(groups).toHaveLength(1);
+    expect(groups[0].orderNumber).toBe("");
+    expect(groups[0].pieces).toBe(3);
   });
 });

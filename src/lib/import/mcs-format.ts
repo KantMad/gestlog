@@ -415,6 +415,13 @@ export function parseTexasClientOrders(buffer: ArrayBuffer): TexasClientLine[] {
 
 // ---------------------------------------------------------------- Packing List
 export interface McsReceptionLine {
+  /**
+   * N° de commande fournisseur porté par la LIGNE, quand le fichier a une colonne
+   * « COMMANDE FOURNISSEUR » / « CDE FOURNISSEUR ». Vide sinon.
+   * Un même fichier de colisage peut couvrir PLUSIEURS commandes : c'est cette colonne
+   * qui permet de le découper en autant de réceptions.
+   */
+  orderNumber: string;
   reference: string;
   colorCode: string;
   colorName: string;
@@ -428,6 +435,47 @@ export interface McsReceptionLine {
 }
 
 type SizeCol = { col: number; size: string };
+
+/** Un bloc de colisage rattaché à une commande fournisseur. */
+export interface ReceptionGroup {
+  /** N° de commande fournisseur lu dans le fichier ; "" si le fichier n'en porte pas. */
+  orderNumber: string;
+  lines: McsReceptionLine[];
+  /** Total de pièces du bloc (lecture principale des tailles). */
+  pieces: number;
+}
+
+/**
+ * Découpe les lignes d'un colisage par commande fournisseur.
+ *
+ * Un même fichier couvre régulièrement plusieurs commandes — *cas réel
+ * « W26 KATA LOT 4 PL » : 100748 (7 lignes, 990 pièces) et 100747 (1 ligne, 5 pièces)*.
+ * Sans découpage, les 5 pièces de la seconde commande étaient rattachées à la première.
+ *
+ * ⚠️ Les pièces sont comptées sur la lecture PRINCIPALE des tailles. Un fichier ambigu
+ * (cf. `sizesAlt`) n'est tranché qu'au moment du mapping, avec la grille du produit :
+ * l'aperçu peut donc différer à la marge du total finalement importé.
+ */
+export function groupReceptionsByOrder(lines: McsReceptionLine[]): ReceptionGroup[] {
+  const map = new Map<string, McsReceptionLine[]>();
+  for (const line of lines) {
+    const key = line.orderNumber || "";
+    const arr = map.get(key);
+    if (arr) arr.push(line);
+    else map.set(key, [line]);
+  }
+  return [...map.entries()]
+    .map(([orderNumber, ls]) => ({
+      orderNumber,
+      lines: ls,
+      pieces: ls.reduce(
+        (sum, l) => sum + Object.values(l.sizes).reduce((a, b) => a + b, 0),
+        0
+      ),
+    }))
+    // Le plus gros bloc d'abord : c'est celui qu'on veut voir en premier à l'écran.
+    .sort((a, b) => b.pieces - a.pieces || a.orderNumber.localeCompare(b.orderNumber));
+}
 
 /**
  * Tranche entre les deux lectures d'une réception ambiguë (cf. `sizesAlt`) à l'aide de la
@@ -475,6 +523,11 @@ export function parseMcsPackingList(buffer: ArrayBuffer): McsReceptionLine[] {
       cCode = header.findIndex(
         (s) => (s.includes("COLOR") || s.includes("COULEUR") || s.includes("COLORIS")) && !s.includes("DESCR")
       );
+    // Colonne « commande fournisseur » : tolère les libellés du terrain, y compris la
+    // coquille « COMMANDE FOURNISEUR » (un seul S) présente dans les fichiers réels.
+    const cOrder = header.findIndex(
+      (s) => /(COMMANDE|CDE|CMD)/.test(s) && s.includes("FOURNIS")
+    );
     let cName = header.findIndex((s) => s.includes("DESCR") && s.includes("COLOR"));
     // Sinon, une colonne de LIBELLÉ couleur distincte du code (« Coloris produit fini »).
     if (cName < 0)
@@ -514,10 +567,19 @@ export function parseMcsPackingList(buffer: ArrayBuffer): McsReceptionLine[] {
         // couleur = code (on retire un éventuel « -Nom »)
         const rawColor = norm(row[cCode]);
         const colorCode = rawColor.includes("-") ? rawColor.slice(0, rawColor.indexOf("-")).trim() : rawColor;
-        const key = `${reference}__${colorCode}`;
+        // ⚠️ Le n° de commande fait partie de la CLÉ : deux commandes du même fichier
+        // peuvent livrer la même référence/coloris, elles ne doivent pas fusionner.
+        const orderNumber = cOrder >= 0 ? norm(row[cOrder]) : "";
+        const key = `${orderNumber}__${reference}__${colorCode}`;
         let entry = agg.get(key);
         if (!entry) {
-          entry = { reference, colorCode, colorName: cName >= 0 ? norm(row[cName]) : "", sizes: {} };
+          entry = {
+            orderNumber,
+            reference,
+            colorCode,
+            colorName: cName >= 0 ? norm(row[cName]) : "",
+            sizes: {},
+          };
           agg.set(key, entry);
         }
         for (const [size, n] of read(row)) entry.sizes[size] = (entry.sizes[size] || 0) + n;

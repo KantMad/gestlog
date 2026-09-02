@@ -105,6 +105,22 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
   archive. Une commande = **une seule saison**. Les commandes fournisseurs **créent** un
   produit absent du référentiel (avec sa grille). Supprimer une commande fournisseur supprime
   aussi ses **réceptions** (cascade).
+- **Un colisage peut couvrir PLUSIEURS commandes fournisseur.** Quand le fichier porte une
+  colonne « COMMANDE FOURNISSEUR » (ou « CDE/CMD FOURNISSEUR », coquille
+  « FOURNISEUR » comprise), le parseur rattache chaque ligne à SA commande et l'import crée
+  **une réception par commande**, numérotée `<n° réception>-<n° commande>`.
+  - *Cas réel « W26 KATA LOT 4 PL GESTLOG » : 100748 (7 lignes, 990 pièces) et 100747
+    (1 ligne, 5 pièces), total 995 conforme au fichier.* Avant, les 5 pièces de la seconde
+    commande étaient rattachées à la première.
+  - ⚠️ Le **n° de commande fait partie de la clé d'agrégation** : deux commandes du même
+    fichier livrant la même référence/coloris ne fusionnent plus.
+  - L'écran affiche les blocs détectés (n° · lignes · pièces · fournisseur, ou
+    « commande inconnue de cette saison ») avec une case **« Créer une réception par
+    commande »**, cochée par défaut. Décochée, on retombe sur l'ancien comportement.
+  - Le fichier fait alors **autorité** : le champ « Commande fournisseur à rattacher »
+    disparaît, il ne sert qu'aux fichiers SANS colonne de commande.
+  - L'analyse est faite **côté navigateur** (le fichier y est déjà parsé) et croisée avec
+    les commandes de la saison déjà chargées — aucun aller-retour serveur supplémentaire.
 - **Pièges** : couleur = code avant le tiret (`208-Cognac`→208) ; réf réception tiret→underscore ;
   réceptions : importer la commande fournisseur **d'abord** (auto-rattachement). ⚠️ Un
   **« produit introuvable »** signifie que la ligne est **écartée** — à traiter, pas à ignorer :
