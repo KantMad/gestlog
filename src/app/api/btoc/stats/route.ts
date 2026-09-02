@@ -240,16 +240,23 @@ export async function GET(request: NextRequest) {
         ? "WHERE " + topProductConditions.join(" AND ")
         : "";
 
-    // Branche remboursements (déduits) : mêmes filtres date/client + revenue,
-    // sans catégorie/produit (les lignes de remboursement ne joignent pas
-    // BtocProduct). Params séparés pour ne pas perturber les requêtes qui
-    // réutilisent topProductParams (ex. sizeDistribution).
+    // Branche remboursements (déduits des ventes) : elle doit porter EXACTEMENT les
+    // mêmes filtres que la branche ventes.
+    // ⚠️ Elle ignorait catégorie / produit parent : avec un filtre « Pantalons », les
+    // remboursements de chemises étaient injectés en négatif dans le Top produits —
+    // *118 références non-pantalon et 379 pièces sur mars→août 2026*. Les lignes de
+    // remboursement portent un `sku`, elles peuvent donc joindre `BtocProduct` comme
+    // les ventes. Params séparés pour ne pas perturber les requêtes qui réutilisent
+    // `topProductParams` (ex. sizeDistribution).
     const tpAllParams = [...topProductParams];
     const tpRefundConds: string[] = [REVENUE_FILTER];
     let tpr = topProductParams.length + 1;
     if (dateFrom) { tpRefundConds.push(`o."orderDate" >= $${tpr++}`); tpAllParams.push(dateGte!); }
     if (dateTo) { tpRefundConds.push(`o."orderDate" < $${tpr++}`); tpAllParams.push(dateLt!); }
     if (customerId) { tpRefundConds.push(`o."customerId" = $${tpr++}`); tpAllParams.push(customerId); }
+    if (category) { tpRefundConds.push(`rp.category ILIKE '%' || $${tpr++} || '%'`); tpAllParams.push(category); }
+    if (parentProduct) { tpRefundConds.push(`rp.sku ILIKE $${tpr++}`); tpAllParams.push(`%${parentProduct}%`); }
+    if (globalCategory) { tpRefundConds.push(`SPLIT_PART(rl.sku, '-', 1) = ANY($${tpr++})`); tpAllParams.push(globalCategorySkus); }
     const tpRefundWhere = "WHERE " + tpRefundConds.join(" AND ");
 
     // Top produits : on agrège par RÉFÉRENCE (SPLIT_PART(sku,'-',1)) — un produit =
@@ -270,6 +277,7 @@ export async function GET(request: NextRequest) {
         SELECT SPLIT_PART(rl.sku, '-', 1), rl.name, SPLIT_PART(rl.sku, '-', 2), -rl.quantity, -rl.total
         FROM "BtocRefundLine" rl
         JOIN "BtocOrder" o ON o."wooId" = rl."orderWooId"
+        LEFT JOIN "BtocProduct" rp ON rp.sku = SPLIT_PART(rl.sku, '-', 1)
         ${tpRefundWhere}
       ) t
       WHERE ref IS NOT NULL AND ref <> ''

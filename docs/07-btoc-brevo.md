@@ -149,9 +149,25 @@ nombre de lignes retenues**. Deux conséquences, corrigées :
    *Même cas réel : **74 942,60 € affichés pour 46 002,20 € réels**, ×1,63 — en
    contradiction visible avec la tuile CA de la même page.*
 
+3. **Top produits : les remboursements ignoraient le filtre produit.** La branche
+   remboursement de l'`UNION ALL` n'appliquait que date/client, pas
+   catégorie/parent/cat. globale — les lignes de remboursement joignent pourtant
+   `BtocProduct` par leur `sku`. Résultat : avec un filtre « Pantalons », **118 références
+   non-pantalon** (379 pièces) étaient injectées **en négatif** dans le classement.
+   La branche joint désormais `BtocProduct rp` et porte les mêmes filtres.
+
 ⚠️ Toute nouvelle requête utilisant `${lineJoin}` doit **dédoublonner les commandes** avant
 d'agréger un montant au niveau commande. `COUNT(DISTINCT o.id)` ne suffit pas : il protège
 le comptage, pas les `SUM`.
+
+⚠️ Et toute branche **remboursement** d'un `UNION ALL` doit porter **exactement** les mêmes
+filtres que la branche ventes, sinon on soustrait des remboursements hors périmètre.
+
+**Requêtes auditées et jugées correctes** : `topCategories` et `topCountries` (niveau ligne
+ou sans jointure, filtres date/client seulement — volontairement insensibles aux filtres
+BtoC), `topCities` (sous-requête `DISTINCT` déjà en place), `ordersByStatus`
+(`COUNT(DISTINCT o.id)`), `sizeDistribution` (niveau ligne, filtres appliqués),
+`/api/btoc/size-distribution` et `/api/btoc/segmentation`.
 
 ### Filtre « Cat. globale » (`src/lib/btoc-global-category.ts`, testé)
 Les catégories WooCommerce ne servent pas à analyser : un produit en porte jusqu'à **onze**

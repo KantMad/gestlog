@@ -47,7 +47,11 @@ interface CatRow {
 }
 interface CompData {
   season1: { name: string; qty: number; ca: number };
-  season2: { name: string; qty: number; ca: number; endDate: string | null };
+  season2: {
+    name: string; qty: number; ca: number; endDate: string | null;
+    /** Commandes sans date de commande, écartées par la date de fin. */
+    undatedOrders?: number;
+  };
   global: { qtyPct: number; caPct: number };
   categories: CatRow[];
 }
@@ -264,6 +268,14 @@ export default function SeasonComparisonPage() {
                 <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-44 h-9" />
               </div>
               {endDate && <button onClick={() => setEndDate("")} className="text-xs text-muted-foreground underline mb-2.5">tout prendre</button>}
+              {/* ⚠️ Sans cet avertissement, une saison dont les commandes n'ont pas de
+                  date (AH26 côté Texas) affiche 0 sans explication. */}
+              {endDate && (data?.season2.undatedOrders ?? 0) > 0 && (
+                <p className="mb-2.5 max-w-xs text-xs text-amber-700">
+                  ⚠️ <strong>{data!.season2.undatedOrders} commande(s)</strong> de{" "}
+                  {data!.season2.name} n&apos;ont pas de date et sont écartées par ce filtre.
+                </p>
+              )}
             </div>
 
             {/* Filtre boutique */}

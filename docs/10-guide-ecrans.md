@@ -296,6 +296,24 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
 - **Pièges** : deux notions de « livré » (BL réels vs `Delivery` allocation) ; top 15 clients
   pour le détail mais montant facturé global.
 
+### ⚠️ Pièges de comptage corrigés (audit)
+- **Pièces commandées et soldées : filtre `source` manquant** (`/api/statistics/season`).
+  `totalPieces` et `cancelledPieces` interrogeaient `ClientOrderLine` sans filtrer la
+  source, alors qu'une saison peut porter les mêmes commandes en TIO **et** en TEXAS.
+  *Cas réel AH26 : **158 636 pièces affichées pour 69 925 réelles** (x2,27).* Les autres
+  saisons n'ayant qu'une source, elles étaient justes — d'où un bug invisible jusqu'ici.
+  ⚠️ Toute lecture de `ClientOrder`/`ClientOrderLine` doit passer par `resolveOrderSource`.
+- **Livraisons expédiées non filtrées par saison** : la tuile comptait les livraisons de
+  **toutes** les saisons. Corrigé via `allocationSession: { seasonId }`. (Impact nul
+  aujourd'hui — 0 livraison expédiée en base — mais le compteur était faux par construction.)
+- **Comparaison saisons : les commandes sans date disparaissent.** Poser une date de fin
+  applique `orderDate IS NOT NULL`. *Les 282 commandes TEXAS d'AH26 ont toutes
+  `orderDate` NULL* → l'élément 2 tombait à 0 sans explication. La route renvoie
+  `season2.undatedOrders` et l'écran affiche un avertissement.
+- **Audités et corrects** : `/api/statistics/charts` (source filtrée partout),
+  `/api/statistics/client-comparison` et `/api/statistics/season-comparison` (source
+  résolue par sous-select corrélé), `/api/recap`, `/api/reassort`.
+
 ## Comparaison saisons / catalogues (`/season-comparison`)
 - **Rôle** : comparer deux **saisons** OU deux **catalogues** par catégorie produit (CA,
   quantité, poids, évolution). Item 2 filtrable jusqu'à une date de commande.

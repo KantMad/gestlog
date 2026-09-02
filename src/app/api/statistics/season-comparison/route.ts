@@ -43,6 +43,8 @@ export async function GET(request: NextRequest) {
       ];
       if (end) {
         params.push(end);
+        // ⚠️ Écarte les commandes SANS date. Voir `undatedOrders` plus bas : sur une
+        // saison où toutes les commandes sont sans date, l'item filtré tomberait à 0.
         conds.push(`co."orderDate" IS NOT NULL AND co."orderDate" <= $${params.length}::timestamp`);
       }
       let clientJoin = "";
@@ -72,6 +74,27 @@ export async function GET(request: NextRequest) {
       groupQuery(season1, null),
       groupQuery(season2, endTs),
     ]);
+
+    // ⚠️ Toutes les commandes n'ont pas de date : les 282 commandes TEXAS d'AH26 ont
+    // `orderDate` NULL. Poser une date de fin les écarterait TOUTES, en silence, et
+    // l'item 2 afficherait 0 sans qu'on comprenne pourquoi. On le remonte à l'écran.
+    let undatedOrders = 0;
+    if (endTs) {
+      const dimCol = dimension === "catalog" ? `"catalogId"` : `"seasonId"`;
+      const dimTable = dimension === "catalog" ? "Catalog" : "Season";
+      const undated = await prisma.$queryRawUnsafe<{ n: bigint }[]>(
+        `SELECT COUNT(*)::bigint AS n
+         FROM "ClientOrder" co
+         JOIN "${dimTable}" dim ON dim.id = co.${dimCol}
+         WHERE dim.name = $1 AND co."orderDate" IS NULL
+           AND co."source" = (CASE WHEN EXISTS (
+                 SELECT 1 FROM "ClientOrder" c2
+                 WHERE c2."seasonId" = co."seasonId" AND c2."source" = 'TEXAS'
+               ) THEN 'TEXAS' ELSE 'TIO' END)`,
+        season2
+      );
+      undatedOrders = Number(undated[0]?.n ?? 0);
+    }
 
     const map1 = new Map(rows1.map((r) => [r.cat, { qty: Number(r.qty), ca: Number(r.ca) }]));
     const map2 = new Map(rows2.map((r) => [r.cat, { qty: Number(r.qty), ca: Number(r.ca) }]));
@@ -114,7 +137,10 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       season1: { name: season1, qty: s1TotalQty, ca: Math.round(s1TotalCa) },
-      season2: { name: season2, qty: s2TotalQty, ca: Math.round(s2TotalCa), endDate: endDate || null },
+      season2: {
+        name: season2, qty: s2TotalQty, ca: Math.round(s2TotalCa),
+        endDate: endDate || null, undatedOrders,
+      },
       global: {
         qtyPct: pct(s2TotalQty, s1TotalQty),
         caPct: pct(s2TotalCa, s1TotalCa),

@@ -25,11 +25,18 @@ export async function GET(request: NextRequest) {
     prisma.allocationSession.count({
       where: { seasonId, status: "SIMULATION" },
     }),
-    prisma.delivery.count({ where: { status: "EXPEDIEE" } }),
+    // ⚠️ Compte les livraisons DE LA SAISON (via la session de répartition). Sans ce
+    // filtre, la tuile affichait le total toutes saisons confondues sur chaque saison.
+    prisma.delivery.count({
+      where: { status: "EXPEDIEE", allocationSession: { seasonId } },
+    }),
   ]);
 
+  // ⚠️ Le filtre `source` est INDISPENSABLE : une saison peut porter les mêmes commandes
+  // en TIO (archive) et en TEXAS (vérité). Sans lui, les pièces étaient comptées deux
+  // fois. *Cas réel AH26 : 158 636 pièces affichées pour 69 925 réelles (x2,27).*
   const clientOrderLines = await prisma.clientOrderLine.findMany({
-    where: { clientOrder: { seasonId } },
+    where: { clientOrder: { seasonId, source: src } },
     select: { totalQuantity: true },
   });
   const totalPieces = clientOrderLines.reduce(
@@ -37,6 +44,7 @@ export async function GET(request: NextRequest) {
     0
   );
 
+  // (les commandes fournisseur n'ont pas de double source : pas de filtre à ajouter)
   const supplierOrders = await prisma.supplierOrder.findMany({
     where: { seasonId },
     select: { status: true },
@@ -51,7 +59,7 @@ export async function GET(request: NextRequest) {
 
   // Soldé (pièces annulées) sur la saison → retirées du dénominateur.
   const cancelledAgg = await prisma.clientOrderLine.aggregate({
-    where: { clientOrder: { seasonId } },
+    where: { clientOrder: { seasonId, source: src } },
     _sum: { cancelledTotal: true },
   });
   const cancelledPieces = cancelledAgg._sum.cancelledTotal || 0;
