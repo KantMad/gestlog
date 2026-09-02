@@ -5,6 +5,12 @@ import { prisma } from "@/lib/prisma";
 // GET — Liste des livraisons (BL / FAC importés) avec filtres + résumé.
 // Filtres : docType, clientCode, orderSeason (saison de la commande TIO liée),
 // dateFrom, dateTo, search.
+// Plafond de documents renvoyés. ⚠️ Il était à 1 000 alors que la base en compte 5 030 :
+// l'écran regroupe ces documents PAR CLIENT côté navigateur, donc son tableau ignorait
+// 4 030 documents tout en affichant, juste au-dessus, des tuiles calculées par le serveur
+// sur la totalité. Deux chiffres contradictoires sur le même écran.
+const DOC_LIMIT = 10000;
+
 export async function GET(request: NextRequest) {
   try {
     const p = request.nextUrl.searchParams;
@@ -93,7 +99,7 @@ export async function GET(request: NextRequest) {
        ) ord ON true
        ${where}
        ORDER BY d."documentDate" DESC NULLS LAST, d."documentNumber" DESC
-       LIMIT 1000`,
+       LIMIT ${DOC_LIMIT}`,
       ...params
     );
 
@@ -123,6 +129,9 @@ export async function GET(request: NextRequest) {
     );
 
     return NextResponse.json({
+      // Vrai si le plafond a été atteint : l'écran doit alors le DIRE, ses regroupements
+      // étant incomplets.
+      truncated: documents.length >= DOC_LIMIT,
       documents: documents.map((d) => ({
         ...d,
         lineCount: Number(d.lineCount),

@@ -119,6 +119,8 @@ function groupDocs(docs: Doc[]): Group[] {
 export default function ShipmentsPage() {
   const [documents, setDocuments] = useState<Doc[]>([]);
   const [summary, setSummary] = useState({ docs: 0, qty: 0, clients: 0 });
+  // Liste plafonnée côté serveur → les regroupements de l'écran sont incomplets.
+  const [truncated, setTruncated] = useState(false);
   const [clients, setClients] = useState<{ clientCode: string; clientName: string | null }[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -151,6 +153,7 @@ export default function ShipmentsPage() {
       const d = await res.json();
       setDocuments(d.documents || []);
       setSummary(d.summary || { docs: 0, qty: 0, clients: 0 });
+      setTruncated(!!d.truncated);
       setClients(d.clients || []);
     } catch {
       toast.error("Impossible de charger les livraisons");
@@ -326,6 +329,18 @@ export default function ShipmentsPage() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Les tuiles ci-dessus sont calculées par le serveur sur TOUS les documents.
+            Le tableau, lui, regroupe la liste renvoyée : s'il en manque, il faut le dire. */}
+        {truncated && (
+          <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+            ⚠️ Trop de documents pour être tous affichés : le tableau ci-dessous est{" "}
+            <strong>incomplet</strong> et ses totaux par client aussi. Les compteurs
+            ci-dessus, eux, portent bien sur les{" "}
+            <strong>{formatNumber(summary.docs)}</strong> documents. Filtre par saison,
+            client ou type pour réduire la liste.
+          </div>
+        )}
 
         {/* Filtres */}
         <Card>

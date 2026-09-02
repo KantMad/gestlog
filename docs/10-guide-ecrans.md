@@ -345,6 +345,17 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
     un 0 % permanent.
   - ⚠️ `SupplierOrder.status` reste donc limité à `EN_ATTENTE`/`PARTIEL` en pratique :
     **ne pas s'en servir pour juger qu'une commande est soldée ou complète.**
+- 🔴 **Écran Commandes client : les compteurs sommaient une liste plafonnée à 1 000.**
+  `/api/reassort` calcule son `summary` (commandé, soldé, livré, facturé, et les
+  répartitions par statut) en **réduisant le tableau `documents`**, lui-même borné par un
+  `LIMIT 1000`. Sur la saison **Réassort (2 124 commandes)**, **1 124 commandes**
+  n'entraient dans aucun compteur, sans le moindre signalement. Plafond porté à 20 000
+  (la base compte 4 383 commandes toutes saisons) + drapeau `truncated`.
+- 🔴 **Écran Livraisons : tableau groupé plafonné à 1 000 sur 5 030 documents.** Les tuiles
+  viennent d'un `summary` SQL calculé sur **tout** le périmètre — elles étaient justes —
+  mais le tableau regroupe par client la **liste renvoyée**, plafonnée à 1 000. L'écran
+  affichait donc un total exact au-dessus d'un tableau amputé de 4 030 documents. Plafond
+  porté à 10 000, drapeau `truncated` et bandeau d'avertissement.
 - 🔴 **Écran Statistiques : les tuiles ne comptaient que le TOP 15 clients.** `totalOrdered`
   / `totalDelivered` / `totalInvoiced` étaient sommés depuis `clientBreakdown`, or celui-ci
   est **tronqué au top 15** pour la lisibilité du graphe. Selon la saison, les tuiles
@@ -361,6 +372,20 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
   `/api/statistics/charts` renvoie désormais **`totals`** (tous clients) à côté de
   `clientBreakdown` (top 15, pour le seul graphe, qui l'annonce dans son titre).
   ⚠️ **Ne jamais sommer `clientBreakdown` pour obtenir un total de saison.**
+
+  ⚠️ **Règle générale, vérifiée trois fois dans cet audit : ne JAMAIS agréger une liste
+  plafonnée.** Un total se calcule en SQL sur l'ensemble du périmètre (`summary`,
+  `totals`), la liste ne sert qu'à l'affichage — et quand elle est tronquée, l'écran doit
+  le dire.
+
+  **Écrans audités et jugés corrects** : À vendre (les totaux portent sur la liste filtrée
+  complète, seul le *rendu* est limité à 300 lignes et l'écran l'annonce), Clients BtoC
+  (pagination serveur, compteur `data.total`, export qui boucle sur toutes les pages),
+  Récap clients (`stats` calculé sur tous les clients), Comparaison, Comparaison clients et
+  Comparaison saisons (sommes sur des listes complètes, filtrées côté écran à dessein),
+  Répartition, Échantillons, Vue dépôt, Contrôle commandes, Conditionnelle, Fichier
+  d'intégration CC et Lancement de commande (calculs sur le fichier local), Tableau de bord
+  (aucun calcul propre).
 - 🔴 **Conformité fournisseur : moyenne non pondérée des pourcentages.** L'écran faisait la
   moyenne des `conformité` par fournisseur — un fournisseur de 5 pièces pesait autant qu'un
   fournisseur de 40 000. *AH26 : **35 %** en moyenne simple contre **51 %** en pondéré.*

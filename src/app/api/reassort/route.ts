@@ -7,6 +7,13 @@ import { resolveOrderSourceBySeasonName } from "@/lib/order-source";
 // GET — Commandes client (TIO) avec réconciliation commandé vs livré
 // (via les BL/FAC liés par n° TIO). Statut à la volée : NON_LIVREE /
 // PARTIELLE / LIVREE. Filtre principal : saison.
+// Plafond de sécurité. ⚠️ Il valait 1 000 alors que le `summary` ci-dessous est calculé
+// en SOMMANT cette liste : sur la saison Réassort (2 123 commandes), les compteurs
+// n'agrégeaient que les 1 000 premières, sans que rien ne le signale. Le plafond couvre
+// désormais largement la base (~4 400 commandes toutes saisons) et `truncated` prévient
+// si on l'atteignait quand même.
+const ROW_CAP = 20000;
+
 export async function GET(request: NextRequest) {
   try {
     const p = request.nextUrl.searchParams;
@@ -88,7 +95,7 @@ export async function GET(request: NextRequest) {
        LEFT JOIN "Catalog" cat ON cat.id = co."catalogId"
        ${where}
        ORDER BY co."orderDate" DESC NULLS LAST, co."orderNumber" DESC
-       LIMIT 1000`,
+       LIMIT ${ROW_CAP}`,
       ...params
     );
 
@@ -152,7 +159,15 @@ export async function GET(request: NextRequest) {
        ORDER BY (se.type = 'REASSORT') DESC, se.name DESC`
     );
 
-    return NextResponse.json({ documents, summary, clients, seasons: seasons.map((s) => s.name) });
+    return NextResponse.json({
+      documents,
+      summary,
+      // Vrai seulement si le plafond de sécurité est atteint : les compteurs seraient
+      // alors partiels et l'écran doit le dire.
+      truncated: documents.length >= ROW_CAP,
+      clients,
+      seasons: seasons.map((s) => s.name),
+    });
   } catch (e) {
     return handleApiError(e, "api/reassort");
   }
