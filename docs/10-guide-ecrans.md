@@ -345,6 +345,27 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
     un 0 % permanent.
   - ⚠️ `SupplierOrder.status` reste donc limité à `EN_ATTENTE`/`PARTIEL` en pratique :
     **ne pas s'en servir pour juger qu'une commande est soldée ou complète.**
+- 🔴 **Écran Statistiques : les tuiles ne comptaient que le TOP 15 clients.** `totalOrdered`
+  / `totalDelivered` / `totalInvoiced` étaient sommés depuis `clientBreakdown`, or celui-ci
+  est **tronqué au top 15** pour la lisibilité du graphe. Selon la saison, les tuiles
+  n'affichaient qu'entre **32 % et 53 %** des pièces :
+
+  | Saison | affiché | réel | manquant |
+  |---|---|---|---|
+  | PE27 | 16 703 | 51 791 | 35 088 |
+  | AH26 | 26 426 | 69 925 | 43 499 |
+  | AH25 | 37 994 | 79 706 | 41 712 |
+
+  Pire, la **même tuile** affichait un *montant facturé* calculé, lui, sur **tous** les
+  clients — un montant global au-dessus d'un compte de pièces partiel.
+  `/api/statistics/charts` renvoie désormais **`totals`** (tous clients) à côté de
+  `clientBreakdown` (top 15, pour le seul graphe, qui l'annonce dans son titre).
+  ⚠️ **Ne jamais sommer `clientBreakdown` pour obtenir un total de saison.**
+- 🔴 **Conformité fournisseur : moyenne non pondérée des pourcentages.** L'écran faisait la
+  moyenne des `conformité` par fournisseur — un fournisseur de 5 pièces pesait autant qu'un
+  fournisseur de 40 000. *AH26 : **35 %** en moyenne simple contre **51 %** en pondéré.*
+  La route renvoie `supplierTotals` et l'écran calcule **reçu / commandé**, ce qui le rend
+  cohérent avec le taux de réception du tableau de bord.
 - **Tableau de bord** : il n'effectue **aucun calcul propre**, il affiche les valeurs de
   `/api/statistics/season` et `/charts`. Le surcompte AH26 le touchait donc aussi
   (`deliveryRate` = livré / pièces effectives, dénominateur doublé → taux divisé par deux).

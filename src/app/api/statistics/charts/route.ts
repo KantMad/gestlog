@@ -127,8 +127,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Répartition par client : livré = BL, soldé = annulé, restant = commandé − soldé − livré.
-    // Trié par volume commandé, limité aux 15 plus gros (lisibilité du graphe).
-    const clientBreakdown = Array.from(clientOrderData.entries())
+    const allClients = Array.from(clientOrderData.entries())
       .map(([clientId, data]) => {
         const livré = clientBlDelivered.get(clientId) || 0;
         const facturé = clientFacInvoiced.get(clientId) || 0;
@@ -143,8 +142,24 @@ export async function GET(request: NextRequest) {
           restant: Math.max(0, data.ordered - data.cancelled - livré),
         };
       })
-      .sort((a, b) => b.commandé - a.commandé)
-      .slice(0, 15);
+      .sort((a, b) => b.commandé - a.commandé);
+
+    // ⚠️ TOTAUX DE LA SAISON, calculés sur TOUS les clients — à ne pas confondre avec
+    // `clientBreakdown`, tronqué au top 15 pour la lisibilité du graphe.
+    // L'écran Statistiques sommait les tuiles depuis le top 15 : il n'affichait donc
+    // qu'entre 32 % et 53 % des pièces selon la saison (*PE27 : 16 703 sur 51 791*),
+    // tout en montrant à côté un montant facturé, lui, calculé sur tous les clients.
+    const totals = {
+      clients: allClients.length,
+      commandé: allClients.reduce((s, c) => s + c.commandé, 0),
+      livré: allClients.reduce((s, c) => s + c.livré, 0),
+      facturé: allClients.reduce((s, c) => s + c.facturé, 0),
+      soldé: allClients.reduce((s, c) => s + c.soldé, 0),
+      restant: allClients.reduce((s, c) => s + c.restant, 0),
+    };
+
+    // Top 15 pour le GRAPHE uniquement.
+    const clientBreakdown = allClients.slice(0, 15);
 
     // Client delivery detail (all statuses)
     const clientDeliveries = Array.from(clientDeliveryDetail.values());
@@ -197,6 +212,16 @@ export async function GET(request: NextRequest) {
         });
       }
     }
+
+    // ⚠️ Conformité GLOBALE = total reçu / total commandé, PAS la moyenne des
+    // pourcentages par fournisseur : cette moyenne donne le même poids à un fournisseur
+    // de 5 pièces qu'à un fournisseur de 40 000. *AH26 : 35 % en moyenne simple contre
+    // 51 % en pondéré.* Le pondéré est aussi ce qu'affiche le tableau de bord, donc les
+    // deux écrans concordent enfin.
+    const supplierTotals = {
+      commandé: [...supplierData.values()].reduce((s, x) => s + x.ordered, 0),
+      reçu: [...supplierData.values()].reduce((s, x) => s + x.received, 0),
+    };
 
     const supplierConformity = Array.from(supplierData.values()).map((s) => ({
       name: s.name,
@@ -284,6 +309,8 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       clientBreakdown,
+      totals,
+      supplierTotals,
       clientDeliveries,
       supplierConformity,
       supplierReceptions,

@@ -58,6 +58,10 @@ interface ChartData {
   deliveryStatus: { name: string; value: number }[];
   invoiceStatus: { name: string; value: number }[];
   deliveryTimeline: { date: string; client: string; pièces: number }[];
+  /** Totaux de la saison, sur TOUS les clients (clientBreakdown est tronqué au top 15). */
+  totals?: { clients: number; commandé: number; livré: number; facturé: number; soldé: number; restant: number };
+  /** Totaux fournisseurs de la saison, pour une conformité pondérée. */
+  supplierTotals?: { commandé: number; reçu: number };
 }
 
 // Statut facturation : Facturées / Partielles / À facturer
@@ -135,24 +139,27 @@ export default function StatisticsPage() {
       c.commandé > 0 ? Math.round((c.livré / c.commandé) * 100) : 0,
   }));
 
+  // ⚠️ Les tuiles doivent lire les TOTAUX de la saison, pas `clientBreakdown` qui est
+  // tronqué au top 15 pour le graphe : sommer le top 15 n'affichait qu'entre 32 % et 53 %
+  // des pièces selon la saison, à côté d'un montant facturé calculé, lui, sur tous les
+  // clients. (Repli sur le top 15 pour rester compatible avec une réponse ancienne.)
   const totalOrdered =
-    data?.clientBreakdown.reduce((s, c) => s + c.commandé, 0) || 0;
+    data?.totals?.commandé ?? data?.clientBreakdown.reduce((s, c) => s + c.commandé, 0) ?? 0;
   const totalDelivered =
-    data?.clientBreakdown.reduce((s, c) => s + c.livré, 0) || 0;
+    data?.totals?.livré ?? data?.clientBreakdown.reduce((s, c) => s + c.livré, 0) ?? 0;
   const totalInvoiced =
-    data?.clientBreakdown.reduce((s, c) => s + (c.facturé || 0), 0) || 0;
+    data?.totals?.facturé ?? data?.clientBreakdown.reduce((s, c) => s + (c.facturé || 0), 0) ?? 0;
   // Montant facturé par client (HT), trié décroissant, pour le graphe dédié.
   const clientAmounts = (data?.clientBreakdown || [])
     .filter((c) => (c.montantFacturé || 0) > 0)
     .map((c) => ({ name: c.name, montant: c.montantFacturé }))
     .sort((a, b) => b.montant - a.montant);
-  const avgConformity =
-    data?.supplierConformity.length
-      ? Math.round(
-          data.supplierConformity.reduce((s, c) => s + c.conformité, 0) /
-            data.supplierConformity.length
-        )
-      : 0;
+  // Conformité PONDÉRÉE (total reçu / total commandé) et non moyenne des pourcentages :
+  // sinon un fournisseur de 5 pièces pèse autant qu'un fournisseur de 40 000.
+  // *AH26 : 35 % en moyenne simple contre 51 % en pondéré.*
+  const avgConformity = data?.supplierTotals?.commandé
+    ? Math.round((data.supplierTotals.reçu / data.supplierTotals.commandé) * 100)
+    : 0;
 
   return (
     <div>
@@ -243,6 +250,7 @@ export default function StatisticsPage() {
                       </div>
                       <p className="text-sm text-muted-foreground">
                         Total commandé
+                        {data?.totals ? ` — ${formatNumber(data.totals.clients)} clients` : ""}
                       </p>
                       <div className="mt-2 h-2 rounded-full bg-zinc-100 overflow-hidden">
                         <div
@@ -323,7 +331,13 @@ export default function StatisticsPage() {
                     <Card>
                       <CardHeader>
                         <CardTitle className="text-base">
-                          Commandé / Livré / Facturé par client
+                          Commandé / Livré / Facturé par client{" "}
+                          {data!.totals && data!.totals.clients > data!.clientBreakdown.length && (
+                            <span className="text-xs font-normal text-muted-foreground">
+                              (top {data!.clientBreakdown.length} sur {data!.totals.clients} —
+                              les tuiles ci-dessus portent sur toute la saison)
+                            </span>
+                          )}
                         </CardTitle>
                       </CardHeader>
                       <CardContent>
