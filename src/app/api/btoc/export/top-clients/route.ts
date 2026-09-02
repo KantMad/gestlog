@@ -43,6 +43,10 @@ export async function GET(request: NextRequest) {
         avgBasket: number;
       }[]
     >(
+      // ⚠️ Le total dépensé DÉDUIT les remboursements (`total - totalRefunded`), comme
+      // les stats et la segmentation. Sans cette déduction, 225 clients apparaissaient
+      // avec un panier gonflé et 50 clients entraient dans l'export sans y avoir droit
+      // (908 retenus au lieu de 858). L'historique importé n'a pas de remboursement.
       `WITH sales AS (
         -- Boutique live
         SELECT
@@ -53,7 +57,7 @@ export async function GET(request: NextRequest) {
           NULL::text               AS hist_first,
           NULL::text               AS hist_last,
           NULL::text               AS hist_phone,
-          o.total                  AS total,
+          o.total - COALESCE(o."totalRefunded", 0) AS total,
           o."orderDate"            AS order_date
         FROM "BtocOrder" o
         WHERE o."customerEmail" IS NOT NULL AND o."customerEmail" != ''

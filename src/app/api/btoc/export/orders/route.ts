@@ -176,6 +176,43 @@ export async function GET(request: NextRequest) {
     const where =
       conditions.length > 0 ? "WHERE " + conditions.join(" AND ") : "";
 
+    // ⚠️ Les remboursements doivent être DÉDUITS, comme partout ailleurs (stats,
+    // best-sellers, répartition des tailles). Sans cette branche, l'export « Ventes »
+    // annonçait 7 794 pièces et 428 786,30 € là où les stats affichaient 7 354 pièces
+    // et 412 140,10 € pour la même période : deux chiffres pour la même chose.
+    //
+    // Les lignes de remboursement n'ont ni `color` ni `size` : on les redérive du SKU,
+    // exactement comme le fait déjà la branche ventes en repli.
+    const refundConditions: string[] = [];
+    const refundParams: unknown[] = [];
+    let ridx = queryParams.length + 1;
+    if (statuses.length > 0) {
+      refundConditions.push(`o.status = ANY($${ridx++})`);
+      refundParams.push(statuses);
+    }
+    if (dateGte) { refundConditions.push(`o."orderDate" >= $${ridx++}`); refundParams.push(dateGte); }
+    if (dateLt) { refundConditions.push(`o."orderDate" < $${ridx++}`); refundParams.push(dateLt); }
+    if (productRef) {
+      refundConditions.push(`(bp.sku ILIKE $${ridx} OR SPLIT_PART(rl.sku, '-', 1) ILIKE $${ridx})`);
+      refundParams.push(`%${productRef}%`);
+      ridx++;
+    }
+    if (color) {
+      refundConditions.push(`SPLIT_PART(rl.sku, '-', 2) = $${ridx++}`);
+      refundParams.push(color);
+    }
+    if (size) {
+      refundConditions.push(`UPPER(SPLIT_PART(rl.sku, '-', 3)) = UPPER($${ridx++})`);
+      refundParams.push(size);
+    }
+    if (customerName) {
+      refundConditions.push(`o."customerName" ILIKE $${ridx++}`);
+      refundParams.push(`%${customerName}%`);
+    }
+    refundConditions.push(`rl.sku IS NOT NULL AND rl.sku <> ''`);
+    const refundWhere = "WHERE " + refundConditions.join(" AND ");
+    const allParams = [...queryParams, ...refundParams];
+
     // ─── Step 1: Load SizeType system ─────────────────────
     const { sizeTypes, positionSizes, maxPosition } = await loadSizeTypes();
     const sizeColumns = buildSizeColumns(positionSizes, maxPosition);
@@ -281,28 +318,52 @@ export async function GET(request: NextRequest) {
         revenue: number;
       }[]
     >(
+      // Le regroupement se fait sur (référence, coloris, taille) et les libellés sont
+      // pris en MAX : une ligne de remboursement ne porte pas `color`, la grouper sur ce
+      // champ dédoublerait le produit en deux lignes (l'une avec coloris, l'autre à NULL).
       `SELECT
-        COALESCE(bp.name, ol.name) AS "productName",
-        SPLIT_PART(ol.sku, '-', 1) AS "parentRef",
-        SPLIT_PART(ol.sku, '-', 2) AS "colorNum",
-        ol.color AS "btocColor",
-        bp.category AS "btocCategory",
-        COALESCE(NULLIF(UPPER(ol.size), ''), UPPER(SPLIT_PART(ol.sku, '-', 3))) AS size,
-        SUM(ol.quantity) AS quantity,
-        SUM(ol.total) AS revenue
-       FROM "BtocOrderLine" ol
-       JOIN "BtocOrder" o ON o.id = ol."orderId"
-       LEFT JOIN "BtocProduct" bp ON bp.sku = SPLIT_PART(ol.sku, '-', 1)
-       ${where}
-       GROUP BY
-         COALESCE(bp.name, ol.name),
-         SPLIT_PART(ol.sku, '-', 1),
-         SPLIT_PART(ol.sku, '-', 2),
-         ol.color,
-         bp.category,
-         COALESCE(NULLIF(UPPER(ol.size), ''), UPPER(SPLIT_PART(ol.sku, '-', 3)))
+        MAX(t.pname) AS "productName",
+        t.ref  AS "parentRef",
+        t.cnum AS "colorNum",
+        MAX(t.bcolor) AS "btocColor",
+        MAX(t.bcat)   AS "btocCategory",
+        t.size,
+        SUM(t.qty)     AS quantity,
+        SUM(t.revenue) AS revenue
+       FROM (
+         SELECT
+           COALESCE(bp.name, ol.name) AS pname,
+           SPLIT_PART(ol.sku, '-', 1) AS ref,
+           SPLIT_PART(ol.sku, '-', 2) AS cnum,
+           ol.color AS bcolor,
+           bp.category AS bcat,
+           COALESCE(NULLIF(UPPER(ol.size), ''), UPPER(SPLIT_PART(ol.sku, '-', 3))) AS size,
+           ol.quantity AS qty,
+           ol.total AS revenue
+         FROM "BtocOrderLine" ol
+         JOIN "BtocOrder" o ON o.id = ol."orderId"
+         LEFT JOIN "BtocProduct" bp ON bp.sku = SPLIT_PART(ol.sku, '-', 1)
+         ${where}
+         UNION ALL
+         -- Remboursements : quantités et CA en NÉGATIF
+         SELECT
+           COALESCE(bp.name, rl.name),
+           SPLIT_PART(rl.sku, '-', 1),
+           SPLIT_PART(rl.sku, '-', 2),
+           NULL,
+           bp.category,
+           UPPER(SPLIT_PART(rl.sku, '-', 3)),
+           -rl.quantity,
+           -rl.total
+         FROM "BtocRefundLine" rl
+         JOIN "BtocOrder" o ON o."wooId" = rl."orderWooId"
+         LEFT JOIN "BtocProduct" bp ON bp.sku = SPLIT_PART(rl.sku, '-', 1)
+         ${refundWhere}
+       ) t
+       WHERE t.ref IS NOT NULL AND t.ref <> ''
+       GROUP BY t.ref, t.cnum, t.size
        ORDER BY "productName", "colorNum"`,
-      ...queryParams
+      ...allParams
     );
 
     // ─── Step 4: Pivot by reference + colorNum ────────────

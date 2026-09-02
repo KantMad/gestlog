@@ -310,6 +310,13 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
   applique `orderDate IS NOT NULL`. *Les 282 commandes TEXAS d'AH26 ont toutes
   `orderDate` NULL* → l'élément 2 tombait à 0 sans explication. La route renvoie
   `season2.undatedOrders` et l'écran affiche un avertissement.
+- **Récap clients : pièces soldées non déduites du reste à livrer.** `totalRemaining`
+  valait `commandé − livré` : une pièce soldée, qui ne sera jamais livrée, restait
+  éternellement « à livrer ». Corrigé en `commandé − soldé − livré`, avec `totalCancelled`
+  exposé. *Impact nul aujourd'hui (aucune pièce soldée en base) — correctif préventif.*
+- **Tableau de bord** : il n'effectue **aucun calcul propre**, il affiche les valeurs de
+  `/api/statistics/season` et `/charts`. Le surcompte AH26 le touchait donc aussi
+  (`deliveryRate` = livré / pièces effectives, dénominateur doublé → taux divisé par deux).
 - **Audités et corrects** : `/api/statistics/charts` (source filtrée partout),
   `/api/statistics/client-comparison` et `/api/statistics/season-comparison` (source
   résolue par sous-select corrélé), `/api/recap`, `/api/reassort`.

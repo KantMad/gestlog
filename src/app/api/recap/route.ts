@@ -62,6 +62,7 @@ export async function GET(request: NextRequest) {
           tioOrderNumber: string | null;
         }[];
         totalOrdered: number;
+        totalCancelled: number;
         totalDelivered: number;
         totalRemaining: number;
         deliveryCount: number;
@@ -86,6 +87,7 @@ export async function GET(request: NextRequest) {
         ranking: cs.ranking,
         orders: [],
         totalOrdered: 0,
+        totalCancelled: 0,
         totalDelivered: 0,
         totalRemaining: 0,
         deliveryCount: 0,
@@ -105,6 +107,7 @@ export async function GET(request: NextRequest) {
           ranking: 99,
           orders: [],
           totalOrdered: 0,
+          totalCancelled: 0,
           totalDelivered: 0,
           totalRemaining: 0,
           deliveryCount: 0,
@@ -116,6 +119,10 @@ export async function GET(request: NextRequest) {
       const orderTotal = order.lines.reduce((sum, l) => {
         return sum + sumQuantities(parseSizeQuantities(l.quantitiesBySize));
       }, 0);
+      // Pièces SOLDÉES : elles ne seront jamais livrées, elles ne peuvent donc pas
+      // rester « à livrer ». Aucune en base aujourd'hui, mais sans cette déduction le
+      // reste à livrer resterait bloqué au niveau du soldé dès la première annulation.
+      const orderCancelled = order.lines.reduce((sum, l) => sum + (l.cancelledTotal || 0), 0);
 
       recap.orders.push({
         id: order.id,
@@ -128,6 +135,7 @@ export async function GET(request: NextRequest) {
         tioOrderNumber: order.tioOrderNumber,
       });
       recap.totalOrdered += orderTotal;
+      recap.totalCancelled += orderCancelled;
     }
 
     // Aggregate deliveries
@@ -157,7 +165,10 @@ export async function GET(request: NextRequest) {
 
     // Compute remaining
     for (const recap of recapByClient.values()) {
-      recap.totalRemaining = Math.max(0, recap.totalOrdered - recap.totalDelivered);
+      recap.totalRemaining = Math.max(
+        0,
+        recap.totalOrdered - recap.totalCancelled - recap.totalDelivered
+      );
     }
 
     const data = Array.from(recapByClient.values()).sort(
@@ -168,6 +179,7 @@ export async function GET(request: NextRequest) {
     const stats = {
       totalClients: data.length,
       totalOrdered: data.reduce((s, c) => s + c.totalOrdered, 0),
+      totalCancelled: data.reduce((s, c) => s + c.totalCancelled, 0),
       totalDelivered: data.reduce((s, c) => s + c.totalDelivered, 0),
       totalRemaining: data.reduce((s, c) => s + c.totalRemaining, 0),
       totalDeliveries: data.reduce((s, c) => s + c.deliveryCount, 0),

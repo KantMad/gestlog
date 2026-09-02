@@ -163,6 +163,29 @@ le comptage, pas les `SUM`.
 ⚠️ Et toute branche **remboursement** d'un `UNION ALL` doit porter **exactement** les mêmes
 filtres que la branche ventes, sinon on soustrait des remboursements hors périmètre.
 
+### Exports : les remboursements doivent être déduits partout ⚠️
+- **Export « Ventes »** (`/api/btoc/export/orders`) sommait `ol.quantity`/`ol.total` **sans
+  déduire les remboursements**, alors que les stats, `best-sellers` et la répartition des
+  tailles les déduisent. *Écart réel : **7 794 pièces / 428 786,30 €** dans l'export contre
+  **7 354 / 412 140,10 €** dans les stats.* Une branche `UNION ALL` négative a été ajoutée,
+  avec les **mêmes filtres** (dates, statuts, référence, coloris, taille, client) exprimés
+  sur `rl` et redérivés du SKU. Le regroupement est passé sur `(référence, coloris, taille)`
+  avec des `MAX()` sur les libellés : une ligne de remboursement n'a pas de `color`, la
+  grouper dessus aurait **dédoublé** chaque produit (une ligne coloris, une ligne NULL).
+  - ⚠️ Résultat 7 355 pièces / 412 218,85 € : **1 pièce et 78,75 € d'écart** avec les stats,
+    ce sont les **remboursements sans SKU**, impossibles à rattacher à un produit — ils
+    restent comptés dans le CA global mais pas dans une ligne produit.
+- **Export « Top clients »** : `totalSpent` sommait `o.total` brut → **225 clients** au
+  panier gonflé et **50 clients retenus à tort** (908 au lieu de 858). Corrigé en
+  `total - totalRefunded`.
+- 🔴 **`/api/sync/btoc/vip-recompute` a le même défaut et n'a PAS été corrigé** : il calcule
+  `SUM(o.total)` sans déduire les remboursements. **8 clients sont VIP à tort** (76 au lieu
+  de 68 au seuil de 500 €). Non modifié volontairement — le statut VIP pilote une **liste
+  Brevo** (effet sortant) ; la correction doit être une décision explicite.
+- **Vérifié sans problème** : l'historique importé (`HistOrder`, 3 349 commandes du
+  04/03/2019 au 30/12/2025) **ne chevauche pas** les ventes live (`BtocOrder`, à partir du
+  01/01/2026) — aucun double comptage dans `best-sellers` et `top-clients`.
+
 **Requêtes auditées et jugées correctes** : `topCategories` et `topCountries` (niveau ligne
 ou sans jointure, filtres date/client seulement — volontairement insensibles aux filtres
 BtoC), `topCities` (sous-requête `DISTINCT` déjà en place), `ordersByStatus`
