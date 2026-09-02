@@ -44,17 +44,34 @@ export async function GET(request: NextRequest) {
     0
   );
 
-  // (les commandes fournisseur n'ont pas de double source : pas de filtre à ajouter)
-  const supplierOrders = await prisma.supplierOrder.findMany({
-    where: { seasonId },
-    select: { status: true },
-  });
-  const completedOrders = supplierOrders.filter(
-    (o) => o.status === "COMPLET" || o.status === "SOLDE"
-  ).length;
+  // Taux de réception = PIÈCES reçues / PIÈCES commandées aux fournisseurs.
+  //
+  // ⚠️ Il était calculé sur le STATUT des commandes fournisseur (part des `COMPLET` ou
+  // `SOLDE`). Or rien dans l'application ne pose jamais ces deux statuts : l'import de
+  // réception force `PARTIEL` (`lib/import/mcs-mapper.ts`) et le défaut du modèle est
+  // `EN_ATTENTE`. La base ne contient donc QUE ces deux valeurs — le taux valait
+  // structurellement **0 % sur toutes les saisons**, quoi qu'on reçoive.
+  // *Cas réel AH26 : 24 EN_ATTENTE + 20 PARTIEL, 42 167 pièces reçues sur 84 851
+  // commandées → 0 % affiché au lieu de 50 %.*
+  //
+  // Le comptage en pièces est aussi celui de l'écran Comparaison, donc les deux
+  // concordent. Non plafonné : au-delà de 100 % on a reçu plus que commandé, et c'est
+  // une information, pas une anomalie d'affichage.
+  const [orderedAgg, receivedRows] = await Promise.all([
+    prisma.supplierOrderLine.aggregate({
+      where: { supplierOrder: { seasonId } },
+      _sum: { totalQuantity: true },
+    }),
+    prisma.receptionLine.aggregate({
+      where: { supplierReception: { supplierOrder: { seasonId } } },
+      _sum: { totalQuantity: true },
+    }),
+  ]);
+  const orderedSupplierPieces = orderedAgg._sum.totalQuantity || 0;
+  const receivedSupplierPieces = receivedRows._sum.totalQuantity || 0;
   const receptionRate =
-    supplierOrders.length > 0
-      ? Math.round((completedOrders / supplierOrders.length) * 100)
+    orderedSupplierPieces > 0
+      ? Math.round((receivedSupplierPieces / orderedSupplierPieces) * 100)
       : 0;
 
   // Soldé (pièces annulées) sur la saison → retirées du dénominateur.
@@ -105,6 +122,8 @@ export async function GET(request: NextRequest) {
       invoicedPieces,
       invoicedAmount,
       receptionRate,
+      orderedSupplierPieces,
+      receivedSupplierPieces,
       deliveryRate,
       invoiceRate,
       pendingAllocations: allocationCount,

@@ -314,6 +314,21 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
   valait `commandé − livré` : une pièce soldée, qui ne sera jamais livrée, restait
   éternellement « à livrer ». Corrigé en `commandé − soldé − livré`, avec `totalCancelled`
   exposé. *Impact nul aujourd'hui (aucune pièce soldée en base) — correctif préventif.*
+- 🔴 **Taux de réception : 0 % structurel sur TOUTES les saisons.** Il était calculé sur le
+  **statut** des commandes fournisseur — part des `COMPLET` ou `SOLDE`. Or **rien dans
+  l'application ne pose jamais ces deux statuts** : l'import de réception force `PARTIEL`
+  (`lib/import/mcs-mapper.ts`) et le défaut du modèle est `EN_ATTENTE`. La base ne contient
+  donc que ces deux valeurs, et le numérateur était toujours nul quoi qu'on reçoive.
+  *Cas réel AH26 : 24 commandes `EN_ATTENTE` + 20 `PARTIEL`, **42 167 pièces reçues sur
+  84 851 commandées** → 0 % affiché au lieu de **50 %**.*
+  - Le taux compte désormais des **PIÈCES** (`ReceptionLine` / `SupplierOrderLine`), comme
+    l'écran Comparaison — les deux concordent. Non plafonné : au-delà de 100 % on a reçu
+    plus que commandé, c'est une information.
+  - Les tuiles **Réception / Livraison / Facturation** affichent maintenant le **détail en
+    pièces** sous le pourcentage. C'est justement l'absence de détail qui a laissé passer
+    un 0 % permanent.
+  - ⚠️ `SupplierOrder.status` reste donc limité à `EN_ATTENTE`/`PARTIEL` en pratique :
+    **ne pas s'en servir pour juger qu'une commande est soldée ou complète.**
 - **Tableau de bord** : il n'effectue **aucun calcul propre**, il affiche les valeurs de
   `/api/statistics/season` et `/charts`. Le surcompte AH26 le touchait donc aussi
   (`deliveryRate` = livré / pièces effectives, dénominateur doublé → taux divisé par deux).

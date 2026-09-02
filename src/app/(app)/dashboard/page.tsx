@@ -35,6 +35,8 @@ interface DashboardStats {
   deliveredPieces: number;
   invoicedPieces: number;
   receptionRate: number;
+  orderedSupplierPieces: number;
+  receivedSupplierPieces: number;
   deliveryRate: number;
   invoiceRate: number;
   pendingAllocations: number;
@@ -96,6 +98,11 @@ export default function DashboardPage() {
     {
       title: "Taux de réception",
       value: stats ? `${stats.receptionRate}%` : "—",
+      // Le détail rend le taux vérifiable d'un coup d'œil : c'est justement
+      // l'absence de détail qui a laissé passer un 0 % structurel.
+      detail: stats
+        ? `${formatNumber(stats.receivedSupplierPieces)} / ${formatNumber(stats.orderedSupplierPieces)} pièces reçues`
+        : null,
       icon: TrendingUp,
       color: "text-amber-600",
       bg: "bg-amber-50",
@@ -103,6 +110,9 @@ export default function DashboardPage() {
     {
       title: "Taux de livraison",
       value: stats ? `${stats.deliveryRate}%` : "—",
+      detail: stats
+        ? `${formatNumber(stats.deliveredPieces)} pièces livrées (BL)`
+        : null,
       icon: Truck,
       color: "text-violet-600",
       bg: "bg-violet-50",
@@ -110,6 +120,9 @@ export default function DashboardPage() {
     {
       title: "Taux de facturation",
       value: stats ? `${stats.invoiceRate}%` : "—",
+      detail: stats
+        ? `${formatNumber(stats.invoicedPieces)} pièces facturées`
+        : null,
       icon: Receipt,
       color: "text-rose-600",
       bg: "bg-rose-50",
@@ -183,6 +196,9 @@ export default function DashboardPage() {
                   </CardHeader>
                   <CardContent>
                     <div className="text-2xl font-bold">{stat.value}</div>
+                    {"detail" in stat && stat.detail && (
+                      <p className="mt-0.5 text-xs text-muted-foreground">{stat.detail}</p>
+                    )}
                   </CardContent>
                 </Card>
               ))}
