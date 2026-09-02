@@ -130,6 +130,56 @@ peut avoir commandé plusieurs fois.* Ce n'est pas une incohérence.
 - **`limit`** (plafonné à 5 000) : le dialog charge 200 lignes puis 200 de plus à la demande ;
   l'export, lui, part **sans limite**. Le `summary` reste calculé sur l'ensemble du segment.
 
+## Stats BtoC — filtres et pièges de comptage ⚠️
+
+### Deux bugs corrigés (filtre catégorie)
+Le filtre catégorie ajoute un `JOIN "BtocOrderLine"`, qui **multiplie la commande par son
+nombre de lignes retenues**. Deux conséquences, corrigées :
+
+1. **« Articles vendus » comptait la commande ENTIÈRE.** La tuile sommait
+   `BtocOrder.itemCount`, qui est le total de la commande — donc les chemises et les
+   ceintures d'une commande contenant un pantalon. Désormais, **dès qu'un filtre de ligne
+   est actif** (`category`, `parentProduct`, `globalCategory`), les articles sont comptés
+   **ligne à ligne**, remboursements de ces lignes déduits (`lineScopeSql` rejoue le filtre
+   dans les sous-requêtes). *Cas réel — Pantalons du 16/03 au 31/08/2026 : **624 affichés
+   pour 405 réels**, +54 %.*
+2. **CA par jour et par mois surcomptés.** `SUM(o.total)` s'appliquait aux lignes
+   dupliquées, sans `DISTINCT` (contrairement à la tuile CA et au Top villes, déjà
+   protégés). Les deux graphes passent par une sous-requête `SELECT DISTINCT o.id, …`.
+   *Même cas réel : **74 942,60 € affichés pour 46 002,20 € réels**, ×1,63 — en
+   contradiction visible avec la tuile CA de la même page.*
+
+⚠️ Toute nouvelle requête utilisant `${lineJoin}` doit **dédoublonner les commandes** avant
+d'agréger un montant au niveau commande. `COUNT(DISTINCT o.id)` ne suffit pas : il protège
+le comptage, pas les `SUM`.
+
+### Filtre « Cat. globale » (`src/lib/btoc-global-category.ts`, testé)
+Les catégories WooCommerce ne servent pas à analyser : un produit en porte jusqu'à **onze**
+(« Collection été 50%, FB FR, FR, Non soldés, Pantalon, Pantalon chino, Pantalons,
+shoppingfeed, Ventes privées, Voir tout pantalon »), mêlant type d'article, opération
+commerciale et canal de diffusion. Le filtre **Cat. globale** reclasse par le **titre du
+produit**, insensible à la **casse**, aux **accents** et au **pluriel**.
+
+- ⚠️ Balayage **de gauche à droite, premier mot reconnu gagnant** — les titres MCS
+  commencent par le type d'article. *« Bermuda en jean » est un **bermuda**, « Veste en
+  jean » une **veste** : un simple `contains('jean')` rangerait les deux dans Jean.*
+- ⚠️ Les clés de `CATEGORY_KEYWORDS` s'écrivent **au singulier et sans accent** — le titre
+  est normalisé ET dépluralisé avant la recherche, donc une clé au pluriel ne matche
+  jamais (`bombers` ne marchait pas, corrigé en `bomber`).
+- Expressions de deux mots gérées (`porte cartes`, `porte monnaie`, `t shirt`), fautes du
+  catalogue incluses (`bemuda`, `panton`).
+- **Couverture mesurée : 1 291 titres sur 1 295 (100 %)** ; les 4 restants ne sont pas des
+  vêtements (carte cadeau, mug, enceinte, jeu de cartes) et tombent dans **« Autres »**.
+- Le classement se fait **en TypeScript**, pas en SQL : la route classe les titres puis ne
+  passe au SQL que la **liste des SKU parents** retenus. Rejouer la table de mots-clés en
+  SQL divergerait de la version testée.
+- Répartition du catalogue : Chemise 389, Jean 171, Pantalon 95, T-shirt 89, Polo 88,
+  Pull 76, Veste 64, Maroquinerie 58, Écharpe 56, Blouson 50, Manteau 41, Ceinture 41,
+  Gilet 36, Bermuda 32, Sweat 24, Surchemise 24, Chapellerie 23, Gants 9, Chaussettes 6,
+  Sous-vêtements 2, Autres 3.
+- ⚠️ **Surchemise n'est pas une chemise** (mot distinct, 24 produits) : le classement est
+  par MOT, pas par sous-chaîne.
+
 ## VIP Brevo
 
 - `src/lib/brevo.ts` + `/api/brevo/health`. Réglages via env : `BREVO_API_KEY`,

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { handleApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { parisRangeToUtc } from "@/lib/btoc-dates";
+import { globalCategoryLabel, allGlobalCategories, UNCLASSIFIED } from "@/lib/btoc-global-category";
 
 export async function GET(request: NextRequest) {
   try {
@@ -11,6 +12,8 @@ export async function GET(request: NextRequest) {
     const category = params.get("category");
     const parentProduct = params.get("parentProduct"); // now expects a SKU / reference
     const customerId = params.get("customerId");
+    // Catégorie GLOBALE : déduite du titre du produit, pas des catégories WooCommerce.
+    const globalCategory = params.get("globalCategory");
     // Bornes de dates en fuseau Paris (jour de fin INCLUS, cf. lib/btoc-dates).
     const { gte: dateGte, lt: dateLt } = parisRangeToUtc(dateFrom, dateTo);
 
@@ -35,23 +38,67 @@ export async function GET(request: NextRequest) {
       paramIndex++;
     }
 
-    // Category and parentProduct require joins with order lines / products
-    const needsLineJoin = !!category || !!parentProduct;
+    // La catégorie globale se calcule en TypeScript (cf. lib/btoc-global-category) :
+    // on classe les titres une fois, puis on ne passe au SQL que la liste des SKU
+    // parents retenus. Rejouer la table de mots-clés en SQL serait illisible et
+    // divergerait de la version testée.
+    let globalCategorySkus: string[] = [];
+    if (globalCategory) {
+      const prods = await prisma.btocProduct.findMany({
+        where: { sku: { not: null } },
+        select: { sku: true, name: true },
+      });
+      const seen = new Set<string>();
+      for (const pr of prods) {
+        const parent = (pr.sku ?? "").split("-")[0];
+        if (!parent || seen.has(parent)) continue;
+        if (globalCategoryLabel(pr.name) === globalCategory) seen.add(parent);
+      }
+      globalCategorySkus = [...seen];
+      // Aucun produit : on force une liste impossible pour que le résultat soit vide
+      // plutôt que non filtré.
+      if (globalCategorySkus.length === 0) globalCategorySkus = ["__aucun__"];
+    }
+
+    // Category, parentProduct et globalCategory imposent la jointure sur les lignes
+    const needsLineJoin = !!category || !!parentProduct || !!globalCategory;
     let lineJoin = "";
+    // Index des paramètres du filtre de ligne : ils sont RÉUTILISÉS tels quels par
+    // `lineScopeSql`, qui rejoue les mêmes prédicats sous d'autres alias.
+    let categoryIdx = 0;
+    let parentIdx = 0;
+    let globalIdx = 0;
     if (needsLineJoin) {
       lineJoin = `JOIN "BtocOrderLine" ol ON ol."orderId" = o.id
                   LEFT JOIN "BtocProduct" p ON p.sku = SPLIT_PART(ol.sku, '-', 1)`;
       if (category) {
+        categoryIdx = paramIndex;
         orderConditions.push(`p.category ILIKE '%' || $${paramIndex} || '%'`);
         orderParams.push(category);
         paramIndex++;
       }
       if (parentProduct) {
+        parentIdx = paramIndex;
         orderConditions.push(`p.sku ILIKE $${paramIndex}`);
         orderParams.push(`%${parentProduct}%`);
         paramIndex++;
       }
+      if (globalCategory) {
+        globalIdx = paramIndex;
+        orderConditions.push(`SPLIT_PART(ol.sku, '-', 1) = ANY($${paramIndex})`);
+        orderParams.push(globalCategorySkus);
+        paramIndex++;
+      }
     }
+
+    /** Le filtre de ligne courant, rejoué sur d'autres alias (sous-requêtes). */
+    const lineScopeSql = (lineAlias: string, prodAlias: string) => {
+      const parts: string[] = [];
+      if (categoryIdx) parts.push(`${prodAlias}.category ILIKE '%' || $${categoryIdx} || '%'`);
+      if (parentIdx) parts.push(`${prodAlias}.sku ILIKE $${parentIdx}`);
+      if (globalIdx) parts.push(`SPLIT_PART(${lineAlias}.sku, '-', 1) = ANY($${globalIdx})`);
+      return parts.length > 0 ? parts.join(" AND ") : "TRUE";
+    };
 
     const whereClause =
       orderConditions.length > 0
@@ -65,6 +112,24 @@ export async function GET(request: NextRequest) {
     const revenueWhere = whereClause
       ? `${whereClause} AND ${REVENUE_FILTER}`
       : `WHERE ${REVENUE_FILTER}`;
+
+    // ⚠️ « Articles vendus » : `BtocOrder.itemCount` compte la commande ENTIÈRE. Avec un
+    // filtre catégorie ou produit parent, cela comptait aussi les articles des AUTRES
+    // catégories présents dans la même commande. *Cas réel — Pantalons du 16/03 au
+    // 31/08/2026 : 624 articles affichés pour 405 réellement vendus (+54 %).* Dès qu'un
+    // filtre de ligne est actif, on ne compte donc que les lignes RETENUES.
+    const itemCountExpr = needsLineJoin
+      ? `(SELECT COALESCE(SUM(ol2.quantity), 0)
+          FROM "BtocOrderLine" ol2
+          LEFT JOIN "BtocProduct" p2 ON p2.sku = SPLIT_PART(ol2.sku, '-', 1)
+          WHERE ol2."orderId" = o.id AND ${lineScopeSql("ol2", "p2")})`
+      : `o."itemCount"`;
+    const refQtyExpr = needsLineJoin
+      ? `(SELECT COALESCE(SUM(rl.quantity), 0)
+          FROM "BtocRefundLine" rl
+          LEFT JOIN "BtocProduct" p3 ON p3.sku = SPLIT_PART(rl.sku, '-', 1)
+          WHERE rl."orderWooId" = o."wooId" AND ${lineScopeSql("rl", "p3")})`
+      : `(SELECT COALESCE(SUM(rl.quantity), 0) FROM "BtocRefundLine" rl WHERE rl."orderWooId" = o."wooId")`;
 
     // ─── Overview ────────────────────────────────────────────
     const overviewRows = await prisma.$queryRawUnsafe<
@@ -90,8 +155,9 @@ export async function GET(request: NextRequest) {
           ELSE 0 END AS "avgOrderValue",
         COALESCE(SUM(GREATEST(o."itemCount" - o."refQty", 0)), 0) AS "totalItems"
       FROM (
-        SELECT DISTINCT o.id, o.total, o."totalRefunded", o."totalTax", o."shippingTotal", o."customerId", o."itemCount",
-          (SELECT COALESCE(SUM(rl.quantity), 0) FROM "BtocRefundLine" rl WHERE rl."orderWooId" = o."wooId") AS "refQty"
+        SELECT DISTINCT o.id, o.total, o."totalRefunded", o."totalTax", o."shippingTotal", o."customerId",
+          ${itemCountExpr} AS "itemCount",
+          ${refQtyExpr} AS "refQty"
         FROM "BtocOrder" o
         ${lineJoin}
         ${revenueWhere}
@@ -112,13 +178,20 @@ export async function GET(request: NextRequest) {
     const revenueByMonth = await prisma.$queryRawUnsafe<
       { month: string; revenue: number; orders: bigint }[]
     >(
+      // ⚠️ `lineJoin` multiplie la commande par son nombre de lignes retenues : sans le
+      // DISTINCT ci-dessous, `SUM(o.total)` comptait la même commande plusieurs fois.
+      // *Cas réel — Pantalons du 16/03 au 31/08/2026 : 74 942,60 € affichés pour
+      // 46 002,20 € réels (x1,63), en contradiction avec la tuile CA, elle dédoublonnée.*
       `SELECT
         TO_CHAR(((o."orderDate" AT TIME ZONE 'UTC') AT TIME ZONE 'Europe/Paris'), 'YYYY-MM') AS month,
         COALESCE(SUM(o.total - o."totalRefunded"), 0) AS revenue,
-        COUNT(DISTINCT o.id) AS orders
-      FROM "BtocOrder" o
-      ${lineJoin}
-      ${revenueWhere} AND o."orderDate" >= NOW() - INTERVAL '12 months'
+        COUNT(*) AS orders
+      FROM (
+        SELECT DISTINCT o.id, o."orderDate", o.total, o."totalRefunded"
+        FROM "BtocOrder" o
+        ${lineJoin}
+        ${revenueWhere} AND o."orderDate" >= NOW() - INTERVAL '12 months'
+      ) o
       GROUP BY TO_CHAR(((o."orderDate" AT TIME ZONE 'UTC') AT TIME ZONE 'Europe/Paris'), 'YYYY-MM')
       ORDER BY month ASC`,
       ...orderParams
@@ -153,6 +226,11 @@ export async function GET(request: NextRequest) {
     if (parentProduct) {
       topProductConditions.push(`p.sku ILIKE $${tpIdx}`);
       topProductParams.push(`%${parentProduct}%`);
+      tpIdx++;
+    }
+    if (globalCategory) {
+      topProductConditions.push(`SPLIT_PART(ol.sku, '-', 1) = ANY($${tpIdx})`);
+      topProductParams.push(globalCategorySkus);
       tpIdx++;
     }
 
@@ -332,13 +410,17 @@ export async function GET(request: NextRequest) {
     const revenueByDay = await prisma.$queryRawUnsafe<
       { date: string; revenue: number; orders: bigint }[]
     >(
+      // Même dédoublonnage que le CA par mois (cf. commentaire ci-dessus).
       `SELECT
         TO_CHAR(((o."orderDate" AT TIME ZONE 'UTC') AT TIME ZONE 'Europe/Paris'), 'YYYY-MM-DD') AS date,
         COALESCE(SUM(o.total - o."totalRefunded"), 0) AS revenue,
-        COUNT(DISTINCT o.id) AS orders
-      FROM "BtocOrder" o
-      ${lineJoin}
-      ${revenueWhere}
+        COUNT(*) AS orders
+      FROM (
+        SELECT DISTINCT o.id, o."orderDate", o.total, o."totalRefunded"
+        FROM "BtocOrder" o
+        ${lineJoin}
+        ${revenueWhere}
+      ) o
       GROUP BY TO_CHAR(((o."orderDate" AT TIME ZONE 'UTC') AT TIME ZONE 'Europe/Paris'), 'YYYY-MM-DD')
       ORDER BY date ASC`,
       ...orderParams
@@ -374,6 +456,27 @@ export async function GET(request: NextRequest) {
     const availableCategories = categoryRows
       .map((r) => r.category)
       .filter((c) => c.length > 0);
+
+    // ─── Catégories globales disponibles (filtre) ────────────
+    // Comptées sur les produits réellement au catalogue, avec « Autres » seulement s'il
+    // reste des titres non reconnus (carte cadeau, mug…).
+    const namedProducts = await prisma.btocProduct.findMany({
+      where: { sku: { not: null } },
+      select: { sku: true, name: true },
+    });
+    const globalCounts = new Map<string, Set<string>>();
+    for (const pr of namedProducts) {
+      const parent = (pr.sku ?? "").split("-")[0];
+      if (!parent) continue;
+      const label = globalCategoryLabel(pr.name);
+      const set = globalCounts.get(label) ?? new Set<string>();
+      set.add(parent);
+      globalCounts.set(label, set);
+    }
+    const availableGlobalCategories = [
+      ...allGlobalCategories().filter((c) => globalCounts.has(c)),
+      ...(globalCounts.has(UNCLASSIFIED) ? [UNCLASSIFIED] : []),
+    ].map((name) => ({ name, products: globalCounts.get(name)!.size }));
 
     // ─── Available parent products (for filter dropdown) ─────
     const parentProductRows = await prisma.$queryRawUnsafe<
@@ -429,6 +532,7 @@ export async function GET(request: NextRequest) {
         quantity: Number(r.quantity),
       })),
       availableCategories,
+      availableGlobalCategories,
       availableParentProducts,
     });
   } catch (e) {

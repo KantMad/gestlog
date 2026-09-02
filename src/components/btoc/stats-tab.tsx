@@ -70,6 +70,7 @@ interface StatsData {
   revenueByDay: { date: string; revenue: number; orders: number }[];
   sizeDistribution: { size: string; quantity: number }[];
   availableCategories: string[];
+  availableGlobalCategories: { name: string; products: number }[];
   availableParentProducts: { sku: string; name: string; wooId: number }[];
 }
 
@@ -209,6 +210,8 @@ export function BtocStatsTab() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [category, setCategory] = useState("");
+  // Catégorie GLOBALE : déduite du titre du produit (cf. lib/btoc-global-category).
+  const [globalCategory, setGlobalCategory] = useState("");
   const [parentProduct, setParentProduct] = useState("");
   const [filtersApplied, setFiltersApplied] = useState(false);
 
@@ -225,6 +228,7 @@ export function BtocStatsTab() {
       if (dateFrom) params.set("dateFrom", dateFrom);
       if (dateTo) params.set("dateTo", dateTo);
       if (category) params.set("category", category);
+      if (globalCategory) params.set("globalCategory", globalCategory);
       if (parentProduct) params.set("parentProduct", parentProduct);
 
       const [res, sdRes] = await Promise.all([
@@ -244,7 +248,7 @@ export function BtocStatsTab() {
     } finally {
       setLoading(false);
     }
-  }, [dateFrom, dateTo, category, parentProduct]);
+  }, [dateFrom, dateTo, category, globalCategory, parentProduct]);
 
   useEffect(() => {
     loadData();
@@ -259,6 +263,7 @@ export function BtocStatsTab() {
     setDateFrom("");
     setDateTo("");
     setCategory("");
+    setGlobalCategory("");
     setParentProduct("");
     setFiltersApplied(false);
   };
@@ -317,7 +322,33 @@ export function BtocStatsTab() {
             </div>
             <div className="space-y-1">
               <label className="block text-xs font-medium text-muted-foreground">
-                Catégorie
+                Cat. globale
+              </label>
+              {/* Déduite du TITRE du produit, contrairement à « Catégorie » qui reprend
+                  les catégories WooCommerce (jusqu'à onze par produit, mêlant type
+                  d'article, opération commerciale et canal de diffusion). */}
+              <Select
+                value={globalCategory || "all"}
+                onValueChange={(v) => setGlobalCategory(!v || v === "all" ? "" : v)}
+              >
+                <SelectTrigger className="w-44 h-9">
+                  <span className={`text-sm truncate ${!globalCategory ? "text-muted-foreground" : ""}`}>
+                    {globalCategory || "Toutes"}
+                  </span>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Toutes</SelectItem>
+                  {(data.availableGlobalCategories ?? []).map((c) => (
+                    <SelectItem key={c.name} value={c.name}>
+                      {c.name} ({c.products})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <label className="block text-xs font-medium text-muted-foreground">
+                Catégorie WooCommerce
               </label>
               <Select
                 value={category || "all"}
@@ -386,6 +417,9 @@ export function BtocStatsTab() {
               )}
               {dateTo && (
                 <Badge variant="secondary">{"Jusqu'au"} : {dateTo}</Badge>
+              )}
+              {globalCategory && (
+                <Badge variant="secondary">Cat. globale : {globalCategory}</Badge>
               )}
               {category && (
                 <Badge variant="secondary">Catégorie : {category}</Badge>

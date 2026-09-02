@@ -1245,6 +1245,39 @@ export const HELP_THEMES: HelpTheme[] = [
         ],
       },
       {
+        id: "btoc-cat-globale",
+        icon: "\ud83c\udff7\ufe0f",
+        title: "Le filtre « Cat. globale »",
+        keywords: "btoc stats statistiques catégorie globale titre produit pantalon chemise filtre woocommerce",
+        screen: "/btoc",
+        sections: [
+          {
+            lines: [
+              "Dans **BtoC → Statistiques**, le filtre **Cat. globale** classe les produits par **type d'article, lu dans leur titre** : si le titre contient « pantalon », c'est un Pantalon.",
+              "Il ignore la **casse**, les **accents** et le **pluriel** : « PANTALONS », « pantalon » et « Pantalon » vont au même endroit.",
+            ],
+            tip: "Le nombre entre parenthèses dans la liste, c'est le nombre de produits du catalogue dans cette catégorie. 🔢",
+          },
+          {
+            h: "Pourquoi il ne faut plus utiliser « Catégorie WooCommerce »",
+            lines: [
+              "Un même produit porte jusqu'à **onze** catégories WooCommerce, qui mélangent le type d'article et le marketing : *Collection été 50%, FB FR, FR, Non soldés, Pantalon, Pantalon chino, Pantalons, shoppingfeed, Ventes privées, Voir tout pantalon*.",
+              "Filtrer là-dessus revient à filtrer sur des opérations commerciales et des canaux de diffusion, pas sur des vêtements.",
+              "L'ancien filtre reste disponible sous le nom **Catégorie WooCommerce**, mais pour analyser des ventes, **Cat. globale** est le bon.",
+            ],
+          },
+          {
+            h: "Comment le classement décide",
+            lines: [
+              "Il lit le titre **de gauche à droite** et retient le **premier type d'article reconnu**. C'est ce qui fait qu'une **« Veste en jean »** est une veste et un **« Bermuda en jean »** un bermuda — et pas des jeans.",
+              "Une **surchemise** n'est pas une chemise : ce sont deux catégories distinctes.",
+              "Les familles proches sont regroupées : blazer et saharienne dans **Veste**, parka et doudoune dans **Manteau**, sacs et portefeuilles dans **Maroquinerie**.",
+              "Les rares articles qui ne sont pas des vêtements (carte cadeau, mug…) tombent dans **Autres**.",
+            ],
+          },
+        ],
+      },
+      {
         id: "btoc-segmentation",
         icon: "\ud83e\udde9",
         title: "Segmentation clientèle",
