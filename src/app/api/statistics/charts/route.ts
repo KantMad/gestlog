@@ -3,6 +3,7 @@ import { handleApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { parseSizeQuantities, sumQuantities } from "@/lib/utils";
 import { resolveOrderSource } from "@/lib/order-source";
+import { buildSizeMix } from "@/lib/size-mix";
 
 export async function GET(request: NextRequest) {
   const seasonId = request.nextUrl.searchParams.get("seasonId");
@@ -47,6 +48,18 @@ export async function GET(request: NextRequest) {
         });
       }
     }
+
+    // ─── Répartition des tailles COMMANDÉES, par catégorie ───
+    // Les commandes sont déjà chargées avec leurs lignes ET leurs produits : on réutilise
+    // ce qui est en mémoire plutôt que de relire la base.
+    const sizeMix = buildSizeMix(
+      clientOrders.flatMap((o) =>
+        o.lines.map((l) => ({
+          category: l.product.category,
+          quantitiesBySize: l.quantitiesBySize,
+        }))
+      )
+    );
 
     // ─── Livré réel = cumul des BL (par client) ──────────────
     const blRows = await prisma.$queryRawUnsafe<{ clientId: string; delivered: bigint }[]>(
@@ -311,6 +324,7 @@ export async function GET(request: NextRequest) {
       clientBreakdown,
       totals,
       supplierTotals,
+      sizeMix,
       clientDeliveries,
       supplierConformity,
       supplierReceptions,

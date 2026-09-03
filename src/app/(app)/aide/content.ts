@@ -805,6 +805,38 @@ export const HELP_THEMES: HelpTheme[] = [
         ],
       },
       {
+        id: "stats-tailles",
+        icon: "\ud83d\udccf",
+        title: "Répartition des tailles commandées",
+        keywords: "statistiques tailles pourcentage répartition catégorie courbe grille commandé",
+        screen: "/statistics",
+        sections: [
+          {
+            lines: [
+              "En bas des **Statistiques**, ce bloc montre la **part de chaque taille** dans les quantités commandées de la saison.",
+              "Le menu déroulant permet de choisir la **catégorie** : Maille, Jersey, Chemise, Denim, Accessoires…",
+            ],
+            tip: "Exemple AH26 en Maille : S 4,9 % · M 22,1 % · L 30,2 % · XL 24,8 % · 2XL 12,9 % · 3XL 4,2 % · 4XL 0,8 %. 📏",
+          },
+          {
+            h: "Pourquoi par catégorie et pas en global",
+            lines: [
+              "Les familles n'ont pas la même grille : un **jean** se décline en 30-40, un **accessoire** en TU, une **maille** en S-4XL.",
+              "Tout mélanger donnerait « L : 20 % » alors que la taille L n'existe pas pour un jean — le chiffre serait faux dans les deux sens.",
+              "Le choix **Toutes catégories** reste disponible pour voir les volumes, mais l'écran prévient que les grilles y sont mélangées.",
+            ],
+          },
+          {
+            h: "Bon à savoir",
+            lines: [
+              "Les tailles sont rangées **dans l'ordre de la grille** (S, M, L, XL…), pas de la plus vendue à la moins vendue : on lit une courbe, pas un palmarès.",
+              "Les parts sont arrondies au dixième, donc leur somme peut afficher 99,9 % — c'est l'arrondi, aucune pièce n'est perdue.",
+              "Ce sont les quantités **commandées** par les boutiques. Le filtre par référence en haut de l'écran s'y applique aussi.",
+            ],
+          },
+        ],
+      },
+      {
         id: "comparaison-cr",
         icon: "🔍",
         title: "Comparaison commande / réception",

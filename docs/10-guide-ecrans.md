@@ -327,6 +327,21 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
 - **Pièges** : deux notions de « livré » (BL réels vs `Delivery` allocation) ; top 15 clients
   pour le détail mais montant facturé global.
 
+- **Répartition des tailles commandées** (`src/lib/size-mix.ts`, testé) : part de chaque
+  taille, **dans sa catégorie**, sur les quantités **commandées** de la saison.
+  - 🔴 **Le découpage par catégorie n'est pas cosmétique.** AH26 compte **35 tailles
+    distinctes** : un classement global affiche « L : 20 % » alors que L n'existe ni pour
+    un jean (30-40) ni pour un accessoire (TU). Le cumul « Toutes catégories » reste
+    proposé comme repère de volume, avec un avertissement — et la sélection par **défaut
+    est la plus grosse catégorie réelle**, pas le cumul.
+  - Tailles ordonnées par la **grille** (`sortSizeScale`), pas par volume : on lit une
+    courbe de tailles, pas un classement. *Maille AH26 : S 4,9 % · M 22,1 % · L 30,2 % ·
+    XL 24,8 % · 2XL 12,9 % · 3XL 4,2 % · 4XL 0,8 %.*
+  - Parts arrondies à **une décimale** ; la somme affiche donc 99,9 % ou 100,1 % — c'est
+    l'arrondi, pas une perte de pièces.
+  - Calculé **depuis les commandes déjà chargées** par la route (elles incluent déjà lignes
+    et produits) : aucune requête supplémentaire. Suit le filtre référence de l'écran.
+
 ### ⚠️ Pièges de comptage corrigés (audit)
 - **Pièces commandées et soldées : filtre `source` manquant** (`/api/statistics/season`).
   `totalPieces` et `cancelledPieces` interrogeaient `ClientOrderLine` sans filtrer la

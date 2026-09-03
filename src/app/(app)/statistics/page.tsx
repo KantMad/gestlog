@@ -58,6 +58,12 @@ interface ChartData {
   deliveryStatus: { name: string; value: number }[];
   invoiceStatus: { name: string; value: number }[];
   deliveryTimeline: { date: string; client: string; pièces: number }[];
+  /** Répartition des tailles commandées, par catégorie (cf. lib/size-mix). */
+  sizeMix?: {
+    category: string;
+    pieces: number;
+    sizes: { size: string; quantity: number; percent: number }[];
+  }[];
   /** Totaux de la saison, sur TOUS les clients (clientBreakdown est tronqué au top 15). */
   totals?: { clients: number; commandé: number; livré: number; facturé: number; soldé: number; restant: number };
   /** Totaux fournisseurs de la saison, pour une conformité pondérée. */
@@ -90,6 +96,9 @@ export default function StatisticsPage() {
   const [loading, setLoading] = useState(false);
   const [referenceFilter, setReferenceFilter] = useState("");
   const [appliedFilter, setAppliedFilter] = useState("");
+  // Catégorie affichée dans la répartition des tailles. Par défaut la plus grosse
+  // catégorie réelle, pas le cumul : c'est elle qui donne une courbe de tailles lisible.
+  const [sizeCategory, setSizeCategory] = useState("");
 
   const loadData = useCallback(
     async (refFilter: string) => {
@@ -105,6 +114,15 @@ export default function StatisticsPage() {
         if (!res.ok) throw new Error();
         const d = await res.json();
         setData(d);
+        // Sélection par défaut : la plus GROSSE catégorie réelle (mix[1]), pas le cumul
+        // « Toutes catégories » (mix[0]) dont la courbe de tailles n'a pas de sens.
+        // Un choix déjà fait par l'utilisateur est conservé s'il existe encore.
+        setSizeCategory((prev) => {
+          const mix: ChartData["sizeMix"] = d.sizeMix;
+          if (!mix || mix.length === 0) return "";
+          if (prev && mix.some((g) => g.category === prev)) return prev;
+          return (mix[1] ?? mix[0]).category;
+        });
       } catch {
         toast.error("Impossible de charger les statistiques");
       } finally {
@@ -685,6 +703,74 @@ export default function StatisticsPage() {
                     </Card>
                   )}
                 </div>
+
+                {/* ── Répartition des tailles commandées ──
+                    Par CATÉGORIE : les grilles diffèrent d'une famille à l'autre (un jean
+                    se décline en 30-40, un accessoire en TU), un classement global
+                    mélangerait des tailles qui ne se comparent pas. */}
+                {data!.sizeMix && data!.sizeMix.length > 0 && (
+                  <Card>
+                    <CardHeader>
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <CardTitle className="text-base">
+                            Répartition des tailles commandées
+                          </CardTitle>
+                          <p className="mt-0.5 text-xs text-muted-foreground">
+                            Part de chaque taille dans sa catégorie
+                          </p>
+                        </div>
+                        <select
+                          value={sizeCategory}
+                          onChange={(e) => setSizeCategory(e.target.value)}
+                          className="h-9 rounded-lg border border-input bg-background px-2 text-sm outline-none focus:border-primary"
+                        >
+                          {data!.sizeMix.map((g) => (
+                            <option key={g.category} value={g.category}>
+                              {g.category} ({formatNumber(g.pieces)} pcs)
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      {(() => {
+                        const group =
+                          data!.sizeMix!.find((g) => g.category === sizeCategory) ??
+                          data!.sizeMix![0];
+                        const max = Math.max(...group.sizes.map((s) => s.percent), 1);
+                        return (
+                          <div className="space-y-2">
+                            {group.sizes.map((s) => (
+                              <div key={s.size} className="flex items-center gap-3">
+                                <span className="w-16 shrink-0 text-sm font-medium">{s.size}</span>
+                                <div className="h-5 flex-1 overflow-hidden rounded bg-muted">
+                                  <div
+                                    className="h-full rounded bg-indigo-500"
+                                    style={{ width: `${(s.percent / max) * 100}%` }}
+                                  />
+                                </div>
+                                <span className="w-14 shrink-0 text-right text-sm font-semibold">
+                                  {s.percent.toFixed(1)} %
+                                </span>
+                                <span className="w-20 shrink-0 text-right text-xs text-muted-foreground">
+                                  {formatNumber(s.quantity)} pcs
+                                </span>
+                              </div>
+                            ))}
+                            {group.category === "Toutes catégories" && (
+                              <p className="pt-1 text-xs text-muted-foreground">
+                                ⚠️ Toutes catégories confondues, les grilles se mélangent
+                                (lettres, tailles jean, TU). Choisis une catégorie pour lire
+                                une vraie courbe de tailles.
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </CardContent>
+                  </Card>
+                )}
 
                 {/* Delivery timeline full width */}
                 {data!.deliveryTimeline.length > 0 && (
