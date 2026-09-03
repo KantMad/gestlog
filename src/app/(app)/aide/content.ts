@@ -626,6 +626,23 @@ export const HELP_THEMES: HelpTheme[] = [
         ],
       },
       {
+        id: "repartition-marques",
+        icon: "\ud83c\udff7\ufe0f",
+        title: "Les marques dans l'historique",
+        keywords: "répartition historique session marque TDH Country Classic MCS étiquette label fournisseur",
+        screen: "/allocation",
+        sections: [
+          {
+            lines: [
+              "Dans **Répartition → Historique**, chaque session affiche la ou les **marques** réparties, à côté des fournisseurs concernés.",
+              "La marque se lit sur le **début de la référence** : `TH…` = **TDH**, `CC…` = **Country Classic**, tout le reste = **MCS**.",
+              "Les mêmes étiquettes apparaissent en haut de l'écran de **détail** d'une répartition.",
+            ],
+            tip: "Fournisseur et marque sont deux choses différentes : un même fournisseur peut produire pour plusieurs marques. C'est pour ça qu'ils sont séparés par un trait. 🏷️",
+          },
+        ],
+      },
+      {
         id: "valider-repartition",
         icon: "✅",
         title: "Valider une répartition",

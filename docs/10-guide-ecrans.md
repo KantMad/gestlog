@@ -141,6 +141,21 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
   un produit sur plusieurs colis (`api/import/receptions/[id]` PATCH).
 
 ## Répartition (`/allocation`)
+- **Marque des sessions (historique + détail)** — `src/lib/brand.ts`, testé.
+  La marque se lit sur les **deux premières lettres de la référence** : `TH` → **TDH**,
+  `CC` → **Country Classic**, tout le reste → **MCS** (repli volontaire, pas un
+  « inconnu »). *Référentiel : 400 TDH, 1 311 Country Classic, 7 178 MCS.*
+  - L'historique affiche les marques à côté des fournisseurs, séparées par un trait —
+    ce sont deux notions différentes sur la même ligne. Le détail les pose à côté du titre
+    (`PageHeader` accepte désormais un `badge`).
+  - Côté liste, `/api/allocation/sessions` ne remonte que les **préfixes DISTINCTS** par
+    session (`UPPER(LEFT(p.reference, 2))`) : inutile de rapatrier toutes les références
+    pour n'en lire que deux lettres. Côté détail, le calcul se fait dans l'écran, les
+    lignes y étant déjà chargées.
+  - ⚠️ **Ne pas confondre avec `lib/a-vendre-season.ts`**, qui lit la **première** lettre
+    pour en déduire la saison. Les deux lectures coexistent sur la même référence :
+    `RMPULL_W001` est une **MCS** (préfixe RM) de la saison **AH26** (lettre R).
+
 - **Rôle** : répartir les quantités **reçues** entre boutiques quand le stock ne suffit pas,
   ajuster à la main, valider en session, exporter.
 - **Écarter un produit à la main** (vue « Par produit ») : une case **« Exclure de la

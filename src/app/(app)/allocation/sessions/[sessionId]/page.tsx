@@ -7,6 +7,7 @@ import { Topbar } from "@/components/layout/topbar";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { brandsOf } from "@/lib/brand";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -17,7 +18,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ArrowLeft, Search, Users, Package, ArrowDown, CheckCircle, Pencil, Barcode, X } from "lucide-react";
+import { ArrowLeft, Search, Users, Package, ArrowDown, CheckCircle, Pencil, Barcode, X, Tag } from "lucide-react";
 import { cn, sumQuantities, formatNumber, type SizeQuantities } from "@/lib/utils";
 import {
   Select,
@@ -190,6 +191,11 @@ export default function AllocationSessionDetailPage({
     return [...m.values()].sort((a, b) => cmp(a.label, b.label) || cmp(a.sub, b.sub));
   }, [filtered, viewMode]);
 
+  // Marques réparties dans cette session, déduites du préfixe des références
+  // (TH → TDH, CC → Country Classic, sinon MCS). Calculé ici : les lignes sont déjà
+  // chargées, inutile de redemander au serveur ce que l'écran a sous la main.
+  const brands = useMemo(() => brandsOf(lines.map((l) => l.productReference)), [lines]);
+
   const totals = useMemo(() => {
     const original = lines.reduce((s, l) => s + sumQuantities(l.original), 0);
     const allocated = lines.reduce((s, l) => s + sumQuantities(l.allocated), 0);
@@ -318,6 +324,22 @@ export default function AllocationSessionDetailPage({
                   minute: "2-digit",
                 })} · saison ${session.seasonName}`
               : "Chargement..."
+          }
+          badge={
+            brands.length > 0 ? (
+              <span className="flex flex-wrap items-center gap-1">
+                <Tag className="h-3.5 w-3.5 text-muted-foreground" />
+                {brands.map((b) => (
+                  <Badge
+                    key={b}
+                    variant="outline"
+                    className="border-indigo-200 bg-indigo-50 text-[11px] font-normal text-indigo-700"
+                  >
+                    {b}
+                  </Badge>
+                ))}
+              </span>
+            ) : null
           }
           action={
             <div className="flex items-center gap-2">

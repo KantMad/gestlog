@@ -38,6 +38,7 @@ import {
   Barcode,
   Upload,
   Truck,
+  Tag,
   History,
   Pencil,
   X,
@@ -115,6 +116,8 @@ interface SessionEntry {
   _count: { lines: number };
   /** Fournisseur(s) des produits répartis — pour repérer une session d'un coup d'œil. */
   suppliers?: string[];
+  /** Marques réparties (TH → TDH, CC → Country Classic, sinon MCS). */
+  brands?: string[];
 }
 
 interface CatalogEntry {
@@ -2082,6 +2085,25 @@ export default function AllocationPage() {
                                 <span className="text-[10px] text-muted-foreground">
                                   +{session.suppliers.length - 4}
                                 </span>
+                              )}
+                              {/* Marque(s) réparties, déduites du préfixe des références
+                                  (TH → TDH, CC → Country Classic, sinon MCS). Séparées
+                                  visuellement des fournisseurs : ce sont deux notions
+                                  différentes sur la même ligne. */}
+                              {session.brands && session.brands.length > 0 && (
+                                <>
+                                  <span className="mx-0.5 text-muted-foreground/40">|</span>
+                                  <Tag className="h-3 w-3 text-muted-foreground" />
+                                  {session.brands.map((b) => (
+                                    <Badge
+                                      key={b}
+                                      variant="outline"
+                                      className="border-indigo-200 bg-indigo-50 text-[10px] font-normal text-indigo-700"
+                                    >
+                                      {b}
+                                    </Badge>
+                                  ))}
+                                </>
                               )}
                             </div>
                           )}
