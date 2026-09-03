@@ -661,6 +661,27 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
   exclues ; **saison lue dans le fichier commande fournisseur** = `SupplierOrder.tioSeason`) +
   **Comparaison** xlsx. Sélecteur de réceptions (recherche fournisseur). Liens vers les exports
   contextuels (répartition, comparaison saisons, magasin, livraisons).
+- **Recoupement modèle × couleurs** (`/api` : aucun — `src/lib/recoupement.ts`, testé ;
+  `components/export/recoupement-card.tsx`) : transforme l'export CSV **« commandes à la
+  couleur »** en **tableau croisé** — une ligne par modèle, une colonne par couleur, un
+  total par modèle (`Total Modèle`) et par couleur (`Total Couleurs`).
+  - **100 % local** : le fichier est lu dans le navigateur, rien n'est envoyé au serveur ni
+    écrit en base. La carte ne dépend donc d'aucune saison.
+  - Filtres : **catégories**, **sous-catégories** (elles suivent les catégories cochées) et
+    **recherche produit** (référence ou désignation).
+  - ⚠️ **La quantité retenue est « Quantité à la couleur », PAS la somme des colonnes de
+    tailles T0..T12.** Sur l'export réel, **79 lignes** portent une quantité couleur non
+    nulle alors que toutes leurs tailles sont à 0 (`MMCHML_L009`) : sommer les tailles
+    ferait disparaître ces pièces en silence.
+  - Colonnes CSV repérées **par nom** (l'ordre change d'un export à l'autre) ; découpage
+    respectant les guillemets (un `split(";")` naïf casserait toute valeur contenant le
+    séparateur) ; BOM toléré ; séparateur `;`/`,`/tabulation détecté sur l'en-tête.
+  - Lignes et colonnes triées par **volume décroissant**, départage par référence / code
+    couleur pour qu'un même fichier ressorte toujours à l'identique.
+  - ⚠️ **Une cellule sans quantité reste VIDE, pas « 0 »** : un tableau de recoupement se lit
+    à l'œil, une grille de zéros masquerait les couleurs réellement commandées.
+  - *Validé sur l'export réel : 6 069 lignes / 43 597 pièces ; filtré Pantalons + Bermudas
+    → 17 modèles × 14 couleurs / 8 460 pièces, somme des lignes = somme des colonnes.*
 - **Quantités commandées — Excel** (`/api/export/quantites`,
   `components/export/quantites-card.tsx`, logique pure dans `lib/export-quantites.ts`) :
   tableau croisé des quantités commandées par les boutiques, **tailles en colonnes**.

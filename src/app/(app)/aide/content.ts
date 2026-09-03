@@ -1000,6 +1000,38 @@ export const HELP_THEMES: HelpTheme[] = [
         ],
       },
       {
+        id: "export-recoupement",
+        icon: "\ud83d\udd33",
+        title: "Recoupement modèle × couleurs",
+        keywords: "recoupement tableau croisé modèle couleur pantalon bermuda csv commandes à la couleur export",
+        screen: "/export",
+        sections: [
+          {
+            lines: [
+              "Dans **Exports**, dépose l'export **commandes à la couleur** (CSV) : GestLog le retourne en **tableau croisé**.",
+              "Une **ligne par modèle**, une **colonne par couleur**, le **Total Modèle** au bout de chaque ligne et le **Total Couleurs** en bas.",
+            ],
+            tip: "Tout se passe dans ton navigateur : le fichier n'est ni envoyé ni enregistré. Aucune saison à choisir. 🔒",
+          },
+          {
+            h: "Filtrer avant d'exporter",
+            lines: [
+              "**Catégories** puis **Sous-catégories** (elles s'adaptent aux catégories cochées), et une **recherche produit** sur la référence ou la désignation.",
+              "Le compteur t'annonce combien de modèles et de couleurs sortiront, et un aperçu du tableau s'affiche avant le téléchargement.",
+              "Exemple : coche *Pantalons* et *Bermudas* et tu obtiens 17 modèles × 14 couleurs.",
+            ],
+          },
+          {
+            h: "Deux choses à savoir",
+            lines: [
+              "Une case **vide** signifie que le modèle n'a pas été commandé dans cette couleur. C'est volontaire : un tableau rempli de zéros ne se lit plus.",
+              "Modèles et couleurs sont classés du **plus gros volume au plus petit**, pour avoir les porteurs en haut et à gauche.",
+              "La quantité utilisée est celle de la colonne **Quantité à la couleur** du CSV — c'est la seule fiable, certaines lignes ayant leurs tailles à zéro.",
+            ],
+          },
+        ],
+      },
+      {
         id: "export-quantites",
         icon: "\ud83d\udcca",
         title: "Quantités commandées (tableau par taille)",

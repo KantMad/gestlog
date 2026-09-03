@@ -24,6 +24,7 @@ import {
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
 import { QuantitesCard } from "@/components/export/quantites-card";
+import { RecoupementCard } from "@/components/export/recoupement-card";
 
 interface ReceptionRow {
   id: string;
@@ -399,6 +400,11 @@ export default function ExportPage() {
                 pas dans une demi-colonne. */}
             <div className="sm:col-span-2">
               <QuantitesCard seasonId={seasonId} seasonName={season?.name || ""} />
+            </div>
+
+            {/* Ne dépend d'aucune saison : tout est calculé depuis le fichier déposé. */}
+            <div className="sm:col-span-2">
+              <RecoupementCard />
             </div>
           </div>
         </div>
