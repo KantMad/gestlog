@@ -8,6 +8,7 @@ import { Download, Loader2, Search, Table2, TriangleAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
+import { fileStamp } from "@/lib/file-stamp";
 
 interface Catalog {
   id: string;
@@ -162,7 +163,7 @@ export function QuantitesCard({
         "Critères"
       );
       const suffix = withBoutique ? "detail-boutique" : "global";
-      XLSX.writeFile(wb, `quantites-commandees_${seasonName}_${suffix}.xlsx`);
+      XLSX.writeFile(wb, `quantites-commandees_${seasonName}_${suffix}_${fileStamp()}.xlsx`);
       toast.success(`${d.groupCount} référence(s) x coloris — ${d.grandTotal} pièces`);
     } catch {
       toast.error("Export impossible");

@@ -16,6 +16,7 @@ import { cn, formatNumber } from "@/lib/utils";
 import { sortSizeScale } from "@/lib/size-order";
 import { computeTotals, discounted, colorText, type AVendreRow } from "@/lib/a-vendre";
 import * as XLSX from "xlsx";
+import { fileStamp } from "@/lib/file-stamp";
 
 const euro = (n: number) =>
   new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(n);
@@ -177,7 +178,7 @@ export default function AVendrePage() {
     ws["!cols"] = header.map((h) => ({ wch: Math.min(34, Math.max(h.length + 2, 10)) }));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "À vendre");
-    const stamp = new Date().toISOString().slice(0, 10);
+    const stamp = fileStamp();
     XLSX.writeFile(wb, `A vendre ${stamp}.xlsx`);
   };
 

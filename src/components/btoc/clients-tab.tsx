@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { formatNumber } from "@/lib/utils";
 import * as XLSX from "xlsx";
+import { fileStamp } from "@/lib/file-stamp";
 
 interface Customer {
   id: string;
@@ -214,7 +215,7 @@ export function BtocClientsTab() {
 
       XLSX.writeFile(
         wb,
-        `clients-btoc${hasFilters ? "-filtre" : ""}-${new Date().toISOString().slice(0, 10)}.xlsx`
+        `clients-btoc${hasFilters ? "-filtre" : ""}-${fileStamp()}.xlsx`
       );
     } catch (e) {
       console.error("Erreur export:", e);

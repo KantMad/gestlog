@@ -11,6 +11,7 @@ import {
   type SegmentedClient, type SegmentedSummary,
 } from "@/lib/btoc-clients";
 import * as XLSX from "xlsx";
+import { fileStamp } from "@/lib/file-stamp";
 
 const euro = (n: number) =>
   new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(n);
@@ -131,7 +132,7 @@ export function SegmentationExport({
         { Critère: "Clients retenus", Valeur: String(rows.length) },
       ];
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(crit), "Critères");
-      XLSX.writeFile(wb, `clients-segmentes-${new Date().toISOString().slice(0, 10)}.xlsx`);
+      XLSX.writeFile(wb, `clients-segmentes-${fileStamp()}.xlsx`);
     } finally {
       setExporting(false);
     }

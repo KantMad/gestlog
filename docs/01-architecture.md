@@ -21,6 +21,16 @@ Voir [`04-sources-et-n8n.md`](04-sources-et-n8n.md). Un **centre d'aide utilisat
 intégré dans l'app (écran **`/aide`**) ; le tour fonctionnel écran par écran est dans
 [`08-fonctionnalites.md`](08-fonctionnalites.md).
 
+
+## Nommer un fichier exporté
+
+Tout export passe par **`fileStamp()`** (`src/lib/file-stamp.ts`) : `2026-09-04_14h32`.
+
+⚠️ **L'heure et la minute font partie du nom.** Avec une date seule, deux exports du même
+jour portent le MÊME nom : le second écrase le premier dans le dossier de téléchargement,
+ou se retrouve suffixé « (1) » sans qu'on sache lequel est lequel. C'est de l'heure
+**locale**, pas UTC : le nom doit correspondre à l'horloge de l'utilisateur.
+
 ## Stack technique
 
 - **Next.js 15** (App Router) + **React 19** + **TypeScript**.

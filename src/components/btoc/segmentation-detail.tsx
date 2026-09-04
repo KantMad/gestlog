@@ -12,6 +12,7 @@ import {
   type SegmentedClient, type SegmentedSummary,
 } from "@/lib/btoc-clients";
 import * as XLSX from "xlsx";
+import { fileStamp } from "@/lib/file-stamp";
 
 const euro = (n: number) =>
   new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(n);
@@ -94,7 +95,7 @@ export function SegmentDetailDialog({
         ]),
         "Critères"
       );
-      XLSX.writeFile(wb, `${segment.slug}-${new Date().toISOString().slice(0, 10)}.xlsx`);
+      XLSX.writeFile(wb, `${segment.slug}-${fileStamp()}.xlsx`);
     } finally {
       setExporting(false);
     }

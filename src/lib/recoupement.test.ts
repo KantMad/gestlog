@@ -122,13 +122,41 @@ describe("buildCrossTable", () => {
 
 describe("crossTableToAoa", () => {
   const aoa = crossTableToAoa(buildCrossTable(rows), { title: "T", subtitle: "S" });
+  const header = aoa[3];
 
-  it("reprend la disposition du modèle : titre, sous-titre, en-tête, corps, total", () => {
-    expect(aoa[0]).toEqual(["T"]);
-    expect(aoa[1]).toEqual(["S"]);
-    expect(aoa[2][0]).toBe(ROW_HEADER);
-    expect(aoa[2].at(-1)).toBe("Total Modèle");
+  it("reprend la disposition du modèle : titre, sous-titre, ligne vide, en-tête", () => {
+    expect(aoa[0][0]).toBe("T");
+    expect(aoa[1][0]).toBe("S");
+    expect(aoa[2].every((c) => c === null)).toBe(true);
+    expect(header[0]).toBe(ROW_HEADER);
+    expect(header[1]).toBe("MARQUES");
+    expect(header.at(-1)).toBe("Commentaires");
+    expect(header.at(-2)).toBe("Total Modèle");
+  });
+
+  it("place la marque en 2e colonne, déduite de la référence", () => {
+    const ligne = aoa.find((r) => String(r[0]).startsWith("P1"))!;
+    expect(ligne[1]).toBe("MCS");
+    const tdh = crossTableToAoa(
+      buildCrossTable([
+        { reference: "THPULL_C001", productName: "Pull", category: "c", subCategory: "",
+          colorCode: "001", colorName: "Noir", quantity: 3 },
+      ]),
+      { title: "T" }
+    );
+    expect(tdh.find((r) => String(r[0]).startsWith("THPULL"))![1]).toBe("TDH");
+  });
+
+  it("laisse la colonne Commentaires VIDE — c'est au métier de l'annoter", () => {
+    const ligne = aoa.find((r) => String(r[0]).startsWith("P1"))!;
+    expect(ligne.at(-1)).toBeNull();
+  });
+
+  it("sépare le total du corps par une ligne vide", () => {
+    expect(aoa.at(-2)!.every((c) => c === null)).toBe(true);
     expect(aoa.at(-1)![0]).toBe("Total Couleurs");
+    // La cellule MARQUES du pied reste vide.
+    expect(aoa.at(-1)![1]).toBeNull();
   });
 
   it("laisse la cellule VIDE — et non 0 — quand la couleur n'est pas commandée", () => {
@@ -137,8 +165,8 @@ describe("crossTableToAoa", () => {
     expect(ligneC1).toContain(null);
   });
 
-  it("chaque ligne a autant de cellules que l'en-tête", () => {
-    for (const r of aoa.slice(2)) expect(r).toHaveLength(aoa[2].length);
+  it("toutes les lignes ont la largeur de l'en-tête", () => {
+    for (const r of aoa) expect(r).toHaveLength(header.length);
   });
 });
 

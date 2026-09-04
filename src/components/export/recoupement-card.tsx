@@ -8,6 +8,7 @@ import { Download, Grid3x3, Loader2, Plus, Upload, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
+import { fileStamp } from "@/lib/file-stamp";
 import {
   parseColorOrdersCsv, parseLancementWorkbook, filterRows, buildCrossTable, crossTableToAoa,
   findOverlap, mergeSources,
@@ -195,16 +196,23 @@ export function RecoupementCard() {
   const exportExcel = () => {
     if (table.rows.length === 0) return;
     const aoa = crossTableToAoa(table, {
-      title: "Tableau croisé des quantités au modèle et par couleur",
+      title: "Recoupement modèles couleurs",
       subtitle: scope || "Toutes catégories",
     });
     const ws = XLSX.utils.aoa_to_sheet(aoa);
-    ws["!cols"] = [{ wch: 52 }, ...table.columns.map(() => ({ wch: 15 })), { wch: 14 }];
-    // Volet figé sous l'en-tête et après le libellé produit : le tableau est large.
-    ws["!freeze"] = { xSplit: 1, ySplit: 3 };
+    // Réf + description | MARQUES | une par couleur | Total Modèle | Commentaires
+    ws["!cols"] = [
+      { wch: 52 },
+      { wch: 10 },
+      ...table.columns.map(() => ({ wch: 15 })),
+      { wch: 14 },
+      { wch: 40 },
+    ];
+    // Volet figé sous l'en-tête (ligne 4) et après la marque : le tableau est large.
+    ws["!freeze"] = { xSplit: 2, ySplit: 4 };
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Recoupement");
-    XLSX.writeFile(wb, `recoupement-modele-couleurs_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    XLSX.writeFile(wb, `recoupement-modele-couleurs_${fileStamp()}.xlsx`);
     toast.success(`${table.rows.length} modèle(s) × ${table.columns.length} couleur(s)`);
   };
 

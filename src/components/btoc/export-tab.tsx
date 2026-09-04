@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { formatNumber } from "@/lib/utils";
 import * as XLSX from "xlsx";
+import { fileStamp } from "@/lib/file-stamp";
 
 // ─── Types ──────────────────────────────────────────
 interface ExportFields {
@@ -1293,9 +1294,8 @@ export function BtocExportTab() {
 }
 
 // ─── Helpers ────────────────────────────────────────
-function today(): string {
-  return new Date().toISOString().slice(0, 10);
-}
+// Horodatage à la MINUTE : deux exports du même jour ne doivent pas porter le même nom.
+const today = fileStamp;
 
 function downloadXLSX(
   rows: Record<string, string | number>[],

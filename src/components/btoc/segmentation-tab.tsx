@@ -10,6 +10,7 @@ import { cn, formatNumber } from "@/lib/utils";
 import * as XLSX from "xlsx";
 import { SegmentationExport } from "@/components/btoc/segmentation-export";
 import { SegmentDetailDialog, type Segment } from "@/components/btoc/segmentation-detail";
+import { fileStamp } from "@/lib/file-stamp";
 
 const euro = (n: number) =>
   new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(n);
@@ -139,7 +140,7 @@ export function BtocSegmentationTab() {
       ),
       "Tailles"
     );
-    XLSX.writeFile(wb, `segmentation-btoc-${new Date().toISOString().slice(0, 10)}.xlsx`);
+    XLSX.writeFile(wb, `segmentation-btoc-${fileStamp()}.xlsx`);
   };
 
   if (loading && !data) {

@@ -722,6 +722,14 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
     séparateur) ; BOM toléré ; séparateur `;`/`,`/tabulation détecté sur l'en-tête.
   - Lignes et colonnes triées par **volume décroissant**, départage par référence / code
     couleur pour qu'un même fichier ressorte toujours à l'identique.
+  - **Disposition du fichier** (reprise du modèle métier) : titre, sous-titre (le
+    périmètre), **ligne vide**, en-tête, les modèles, **ligne vide**, `Total Couleurs`.
+    Colonnes : `Reference Produit description` · **`MARQUES`** · une par couleur ·
+    `Total Modèle` · **`Commentaires`** laissée vide pour l'annotation métier.
+    La marque vient de `lib/brand` (TH → TDH, CC → Country Classic, sinon MCS), la même
+    règle que l'historique des répartitions. Volet figé après la marque et sous l'en-tête.
+  - ⚠️ Toutes les lignes sont **complétées à la largeur de l'en-tête** : une ligne plus
+    courte décale la lecture dans Excel.
   - ⚠️ **Une cellule sans quantité reste VIDE, pas « 0 »** : un tableau de recoupement se lit
     à l'œil, une grille de zéros masquerait les couleurs réellement commandées.
   - *Validé sur l'export réel : 6 069 lignes / 43 597 pièces ; filtré Pantalons + Bermudas
