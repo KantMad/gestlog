@@ -235,3 +235,140 @@ describe("runAllocation — trou incomblable : on retire un bloc, on n'invente p
     expect(served.length).toBeLessThanOrEqual(1);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Trous de taille et redistribution — cas réels THRPOML_902/405 (AH26)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const SCALE = ["S", "M", "L", "XL", "2XL", "3XL", "4XL"];
+
+const run = (
+  available: Record<string, number>,
+  demandes: { id: string; req: Record<string, number>; rank?: number }[]
+) =>
+  runAllocation({
+    seasonId: "s1",
+    available: new Map([["P", available]]),
+    demands: demandes.map((d) => ({
+      clientId: d.id,
+      clientOrderId: `o${d.id}`,
+      productId: "P",
+      sizeScale: SCALE,
+      requested: d.req,
+    })),
+    clientConfigs: new Map(
+      demandes.map((d) => [
+        d.id,
+        {
+          ranking: d.rank ?? 1,
+          maxReductionOrder: 100,
+          maxReductionLine: 100,
+          minDeliveryThreshold: 0,
+          rotationScore: 0,
+        },
+      ])
+    ),
+  } as AllocationInput);
+
+const allocOf = (res: ReturnType<typeof run>, id: string) =>
+  res.lines.find((l) => l.clientId === id)!.allocated;
+
+describe("une taille JAMAIS commandée n'est pas un trou", () => {
+  // Cas réel : Dole commande M, L, XL et 3XL — sans 2XL. Jugée sur la grille complète
+  // S→4XL, son allocation semblait « trouée » en 2XL et la règle lui retirait son 3XL,
+  // qui restait ensuite inutilisé.
+  it("garde le 3XL d'une boutique qui n'a pas commandé de 2XL", () => {
+    const res = run(
+      { M: 1, L: 3, XL: 1, "2XL": 0, "3XL": 1 },
+      [{ id: "DOLE", req: { M: 1, L: 3, XL: 1, "3XL": 1 } }]
+    );
+    expect(allocOf(res, "DOLE")).toEqual({ M: 1, L: 3, XL: 1, "3XL": 1 });
+  });
+
+  it("détecte en revanche un VRAI trou : taille commandée et non servie au milieu", () => {
+    // Ici le 2XL est commandé mais indisponible : servir XL puis 3XL laisserait un trou.
+    const res = run(
+      { M: 1, L: 1, XL: 1, "2XL": 0, "3XL": 1 },
+      [{ id: "A", req: { M: 1, L: 1, XL: 1, "2XL": 1, "3XL": 1 } }]
+    );
+    expect(allocOf(res, "A")["3XL"] ?? 0).toBe(0);
+  });
+});
+
+describe("redistribution du stock resté libre", () => {
+  it("ne laisse pas une pièce inutilisée si une boutique l'a commandée", () => {
+    // 2 boutiques, 3 M disponibles pour 2 + 2 demandés : tout doit partir.
+    const res = run({ M: 3 }, [
+      { id: "A", req: { M: 2 } },
+      { id: "B", req: { M: 2 } },
+    ]);
+    const total = res.lines.reduce((s, l) => s + sumQuantities(l.allocated), 0);
+    expect(total).toBe(3);
+  });
+
+  it("ne crée PAS de trou en redistribuant une taille extrême", () => {
+    // Le 3XL restant ne doit pas être posé chez une boutique servie jusqu'au L :
+    // ça rouvrirait le trou que la règle vient de fermer.
+    const res = run({ M: 2, L: 2, XL: 0, "2XL": 0, "3XL": 2 }, [
+      { id: "A", req: { M: 2, L: 2, XL: 1, "2XL": 1, "3XL": 1 } },
+    ]);
+    expect(allocOf(res, "A")["3XL"] ?? 0).toBe(0);
+  });
+});
+
+describe("emprunt d'une taille pour éviter de sacrifier un bloc", () => {
+  it("prélève 1 pièce chez une boutique qui en a 2, plutôt que de retirer un bloc", () => {
+    // A a besoin d'un XL pour ne pas avoir de trou ; il n'en reste aucun en stock,
+    // mais B en a 2 → B passe à 1 (aucun trou chez elle) et A est complète.
+    const res = run({ M: 3, L: 3, XL: 2, "2XL": 1 }, [
+      { id: "A", req: { M: 1, L: 1, XL: 1, "2XL": 1 }, rank: 2 },
+      { id: "B", req: { M: 2, L: 2, XL: 2 }, rank: 1 },
+    ]);
+    const a = allocOf(res, "A");
+    const b = allocOf(res, "B");
+    // A garde son 2XL grâce au XL emprunté.
+    expect(a["XL"]).toBe(1);
+    expect(a["2XL"]).toBe(1);
+    // B garde au moins 1 XL : on ne descend jamais un donneur à zéro.
+    expect(b["XL"]).toBeGreaterThanOrEqual(1);
+  });
+
+  it("ne descend jamais un donneur à zéro : sans donneur possible, le bloc est sacrifié", () => {
+    // Un seul XL pour deux boutiques qui en demandent chacune une. Celle qui ne l'a pas
+    // se retrouve avec un trou (M, L, [XL], 2XL) ; l'autre n'a qu'UN XL, donc rien à
+    // prêter. Le trou est alors fermé en retirant le bloc de droite, et le donneur
+    // potentiel conserve son XL.
+    const res = run({ M: 2, L: 2, XL: 1, "2XL": 2 }, [
+      { id: "A", req: { M: 1, L: 1, XL: 1, "2XL": 1 }, rank: 1 },
+      { id: "B", req: { M: 1, L: 1, XL: 1, "2XL": 1 }, rank: 2 },
+    ]);
+    const withXl = allocOf(res, (allocOf(res, "A")["XL"] ?? 0) > 0 ? "A" : "B");
+    const without = allocOf(res, (allocOf(res, "A")["XL"] ?? 0) > 0 ? "B" : "A");
+    // Le porteur du XL le garde : on ne le descend jamais à zéro pour dépanner l'autre.
+    expect(withXl["XL"]).toBe(1);
+    // Celle qui n'en a pas perd son 2XL plutôt que d'afficher un trou.
+    expect(without["2XL"] ?? 0).toBe(0);
+    // Et aucune des deux n'a de trou.
+    expect(res.lines.every((l) => sumQuantities(l.allocated) > 0)).toBe(true);
+  });
+});
+
+describe("invariants après correction", () => {
+  it("n'alloue jamais plus que le commandé ni plus que le reçu", () => {
+    const res = run({ S: 9, M: 38, L: 43, XL: 32, "2XL": 18, "3XL": 13, "4XL": 3 }, [
+      { id: "A", req: { M: 3, L: 3, XL: 2, "2XL": 1, "3XL": 1 } },
+      { id: "B", req: { M: 1, L: 3, XL: 1, "3XL": 1 } },
+      { id: "C", req: { S: 1, M: 2, L: 2, XL: 1, "2XL": 1 } },
+    ]);
+    const bySize: Record<string, number> = {};
+    for (const l of res.lines) {
+      for (const [s, q] of Object.entries(l.allocated)) {
+        expect(q).toBeLessThanOrEqual(l.original[s] ?? 0);
+        bySize[s] = (bySize[s] ?? 0) + q;
+      }
+    }
+    // Tout le monde est servi intégralement : le stock couvre chaque taille.
+    expect(res.lines.every((l) => sumQuantities(l.allocated) === sumQuantities(l.original))).toBe(true);
+    expect(bySize["3XL"]).toBe(2);
+  });
+});

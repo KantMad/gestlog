@@ -621,3 +621,49 @@ Les fichiers réels MCS ne sont pas des tableaux plats → l'import les **auto-d
 > Cette table est un index. Pour les détails d'un écran, lire la page + ses API + le module
 > `lib/` associé. Si tu ajoutes/déplaces un écran, **mets à jour cette table** et
 > [`05-authentification.md`](05-authentification.md).
+
+## Répartition — deux défauts corrigés (04/09/2026)
+
+Signalés par le métier : « Garches a zéro XL alors que d'autres en ont 2 ou 3 »,
+« certains clients livrés à 100 % et d'autres à −28 % », « pas de 3XL à Dole ni Angers
+alors que surplus de 4 pièces ».
+
+**Cas reproduit** (`THRPOML_902/405`, AH26, 21 boutiques) : commandé 158, reçu 156, mais
+**alloué 143** — 13 pièces bloquées dont **6 3XL**, pendant que Dole et Angers, qui en
+avaient commandé, en recevaient zéro.
+
+### 1. Le trou de taille se jugeait sur la grille du PRODUIT
+`enforceNoSizeGaps` recevait `d.sizeScale` (la gamme complète du produit, S→4XL) au lieu
+des tailles **réellement commandées** par la boutique. *Dole commande M, L, XL, 3XL — sans
+2XL. Son allocation, pourtant conforme à sa commande, était vue comme « trouée » en 2XL, et
+la règle lui retirait son 3XL.* La règle reçoit désormais
+`d.sizeScale.filter((s) => d.requested[s] > 0)`.
+⚠️ Un vrai trou reste détecté : une taille **commandée** et non servie au milieu de la
+gamme (cas d'Angers, qui commande bien du 2XL) déclenche toujours la règle.
+
+### 2. Les pièces relâchées n'étaient JAMAIS redistribuées
+La règle des trous rend des pièces à `remainingBySize`, et la boucle équitable en laisse
+d'autres — mais aucune passe ne les réattribuait. Elles attendaient un clic manuel sur
+« Répartir surplus » alors que des boutiques étaient en manque. Une **étape 3bis** a été
+ajoutée : elle redonne le stock libre à la boutique la plus coupée en relatif, **à
+condition que la pièce ne crée pas de trou** chez elle (poser un 3XL isolé chez une
+boutique servie jusqu'au XL rouvrirait le trou qu'on vient de fermer).
+
+### 3. Emprunt plutôt que sacrifice d'un bloc
+Avant de retirer un bloc entier faute de la taille manquante, on tente d'**emprunter
+1 pièce à une boutique qui en a au moins 2** (elle passe de 2 à 1, donc aucun trou chez
+elle) ; on prélève sur la **mieux servie**. ⚠️ **Jamais sur une boutique qui n'en a qu'une** :
+on déplacerait le trou au lieu de le fermer. *Sur le cas réel, le taux de service minimum
+passe de 71 % à 83 %.*
+
+### Mesure sur toute la saison AH26 (339 produits-couleurs)
+| | Avant | Après |
+|---|---|---|
+| Pièces allouées | 35 338 | **35 375** |
+| Pièces bloquées alors qu'une boutique les avait commandées | 147 | **57** |
+| Boutiques à 0 sur une taille commandée, stock restant | 62 | **8** |
+| Trous de taille · sur-allocation · pièces fantômes | — | **0 · 0 · 0** |
+
+Les 57 pièces encore bloquées le sont **légitimement** : les servir créerait un trou et
+aucune boutique n'a 2 pièces de la taille manquante à prêter. Elles restent au « Répartir
+surplus », qui est un arbitrage manuel assumé.

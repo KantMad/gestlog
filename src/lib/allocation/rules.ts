@@ -113,3 +113,20 @@ export function checkMinimumThreshold(
 ): boolean {
   return totalAllocated >= threshold;
 }
+
+/**
+ * Vrai si l'allocation présente un TROU : une taille à zéro encadrée, à gauche ET à droite,
+ * par des tailles servies. Les zéros situés aux extrémités ne sont pas des trous.
+ *
+ * ⚠️ `scale` doit être la liste des tailles que la boutique a COMMANDÉES (dans l'ordre de la
+ * grille), pas la grille complète du produit : une taille jamais commandée n'est pas un trou.
+ */
+export function hasSizeGap(scale: string[], allocated: SizeQuantities): boolean {
+  for (let i = 1; i < scale.length - 1; i++) {
+    if ((allocated[scale[i]] || 0) > 0) continue;
+    const left = scale.slice(0, i).some((s) => (allocated[s] || 0) > 0);
+    const right = scale.slice(i + 1).some((s) => (allocated[s] || 0) > 0);
+    if (left && right) return true;
+  }
+  return false;
+}

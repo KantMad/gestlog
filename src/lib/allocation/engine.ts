@@ -5,6 +5,7 @@ import {
   capLineReduction,
   sortByRanking,
   checkMinimumThreshold,
+  hasSizeGap,
 } from "./rules";
 import type {
   AllocationInput,
@@ -230,8 +231,46 @@ export function runAllocation(input: AllocationInput): AllocationResult {
       const alloc = allocations.get(key)!;
       // `remainingBySize` = stock encore libre : il contraint le comblage des trous (on ne
       // comble que si la taille manquante existe physiquement) et doit suivre les mouvements.
+      // ⚠️ Le trou se juge sur les tailles que la boutique a COMMANDÉES, pas sur la grille
+      // complète du produit. *Cas réel THRPOML_902/405 : Dole commande M, L, XL, 3XL — sans
+      // 2XL. Jugée sur la grille S→4XL, son allocation présentait un « trou » en 2XL, et la
+      // règle lui retirait son 3XL… qui restait ensuite inutilisé.*
+      const orderedScale = d.sizeScale.filter((s) => (d.requested[s] || 0) > 0);
+
+      // Avant de sacrifier un bloc, on tente d'EMPRUNTER la taille manquante à une boutique
+      // qui en a au moins 2 : elle passe de 2 à 1 (donc aucun trou chez elle) et le trou
+      // est comblé chez celle-ci. Sans cela, une seule taille indisponible faisait perdre
+      // tout un bloc à une boutique — *Saint-Dié perdait son 2XL faute d'un XL, alors que
+      // plusieurs boutiques en avaient 2.* On prélève sur la MIEUX servie.
+      for (let i = 1; i < orderedScale.length - 1; i++) {
+        const gapSize = orderedScale[i];
+        if ((alloc[gapSize] || 0) > 0) continue;
+        if ((remainingBySize[gapSize] || 0) > 0) continue; // le stock libre suffira
+        const left = orderedScale.slice(0, i).some((x) => (alloc[x] || 0) > 0);
+        const right = orderedScale.slice(i + 1).some((x) => (alloc[x] || 0) > 0);
+        if (!left || !right) continue; // zéro en bout de gamme : pas un trou
+
+        let donorKey = "";
+        let donorRate = -1;
+        for (const other of sorted) {
+          if (other === d) continue;
+          const oKey = `${other.clientId}:${other.clientOrderId}`;
+          const oAlloc = allocations.get(oKey)!;
+          if ((oAlloc[gapSize] || 0) < 2) continue; // jamais descendre une boutique à 0
+          const oReq = sumQuantities(other.requested);
+          const rate = oReq > 0 ? sumQuantities(oAlloc) / oReq : 0;
+          if (rate > donorRate) {
+            donorRate = rate;
+            donorKey = oKey;
+          }
+        }
+        if (!donorKey) continue;
+        const donor = allocations.get(donorKey)!;
+        donor[gapSize] -= 1;
+        remainingBySize[gapSize] = (remainingBySize[gapSize] || 0) + 1;
+      }
       const { adjusted, hadGaps, moves, released } = enforceNoSizeGaps(
-        d.sizeScale,
+        orderedScale,
         alloc,
         remainingBySize
       );
@@ -248,6 +287,43 @@ export function runAllocation(input: AllocationInput): AllocationResult {
           `Client ${cName(d.clientId)}, produit ${pName(productId)}: trous de taille corrigés`
         );
       }
+    }
+
+    // Step 3bis — REDISTRIBUTION du stock encore libre.
+    //
+    // ⚠️ Sans cette passe, tout ce que la règle des trous relâche — et tout ce que la
+    // boucle n'a pas pu placer — restait bloqué jusqu'à un clic manuel sur « Répartir
+    // surplus », alors que des boutiques étaient en manque. *Cas réel THRPOML_902/405 :
+    // 13 pièces sur 156 non distribuées, dont 6 3XL, pendant que deux boutiques ayant
+    // commandé du 3XL en recevaient zéro.*
+    //
+    // On ne donne une pièce que si elle NE CRÉE PAS de trou chez la boutique : ajouter un
+    // 3XL isolé à une boutique servie jusqu'au XL rouvrirait le trou que l'étape 3 vient
+    // de fermer. La priorité reste la boutique la plus coupée en relatif.
+    for (;;) {
+      let best: { d: AllocationDemand; alloc: SizeQuantities; size: string } | null = null;
+      let bestDeficit = -1;
+      for (const d of sorted) {
+        const alloc = allocations.get(`${d.clientId}:${d.clientOrderId}`)!;
+        const requestedTotal = sumQuantities(d.requested);
+        const allocTotal = sumQuantities(alloc);
+        if (allocTotal >= requestedTotal) continue;
+        const orderedScale = d.sizeScale.filter((s) => (d.requested[s] || 0) > 0);
+        for (const [size, req] of Object.entries(d.requested)) {
+          if ((remainingBySize[size] || 0) <= 0) continue;
+          if ((alloc[size] || 0) >= req) continue;
+          const trial = { ...alloc, [size]: (alloc[size] || 0) + 1 };
+          if (hasSizeGap(orderedScale, trial)) continue;
+          const deficit = requestedTotal > 0 ? 1 - allocTotal / requestedTotal : 0;
+          if (!best || deficit > bestDeficit) {
+            best = { d, alloc, size };
+            bestDeficit = deficit;
+          }
+        }
+      }
+      if (!best) break;
+      best.alloc[best.size] = (best.alloc[best.size] || 0) + 1;
+      remainingBySize[best.size] = (remainingBySize[best.size] || 0) - 1;
     }
 
     // Step 4: Rule 2 — ensure all clients receive something
