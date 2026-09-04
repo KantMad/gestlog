@@ -233,3 +233,66 @@ describe("parseLancementWorkbook — classeur multi-onglets", () => {
     ]);
   });
 });
+
+describe("parseLancementWorkbook — choix de la colonne de quantité", () => {
+  // Le classeur porte quatre blocs : commandé, site, réa, total. Seul le TOTAL reflète
+  // la commande finale. *Sur le fichier réel, lire le commandé donnait 5 601 pièces sur
+  // Pantalons au lieu de 6 836.*
+  const FULL = [
+    "Étiquettes de lignes", "32", "Somme de Quantity",
+    "site 32", "site Somme de Quantity",
+    "rea 32", "rea Somme de Quantity",
+    "total 32", "total Somme de Quantity",
+  ];
+
+  it("prend « total Somme de Quantity » quand il existe", () => {
+    const r = parseLancementWorkbook({
+      Pantalons: [
+        FULL,
+        ["Pantalons", 100, 100, 0, 20, 0, 30, 0, 150],
+        ["SMPTCH_C001 Chino", 100, 100, 0, 20, 0, 30, 0, 150],
+        ["752 Bleu marine", 100, 100, 20, 20, 30, 30, 150, 150],
+      ],
+    });
+    expect(r.quantityColumn).toBe("total Somme de Quantity");
+    expect(r.rows[0].quantity).toBe(150);
+  });
+
+  it("retombe sur le commandé quand le classeur n'a pas de bloc total", () => {
+    const r = parseLancementWorkbook({
+      Pantalons: [
+        ["Étiquettes de lignes", "32", "Somme de Quantity"],
+        ["Pantalons", 100, 100],
+        ["SMPTCH_C001 Chino", 100, 100],
+        ["752 Bleu marine", 100, 100],
+      ],
+    });
+    expect(r.quantityColumn).toBe("Somme de Quantity");
+    expect(r.rows[0].quantity).toBe(100);
+  });
+
+  it("contrôle la cohérence sur le COMMANDÉ, pas sur le total", () => {
+    // Les lignes produit ne portent de sous-total que dans le bloc commandé : contrôler
+    // sur le total ferait apparaître un écart sur CHAQUE produit.
+    const r = parseLancementWorkbook({
+      Pantalons: [
+        FULL,
+        ["Pantalons", 0, 341, 0, 0, 0, 0, 0, 0],
+        ["SMPT5P_C001 Cinq poches", 0, 341, 0, null, 0, null, 0, null],
+        ["752 Bleu marine", 0, 69, 0, 70, 0, 0, 0, 70],
+        ["005 Sable", 0, 192, 0, 51, 0, 23, 0, 266],
+        ["819 Vert sauge", 0, 128, 0, 39, 0, 18, 0, 185],
+        ["210 Ecureuil", 0, 21, 0, 39, 0, 7, 0, 67],
+      ],
+    });
+    // Un seul écart signalé, et il porte sur le commandé (341 vs 410).
+    expect(r.mismatches).toEqual([
+      {
+        category: "Pantalons", reference: "SMPT5P_C001", productName: "Cinq poches",
+        subtotal: 341, colorsTotal: 410,
+      },
+    ]);
+    // Les quantités retenues sont bien les TOTAUX du fichier : 70 + 266 + 185 + 67.
+    expect(r.rows.reduce((s, x) => s + x.quantity, 0)).toBe(588);
+  });
+});

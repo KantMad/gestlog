@@ -672,14 +672,24 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
        ligne de sous-total suivie de ses coloris. Le **nom d'onglet fait la catégorie** ; une
        ligne produit est reconnue à sa référence (`SMPTCH_C001 …`), tout ce qui la suit est
        un coloris jusqu'au produit suivant.
+  - 🔴 **Quelle colonne de quantité ?** Le classeur porte **quatre blocs** :
+    `Somme de Quantity` (commandé), `site Somme de Quantity`, `rea Somme de Quantity` et
+    **`total Somme de Quantity`** — ce dernier étant le cumul des trois, donc la commande
+    finale. C'est lui qui est lu (repli sur le commandé si le bloc manque), et l'écran
+    **affiche la colonne retenue**. *Lire le commandé donnait 5 601 pièces sur Pantalons
+    au lieu de 6 836, et 2 847 sur Bermudas au lieu de 3 513.*
+  - ⚠️ Le **contrôle de cohérence** porte, lui, sur le bloc **commandé** : c'est le seul où
+    les lignes produit portent un sous-total (les autres blocs n'existent que sur les
+    coloris). Contrôler sur le total ferait apparaître un écart sur *chaque* produit.
   - ⚠️ Ce second format **ne porte pas la sous-catégorie** : le filtre correspondant reste
     donc vide (la carte le masque automatiquement).
   - ⚠️ **Le classeur peut se contredire lui-même.** Seules les lignes COULEUR alimentent le
     tableau ; le sous-total produit sert de **contrôle**. *Cas réel « Lancement de commande
     S27 DO » : `SMPT5P_C001` annonce **341** alors que ses coloris totalisent **410** — une
     ligne « 752 Bleu marine 69 » y figure sans lui appartenir, et le CSV de la même commande
-    confirme 341 sur trois coloris.* L'écart est **remonté à l'écran**, jamais corrigé en
-    silence : c'est au métier de trancher.
+    confirme 341 sur trois coloris. La colonne `total` du fichier l'exclut d'ailleurs déjà :
+    elle vaut 70 (le site seul) et non 139.* L'écart est **remonté à l'écran**, jamais
+    corrigé en silence : c'est au métier de trancher.
   - ⚠️ **Les deux sources ne donnent pas exactement les mêmes quantités** (43 217 pièces pour
     le classeur contre 43 597 pour le CSV, mêmes 186 produits) : elles sont extraites à des
     moments différents. Choisir sa source, pas mélanger.

@@ -101,7 +101,9 @@ export function RecoupementCard() {
         const res = parseLancementWorkbook(sheets);
         parsed = res.rows;
         issues = res.mismatches;
-        label = `Lancement de commande — ${wb.SheetNames.length} onglet(s)`;
+        // On DIT quelle colonne a été lue : « commandé » et « total » ne donnent pas du
+        // tout les mêmes volumes, et le fichier porte les deux.
+        label = `Lancement de commande — ${wb.SheetNames.length} onglet(s) · colonne « ${res.quantityColumn} »`;
       }
 
       if (parsed.length === 0) {
@@ -268,8 +270,9 @@ export function RecoupementCard() {
                 ))}
                 {mismatches.length > 5 && <p>… et {mismatches.length - 5} autre(s).</p>}
                 <p className="pt-0.5">
-                  Le tableau reprend les <strong>coloris</strong> tels quels : à vérifier
-                  dans le fichier d&apos;origine.
+                  Écart constaté sur les quantités <strong>commandées</strong> — le tableau,
+                  lui, reprend la colonne <strong>total</strong> du fichier. À vérifier dans
+                  le fichier d&apos;origine.
                 </p>
               </div>
             )}

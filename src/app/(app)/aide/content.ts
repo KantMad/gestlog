@@ -1019,6 +1019,7 @@ export const HELP_THEMES: HelpTheme[] = [
               "Dans un classeur **Lancement de commande**, chaque produit porte un sous-total, suivi du détail de ses coloris. Quand les deux ne collent pas, GestLog te le **signale en orange** avec l'écart exact.",
               "Le tableau reprend alors les **coloris** tels quels et ne corrige rien : c'est à toi de vérifier le fichier d'origine.",
               "⚠️ Le classeur ne porte pas la **sous-catégorie** : ce filtre n'apparaît qu'avec le CSV.",
+              "⚠️ Le classeur contient quatre colonnes de quantité : **commandé**, **site**, **réa** et **total**. GestLog lit le **total** (la commande finale) et te l'affiche à côté du nom du fichier.",
             ],
           },
           {
