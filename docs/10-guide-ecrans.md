@@ -662,9 +662,27 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
   **Comparaison** xlsx. Sélecteur de réceptions (recherche fournisseur). Liens vers les exports
   contextuels (répartition, comparaison saisons, magasin, livraisons).
 - **Recoupement modèle × couleurs** (`/api` : aucun — `src/lib/recoupement.ts`, testé ;
-  `components/export/recoupement-card.tsx`) : transforme l'export CSV **« commandes à la
-  couleur »** en **tableau croisé** — une ligne par modèle, une colonne par couleur, un
-  total par modèle (`Total Modèle`) et par couleur (`Total Couleurs`).
+  `components/export/recoupement-card.tsx`) : produit un **tableau croisé** — une ligne par
+  modèle, une colonne par couleur, un total par modèle (`Total Modèle`) et par couleur
+  (`Total Couleurs`).
+  - **Deux formats d'entrée**, reconnus à l'extension :
+    1. l'export CSV **« commandes à la couleur »** (une ligne = commande × produit × coloris) ;
+    2. le classeur **« Lancement de commande »** (xlsx) : **un onglet par catégorie**, chacun
+       portant un tableau hiérarchique — total de catégorie, puis pour chaque produit une
+       ligne de sous-total suivie de ses coloris. Le **nom d'onglet fait la catégorie** ; une
+       ligne produit est reconnue à sa référence (`SMPTCH_C001 …`), tout ce qui la suit est
+       un coloris jusqu'au produit suivant.
+  - ⚠️ Ce second format **ne porte pas la sous-catégorie** : le filtre correspondant reste
+    donc vide (la carte le masque automatiquement).
+  - ⚠️ **Le classeur peut se contredire lui-même.** Seules les lignes COULEUR alimentent le
+    tableau ; le sous-total produit sert de **contrôle**. *Cas réel « Lancement de commande
+    S27 DO » : `SMPT5P_C001` annonce **341** alors que ses coloris totalisent **410** — une
+    ligne « 752 Bleu marine 69 » y figure sans lui appartenir, et le CSV de la même commande
+    confirme 341 sur trois coloris.* L'écart est **remonté à l'écran**, jamais corrigé en
+    silence : c'est au métier de trancher.
+  - ⚠️ **Les deux sources ne donnent pas exactement les mêmes quantités** (43 217 pièces pour
+    le classeur contre 43 597 pour le CSV, mêmes 186 produits) : elles sont extraites à des
+    moments différents. Choisir sa source, pas mélanger.
   - **100 % local** : le fichier est lu dans le navigateur, rien n'est envoyé au serveur ni
     écrit en base. La carte ne dépend donc d'aucune saison.
   - Filtres : **catégories**, **sous-catégories** (elles suivent les catégories cochées) et

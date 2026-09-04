@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   splitCsvLine, parseColorOrdersCsv, filterRows, buildCrossTable, crossTableToAoa,
-  ROW_HEADER, type ColorOrderRow,
+  ROW_HEADER, parseLancementWorkbook, type ColorOrderRow,
 } from "./recoupement";
 
 const HEADER =
@@ -139,5 +139,97 @@ describe("crossTableToAoa", () => {
 
   it("chaque ligne a autant de cellules que l'en-tête", () => {
     for (const r of aoa.slice(2)) expect(r).toHaveLength(aoa[2].length);
+  });
+});
+
+describe("parseLancementWorkbook — classeur multi-onglets", () => {
+  const HEAD = ["Étiquettes de lignes", "S", "M", "Somme de Quantity"];
+  const sheets = {
+    Pantalons: [
+      HEAD,
+      ["Pantalons", 10, 20, 60],
+      ["SMPTCH_C001 Pantalon chino", 6, 12, 40],
+      ["752 Bleu marine", 4, 8, 25],
+      ["005 Sable", 2, 4, 15],
+      ["SMPT5P_C002 Pantalon 5 poches", 4, 8, 20],
+      ["005 Sable", 4, 8, 20],
+    ],
+    Bermudas: [
+      HEAD,
+      ["Bermudas", 1, 1, 5],
+      ["SMSHCH_C003 Bermuda chino", 1, 1, 5],
+      ["819 Vert sauge", 1, 1, 5],
+    ],
+  };
+  const { rows, mismatches } = parseLancementWorkbook(sheets);
+
+  it("prend le nom d'onglet comme catégorie", () => {
+    expect([...new Set(rows.map((r) => r.category))]).toEqual(["Pantalons", "Bermudas"]);
+  });
+
+  it("rattache chaque coloris au produit qui le précède", () => {
+    expect(rows.filter((r) => r.reference === "SMPTCH_C001").map((r) => r.colorCode))
+      .toEqual(["752", "005"]);
+    expect(rows.find((r) => r.reference === "SMPT5P_C002")!.colorCode).toBe("005");
+  });
+
+  it("découpe le libellé en code et nom de couleur", () => {
+    expect(rows[0]).toMatchObject({
+      reference: "SMPTCH_C001",
+      productName: "Pantalon chino",
+      colorCode: "752",
+      colorName: "Bleu marine",
+      quantity: 25,
+    });
+  });
+
+  it("ignore la ligne de total de la catégorie", () => {
+    expect(rows.reduce((s, r) => s + r.quantity, 0)).toBe(65);
+  });
+
+  it("ne renseigne PAS la sous-catégorie — ce format ne la porte pas", () => {
+    expect(rows.every((r) => r.subCategory === "")).toBe(true);
+  });
+
+  it("ne signale aucun écart quand le fichier est cohérent", () => {
+    expect(mismatches).toEqual([]);
+  });
+
+  it("SIGNALE un sous-total produit qui ne colle pas à ses coloris", () => {
+    // Cas réel SMPT5P_C001 : la ligne produit annonce 341, ses coloris totalisent 410.
+    const r = parseLancementWorkbook({
+      Pantalons: [
+        HEAD,
+        ["Pantalons", 0, 0, 341],
+        ["SMPT5P_C001 Pantalon 5 poches", 0, 0, 341],
+        ["752 Bleu marine", 0, 0, 69],
+        ["005 Sable", 0, 0, 192],
+        ["819 Vert sauge", 0, 0, 128],
+        ["210 Ecureuil", 0, 0, 21],
+      ],
+    });
+    expect(r.mismatches).toEqual([
+      {
+        category: "Pantalons",
+        reference: "SMPT5P_C001",
+        productName: "Pantalon 5 poches",
+        subtotal: 341,
+        colorsTotal: 410,
+      },
+    ]);
+    // Les lignes sont CONSERVÉES telles quelles : on signale, on ne corrige pas.
+    expect(r.rows.reduce((s, x) => s + x.quantity, 0)).toBe(410);
+  });
+
+  it("ignore un onglet sans colonne de quantité", () => {
+    expect(parseLancementWorkbook({ Vide: [["a", "b"], ["x", 1]] }).rows).toEqual([]);
+  });
+
+  it("alimente le même tableau croisé que le CSV", () => {
+    const t = buildCrossTable(rows);
+    expect(t.grandTotal).toBe(65);
+    expect(t.rows.map((r) => r.reference)).toEqual([
+      "SMPTCH_C001", "SMPT5P_C002", "SMSHCH_C003",
+    ]);
   });
 });

@@ -9,8 +9,8 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
 import {
-  parseColorOrdersCsv, filterRows, buildCrossTable, crossTableToAoa,
-  type ColorOrderRow,
+  parseColorOrdersCsv, parseLancementWorkbook, filterRows, buildCrossTable, crossTableToAoa,
+  type ColorOrderRow, type SheetGrids, type SubtotalMismatch,
 } from "@/lib/recoupement";
 
 /** Sélecteur multiple compact (catégories / sous-catégories). */
@@ -66,6 +66,9 @@ function Chips({
 export function RecoupementCard() {
   const [fileName, setFileName] = useState("");
   const [rows, setRows] = useState<ColorOrderRow[]>([]);
+  const [source, setSource] = useState("");
+  // Incohérences internes au fichier déposé — signalées, jamais corrigées en douce.
+  const [mismatches, setMismatches] = useState<SubtotalMismatch[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
   const [subCategories, setSubCategories] = useState<string[]>([]);
   const [search, setSearch] = useState("");
@@ -75,14 +78,44 @@ export function RecoupementCard() {
   const readFile = async (file: File) => {
     setReading(true);
     try {
-      const parsed = parseColorOrdersCsv(await file.text());
+      // Deux formats acceptés, reconnus à l'extension : l'export CSV « commandes à la
+      // couleur » et le classeur « Lancement de commande » (un onglet par catégorie).
+      const isCsv = /\.csv$/i.test(file.name);
+      let parsed: ColorOrderRow[] = [];
+      let issues: SubtotalMismatch[] = [];
+      let label = "";
+
+      if (isCsv) {
+        parsed = parseColorOrdersCsv(await file.text());
+        label = "Export commandes à la couleur (CSV)";
+      } else {
+        const wb = XLSX.read(await file.arrayBuffer(), { type: "array" });
+        const sheets: SheetGrids = {};
+        for (const name of wb.SheetNames) {
+          sheets[name] = XLSX.utils.sheet_to_json(wb.Sheets[name], {
+            header: 1,
+            raw: true,
+            defval: null,
+          });
+        }
+        const res = parseLancementWorkbook(sheets);
+        parsed = res.rows;
+        issues = res.mismatches;
+        label = `Lancement de commande — ${wb.SheetNames.length} onglet(s)`;
+      }
+
       if (parsed.length === 0) {
         toast.error(
-          "Aucune ligne exploitable — le fichier doit contenir les colonnes « Référence produit », « Code couleur » et « Quantité à la couleur »."
+          isCsv
+            ? "Aucune ligne exploitable — le CSV doit contenir « Référence produit », « Code couleur » et « Quantité à la couleur »."
+            : "Aucune ligne exploitable — chaque onglet doit porter une colonne « Somme de Quantity » et des lignes produit puis coloris."
         );
         return;
       }
+
       setRows(parsed);
+      setMismatches(issues);
+      setSource(label);
       setFileName(file.name);
       setCategories([]);
       setSubCategories([]);
@@ -148,6 +181,8 @@ export function RecoupementCard() {
   const reset = () => {
     setRows([]);
     setFileName("");
+    setSource("");
+    setMismatches([]);
     setCategories([]);
     setSubCategories([]);
     setSearch("");
@@ -164,7 +199,8 @@ export function RecoupementCard() {
       </CardHeader>
       <CardContent className="space-y-4">
         <p className="text-sm text-muted-foreground">
-          Dépose l&apos;export <strong>commandes à la couleur</strong> (CSV) : GestLog le
+          Dépose l&apos;export <strong>commandes à la couleur</strong> (CSV) ou un classeur{" "}
+          <strong>Lancement de commande</strong> (xlsx, un onglet par catégorie) : GestLog le
           transforme en <strong>tableau croisé</strong> — une ligne par modèle, une colonne
           par couleur, avec le total par modèle et par couleur. Filtrable par catégorie ou
           par produit.
@@ -182,14 +218,14 @@ export function RecoupementCard() {
             ) : (
               <Upload className="h-5 w-5 text-muted-foreground" />
             )}
-            <span className="text-sm font-medium">Choisir le fichier CSV</span>
+            <span className="text-sm font-medium">Choisir un fichier</span>
             <span className="text-xs text-muted-foreground">
-              export « commandes à la couleur »
+              CSV « commandes à la couleur » ou xlsx « Lancement de commande »
             </span>
             <input
               ref={inputRef}
               type="file"
-              accept=".csv,text/csv"
+              accept=".csv,text/csv,.xlsx,.xls"
               className="hidden"
               onChange={(e) => {
                 const f = e.target.files?.[0];
@@ -202,7 +238,8 @@ export function RecoupementCard() {
             <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2 text-sm">
               <span className="font-medium">{fileName}</span>
               <span className="text-muted-foreground">
-                {rows.length} lignes · {rows.reduce((s, r) => s + r.quantity, 0)} pièces
+                {source} · {rows.length} lignes ·{" "}
+                {rows.reduce((s, r) => s + r.quantity, 0)} pièces
               </span>
               <button
                 type="button"
@@ -213,6 +250,29 @@ export function RecoupementCard() {
                 Changer de fichier
               </button>
             </div>
+
+            {/* ⚠️ Le fichier peut se contredire lui-même : on le DIT, on ne rattrape rien
+                en silence. Les coloris sont conservés tels quels. */}
+            {mismatches.length > 0 && (
+              <div className="space-y-1 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+                <p className="font-medium">
+                  {mismatches.length} produit(s) dont le sous-total ne correspond pas à ses
+                  coloris
+                </p>
+                {mismatches.slice(0, 5).map((m) => (
+                  <p key={`${m.category}-${m.reference}`}>
+                    <span className="font-mono">{m.reference}</span> {m.productName} —
+                    sous-total <strong>{m.subtotal}</strong>, somme des coloris{" "}
+                    <strong>{m.colorsTotal}</strong> (écart {m.colorsTotal - m.subtotal})
+                  </p>
+                ))}
+                {mismatches.length > 5 && <p>… et {mismatches.length - 5} autre(s).</p>}
+                <p className="pt-0.5">
+                  Le tableau reprend les <strong>coloris</strong> tels quels : à vérifier
+                  dans le fichier d&apos;origine.
+                </p>
+              </div>
+            )}
 
             <Chips
               label="Catégories"

@@ -1008,10 +1008,18 @@ export const HELP_THEMES: HelpTheme[] = [
         sections: [
           {
             lines: [
-              "Dans **Exports**, dépose l'export **commandes à la couleur** (CSV) : GestLog le retourne en **tableau croisé**.",
+              "Dans **Exports**, dépose soit l'export **commandes à la couleur** (CSV), soit un classeur **Lancement de commande** (xlsx, un onglet par catégorie) : GestLog te retourne un **tableau croisé**.",
               "Une **ligne par modèle**, une **colonne par couleur**, le **Total Modèle** au bout de chaque ligne et le **Total Couleurs** en bas.",
             ],
             tip: "Tout se passe dans ton navigateur : le fichier n'est ni envoyé ni enregistré. Aucune saison à choisir. 🔒",
+          },
+          {
+            h: "Si le fichier se contredit",
+            lines: [
+              "Dans un classeur **Lancement de commande**, chaque produit porte un sous-total, suivi du détail de ses coloris. Quand les deux ne collent pas, GestLog te le **signale en orange** avec l'écart exact.",
+              "Le tableau reprend alors les **coloris** tels quels et ne corrige rien : c'est à toi de vérifier le fichier d'origine.",
+              "⚠️ Le classeur ne porte pas la **sous-catégorie** : ce filtre n'apparaît qu'avec le CSV.",
+            ],
           },
           {
             h: "Filtrer avant d'exporter",
