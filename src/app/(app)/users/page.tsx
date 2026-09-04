@@ -325,7 +325,9 @@ export default function UsersPage() {
                 <Plus className="h-4 w-4" />
                 Ajouter un utilisateur
               </DialogTrigger>
-              <DialogContent>
+              {/* `sm:max-w-lg` : la grille des écrans est à deux colonnes, elle étouffe
+                  dans la largeur par défaut. Le défilement est géré par DialogContent. */}
+              <DialogContent className="sm:max-w-lg">
                 <DialogHeader>
                   <DialogTitle>Nouvel utilisateur</DialogTitle>
                 </DialogHeader>
@@ -384,13 +386,17 @@ export default function UsersPage() {
                       onChange={setNewScreens}
                     />
                   )}
-                  <Button
-                    onClick={createUser}
-                    disabled={creating}
-                    className="w-full"
-                  >
-                    {creating ? "Création..." : "Créer le compte"}
-                  </Button>
+                  {/* Collé en bas : avec 23 écrans à cocher, le bouton se retrouvait
+                      hors de portée en bas de la liste sur téléphone. */}
+                  <div className="sticky bottom-0 -mx-4 -mb-4 border-t bg-popover px-4 py-3">
+                    <Button
+                      onClick={createUser}
+                      disabled={creating}
+                      className="w-full"
+                    >
+                      {creating ? "Création..." : "Créer le compte"}
+                    </Button>
+                  </div>
                 </div>
               </DialogContent>
             </Dialog>
@@ -530,7 +536,7 @@ export default function UsersPage() {
 
       {/* ─── Dialogue d'édition (rôle + accès écrans) ─── */}
       <Dialog open={!!editUser} onOpenChange={(o) => !o && setEditUser(null)}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>
               Modifier {editUser?.name}
@@ -580,13 +586,15 @@ export default function UsersPage() {
                 onChange={setEditScreens}
               />
             )}
-            <Button
-              onClick={saveEdit}
-              disabled={savingEdit}
-              className="w-full"
-            >
-              {savingEdit ? "Enregistrement..." : "Enregistrer"}
-            </Button>
+            <div className="sticky bottom-0 -mx-4 -mb-4 border-t bg-popover px-4 py-3">
+              <Button
+                onClick={saveEdit}
+                disabled={savingEdit}
+                className="w-full"
+              >
+                {savingEdit ? "Enregistrement..." : "Enregistrer"}
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

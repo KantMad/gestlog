@@ -753,6 +753,23 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
   Sécurité réelle = l'API (403), double garde côté client.
 - **Mon compte** : nom, code (4 chiffres), déconnexion. Auth : [`05-authentification.md`](05-authentification.md).
 
+- 🔴 **Dialogues illisibles sur téléphone (corrigé).** `DialogContent` (et
+  `AlertDialogContent`) n'avaient **ni hauteur maximale ni défilement** : centrés en
+  `top-1/2 -translate-y-1/2`, ils débordaient en haut **et** en bas dès que leur contenu
+  dépassait l'écran, sans pouvoir défiler — le bas devenait inatteignable. C'est ce qui
+  rendait les **accès aux écrans** inutilisables sur mobile (23 cases réparties en groupes).
+  - Correctif dans les **composants de base**, donc valable pour tous les dialogues :
+    `max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain`.
+  - ⚠️ `dvh` et non `vh` : sur mobile la barre d'adresse mange une partie du `vh`, et le
+    bas du dialogue restait coupé.
+  - Les boutons **Créer le compte** / **Enregistrer** sont **collés en bas**
+    (`sticky bottom-0`) : sans cela il fallait dérouler toute la liste des écrans pour
+    valider. Les deux dialogues passent aussi en `sm:max-w-lg`, la grille d'écrans à deux
+    colonnes étouffant dans la largeur par défaut.
+  - Sans effet de bord sur les menus : `Select` et `Popover` s'affichent dans un **portail**,
+    ils ne sont donc pas rognés par le nouveau `overflow`. La table des utilisateurs, elle,
+    défile déjà horizontalement (le composant `Table` embarque son propre conteneur).
+
 ## Centre d'aide (`/aide`)
 - **Rôle** : documentation **utilisateur** in-app (recherche + thématiques + sous-thèmes),
   accessible à **tous** les connectés (comme `/account`, hors permissions d'écran). Contenu
