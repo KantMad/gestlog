@@ -25,9 +25,29 @@ export interface LancementCsvRow {
   sizeType: string;
   /** Quantités par position (T0..T11), longueur = nb de colonnes T présentes. */
   quantities: number[];
-  /** « Quantité à la couleur » du fichier (contrôle). */
+  /**
+   * « Quantité à la couleur » du fichier — la quantité FAISANT FOI.
+   * Elle peut dépasser la somme des positions : cf. `NO_SIZE`.
+   */
   totalQty: number;
+  /** « Statut de commande » du fichier : `validated`, `created`… (vide si absent). */
+  status: string;
 }
+
+/**
+ * Pseudo-taille recueillant les pièces commandées SANS ventilation par taille.
+ *
+ * ⚠️ L'export TIO porte des lignes dont la « Quantité à la couleur » est renseignée alors
+ * que toutes les positions T0..T12 sont à 0. *Cas réel du 04/09/2026 : 79 lignes,
+ * 449 pièces, portées par deux commandes (Les Jules Tahiti, BRANDS CORNER).* Les ignorer
+ * faisait mentir le total du lancement — `SMCHML_C025` sortait à 56 pièces là où le
+ * fichier en comptait 59. On les place donc dans une colonne à part : le lancement
+ * retombe sur le total du fichier, et l'acheteur voit ce qui reste à ventiler.
+ */
+export const NO_SIZE = "Sans taille";
+
+/** Statut d'une commande validée dans l'export TIO. */
+export const STATUS_VALIDATED = "validated";
 
 export type LancementLineKind = "category" | "product" | "color";
 
@@ -109,6 +129,7 @@ export function parseLancementCsv(text: string): LancementCsvRow[] {
   const cColorName = col("Nom de la couleur");
   const cSizeType = col("Type de taille");
   const cQty = col("Quantité à la couleur", "Quantite a la couleur");
+  const cStatus = col("Statut de commande", "Statut commande");
   if (cRef < 0) return []; // pas le bon fichier
 
   // Colonnes T0..T11, dans l'ordre des positions.
@@ -129,7 +150,11 @@ export function parseLancementCsv(text: string): LancementCsvRow[] {
       const idx = tCols[i];
       quantities[i] = idx === undefined ? 0 : toInt(cells[idx] || "");
     }
-    if (quantities.every((q) => q <= 0)) continue;
+    const totalQty = cQty >= 0 ? toInt(cells[cQty] || "") : 0;
+    // ⚠️ Une ligne sans AUCUNE taille mais avec une quantité couleur est CONSERVÉE :
+    // ce sont des pièces réellement commandées (cf. NO_SIZE). Seules les lignes
+    // entièrement vides sont ignorées.
+    if (quantities.every((q) => q <= 0) && totalQty <= 0) continue;
 
     out.push({
       reference,
@@ -139,7 +164,8 @@ export function parseLancementCsv(text: string): LancementCsvRow[] {
       colorName: cColorName >= 0 ? norm(cells[cColorName] || "") : "",
       sizeType: cSizeType >= 0 ? norm(cells[cSizeType] || "") : "",
       quantities,
-      totalQty: cQty >= 0 ? toInt(cells[cQty] || "") : 0,
+      totalQty,
+      status: cStatus >= 0 ? norm(cells[cStatus] || "") : "",
     });
   }
   return out;
@@ -184,6 +210,8 @@ export function buildLancementSheets(
   const warnings: string[] = [];
   const missingScale = new Set<string>();
   const shortScale = new Set<string>();
+  let unsizedPieces = 0;
+  const unsizedRefs = new Set<string>();
 
   // Grilles nettoyées (dédoublonnées + remises dans l'ordre d'habillage) : le
   // référentiel en contient de désordonnées et de doublonnées, cf. sortSizeScale.
@@ -241,6 +269,7 @@ export function buildLancementSheets(
       product.colors.set(ckey, color);
     }
 
+    let placed = 0;
     for (let pos = 0; pos < row.quantities.length; pos++) {
       const qty = row.quantities[pos];
       if (qty <= 0) continue;
@@ -249,12 +278,28 @@ export function buildLancementSheets(
       addTo(product.bySize, size, qty);
       color.total += qty;
       product.total += qty;
+      placed += qty;
+    }
+
+    // Reliquat non ventilé : la quantité couleur fait foi (cf. NO_SIZE).
+    const unsized = row.totalQty - placed;
+    if (unsized > 0) {
+      addTo(color.bySize, NO_SIZE, unsized);
+      addTo(product.bySize, NO_SIZE, unsized);
+      color.total += unsized;
+      product.total += unsized;
+      unsizedPieces += unsized;
+      unsizedRefs.add(row.reference);
     }
   }
 
   if (missingScale.size > 0)
     warnings.push(
       `${missingScale.size} référence(s) introuvable(s) au référentiel — tailles nommées T0, T1… : ${[...missingScale].slice(0, 5).join(", ")}${missingScale.size > 5 ? "…" : ""}`
+    );
+  if (unsizedPieces > 0)
+    warnings.push(
+      `${unsizedPieces} pièce(s) commandée(s) sans ventilation par taille dans le fichier — placées en colonne « ${NO_SIZE} » sur ${unsizedRefs.size} référence(s) : ${[...unsizedRefs].slice(0, 5).join(", ")}${unsizedRefs.size > 5 ? "…" : ""}`
     );
   if (shortScale.size > 0)
     warnings.push(
@@ -268,8 +313,12 @@ export function buildLancementSheets(
     // Tailles réellement utilisées, dans l'ordre — une colonne vide n'a pas d'intérêt.
     const used = new Set<string>();
     for (const p of sorted) for (const s of Object.keys(p.bySize)) used.add(s);
+    const hasUnsized = used.delete(NO_SIZE);
     const cols = sizes.filter((s) => used.has(s));
     for (const s of used) if (!cols.includes(s)) cols.push(s); // tailles hors grille (T{i}…)
+    // « Sans taille » reste en DERNIÈRE colonne : ce n'est pas une taille de la grille,
+    // elle ne doit pas s'intercaler dans la courbe.
+    if (hasUnsized) cols.push(NO_SIZE);
 
     const catTotals: Record<string, number> = {};
     let catTotal = 0;
@@ -306,4 +355,41 @@ export function safeSheetName(name: string, taken: Set<string>): string {
   }
   taken.add(candidate.toLowerCase());
   return candidate;
+}
+
+// ─── Statut des commandes ────────────────────────────────────────────────────
+// L'export TIO mélange les commandes VALIDÉES et les paniers encore au statut
+// `created`.
+//
+// ⚠️ Un panier non validé peut encore changer, ou DISPARAÎTRE. *Cas réel : entre les
+// exports du 03 et du 04/09/2026, la commande `PO-754287027085` (MCS Saint-Germain-des-
+// Prés, statut `created`, 14 pièces) s'est volatilisée — à elle seule elle expliquait
+// l'écart constaté sur `SMCHML_C025`.* On n'exclut rien d'office (lancer sur les paniers
+// en cours est un choix légitime), mais l'écran affiche le poids de chaque statut et
+// permet de s'en tenir aux commandes validées.
+
+/** Pièces commandées par statut (quantité à la couleur), statuts les plus gros d'abord. */
+export function countByStatus(rows: LancementCsvRow[]): { status: string; pieces: number; lines: number }[] {
+  const map = new Map<string, { pieces: number; lines: number }>();
+  for (const r of rows) {
+    const key = r.status || "—";
+    const cur = map.get(key) ?? { pieces: 0, lines: 0 };
+    cur.pieces += r.totalQty;
+    cur.lines += 1;
+    map.set(key, cur);
+  }
+  return [...map.entries()]
+    .map(([status, v]) => ({ status, ...v }))
+    .sort((a, b) => b.pieces - a.pieces || a.status.localeCompare(b.status, "fr"));
+}
+
+/** Ne conserve que les commandes validées. Un fichier sans colonne statut est rendu tel quel. */
+export function keepValidatedOnly(rows: LancementCsvRow[]): LancementCsvRow[] {
+  if (!rows.some((r) => r.status)) return rows;
+  return rows.filter((r) => r.status.toLowerCase() === STATUS_VALIDATED);
+}
+
+/** Total des pièces du fichier (quantité à la couleur) — repère de contrôle. */
+export function countPieces(rows: LancementCsvRow[]): number {
+  return rows.reduce((s, r) => s + r.totalQty, 0);
 }

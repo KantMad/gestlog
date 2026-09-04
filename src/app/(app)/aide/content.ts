@@ -1271,7 +1271,7 @@ export const HELP_THEMES: HelpTheme[] = [
         id: "lancement-commande",
         icon: "🚀",
         title: "Lancement de commande",
-        keywords: "lancement commande csv couleur categorie onglet taille rea site total achat tcd",
+        keywords: "lancement commande csv couleur categorie onglet taille rea site total achat tcd sans taille statut validated created panier ecart",
         screen: "/lancement-commande",
         sections: [
           {
@@ -1308,6 +1308,23 @@ export const HELP_THEMES: HelpTheme[] = [
               "Si une référence est **introuvable au référentiel**, l'écran te le signale et laisse ses colonnes nommées `T0`, `T1`… : **aucune pièce n'est perdue**, mais les tailles ne sont pas nommées.",
             ],
             tip: "Une référence signalée = un produit pas encore synchronisé depuis TIO. Vérifie l'écran **Infos produits**. 🔎",
+          },
+          {
+            h: "Vérifier que le total est le bon",
+            lines: [
+              "En haut de l'écran, **« Pièces commandées »** (ce qui part dans le classeur) est affiché à côté de **« Pièces dans le fichier »**. Les deux doivent être **identiques** — sinon la carte passe en **rouge** et affiche l'écart.",
+              "Certaines lignes du CSV portent une quantité **sans aucune taille**. Elles ne sont pas perdues : elles vont dans une colonne **« Sans taille »**, placée en **dernier** dans l'onglet. À toi de les ventiler dans Excel.",
+              "Le classeur généré contient une dernière feuille **« Source »** : le fichier d'origine, la date et l'heure de génération, et le détail des totaux.",
+            ],
+            tip: "Si un modèle te paraît trop gros, regarde d'abord la **date de génération** dans la feuille Source : le classeur vient peut-être d'un export plus ancien. 🕒",
+          },
+          {
+            h: "Commandes validées ou paniers en cours ?",
+            lines: [
+              "L'export TIO contient les commandes **validées** *et* les paniers encore au statut **`created`**. L'écran affiche le poids de chacun en pièces.",
+              "⚠️ Un panier `created` **n'est pas figé** : il peut changer de quantité, ou **disparaître** d'un export à l'autre. C'est la cause la plus fréquente d'un total qui « bouge » entre deux lancements.",
+              "L'interrupteur **« Ne garder que les commandes validées »** relance le calcul immédiatement, sans recharger le fichier.",
+            ],
           },
         ],
       },

@@ -530,6 +530,30 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
   **vert** `92D050` (total général) ; cellules `% réa` en **cyan** `00B0F0`.
 - **Écrit avec `exceljs`** (et non `xlsx`) : c'est la seule des deux à écrire **couleurs ET
   formules**. Chargée en **import dynamique** pour ne pas alourdir le reste de l'app.
+- 🔴 **Colonne « Sans taille » — le total du lancement doit égaler celui du fichier.**
+  L'export TIO porte des lignes dont la **« Quantité à la couleur » est renseignée alors que
+  toutes les positions `T0..T12` sont à 0**. *Relevé du 04/09/2026 : **79 lignes, 449 pièces**
+  (1 % du volume), portées par deux commandes (Les Jules Tahiti, BRANDS CORNER), sur
+  34 références.* Elles étaient **purement ignorées** — `SMCHML_C025` sortait à **56 pièces**
+  là où le fichier en comptait **59**. Ces pièces sont désormais placées dans une colonne
+  **`Sans taille`**, toujours en **dernière position** (ce n'est pas une taille de la grille,
+  elle ne doit pas s'intercaler dans la courbe) et **créée seulement si nécessaire**. La
+  quantité qui fait foi est **la quantité à la couleur**, comme dans l'écran Recoupement —
+  les deux écrans donnent maintenant le même total sur le même fichier (**43 423** pièces).
+  L'écran affiche « Pièces dans le fichier » à côté de « Pièces commandées » : **tout écart
+  passe en rouge**.
+- 🔴 **Statut des commandes : l'export mélange `validated` et `created`.** Un `created` est un
+  **panier non figé** — il peut changer, ou **disparaître**. *Cas réel : entre les exports du
+  03 et du 04/09/2026, `PO-754287027085` (MCS Saint-Germain-des-Prés, `created`, **14 pièces**)
+  s'est volatilisée ; à elle seule elle expliquait l'écart constaté sur `SMCHML_C025`.*
+  Rien n'est exclu d'office (lancer sur les paniers en cours est un choix légitime, et ils
+  pèsent **4 547 pièces sur 43 423**), mais l'écran affiche le **poids de chaque statut** et
+  propose **« Ne garder que les commandes validées »** — le filtre se rejoue sans recharger.
+- **Traçabilité** : le classeur porte une dernière feuille **`Source`** (fichier d'origine,
+  date et heure de génération, pièces du fichier / du lancement / sans taille, filtre de
+  statut appliqué), et le nom du fichier est **horodaté à la minute** (`fileStamp`). Deux
+  lancements bâtis sur le même CSV ne se recouvrent plus. La feuille `Source` ne porte pas de
+  colonne de quantité : la relecture par l'écran Recoupement l'**ignore d'elle-même**.
 
 ## À vendre (`/a-vendre`)
 - **Rôle** : repérer le **stock à écouler en priorité** — quels produits-couleurs sont
@@ -678,6 +702,11 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
     finale. C'est lui qui est lu (repli sur le commandé si le bloc manque), et l'écran
     **affiche la colonne retenue**. *Lire le commandé donnait 5 601 pièces sur Pantalons
     au lieu de 6 836, et 2 847 sur Bermudas au lieu de 3 513.*
+  - 🔴 **Repli AUSSI quand le bloc `total` est présent mais VIDE.** Dans le classeur produit
+    par l'écran **Lancement de commande**, ce bloc est une **formule Excel** : tant que le
+    fichier n'a pas été ouvert puis enregistré par Excel, **aucune valeur n'est mise en
+    cache**. Le lire donnait alors un tableau **entièrement vide, sans un mot**. On teste
+    donc que la colonne porte au moins une valeur avant de la retenir.
   - ⚠️ Le **contrôle de cohérence** porte, lui, sur le bloc **commandé** : c'est le seul où
     les lignes produit portent un sous-total (les autres blocs n'existent que sur les
     coloris). Contrôler sur le total ferait apparaître un écart sur *chaque* produit.

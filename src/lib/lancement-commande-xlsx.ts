@@ -68,9 +68,32 @@ export function colLetter(index: number): string {
   return out;
 }
 
+/**
+ * Traçabilité du classeur : d'où viennent les chiffres.
+ *
+ * ⚠️ Deux exports TIO pris à quelques heures d'intervalle ne donnent PAS le même
+ * lancement (un panier non validé peut disparaître). Sans cette feuille, un classeur
+ * ouvert la semaine suivante ne dit plus sur quel extrait il a été bâti.
+ */
+export interface LancementSource {
+  /** Nom du fichier CSV chargé. */
+  fileName: string;
+  /** Date et heure de génération, déjà mise en forme. */
+  generatedAt: string;
+  /** Pièces du fichier (quantité à la couleur). */
+  filePieces: number;
+  /** Pièces reprises dans les onglets. */
+  sheetPieces: number;
+  /** Dont pièces sans ventilation par taille. */
+  unsizedPieces: number;
+  /** Filtre de statut appliqué, en clair. */
+  statusFilter: string;
+}
+
 export function buildLancementWorkbook(
   ExcelJSLib: typeof ExcelJS,
-  sheets: LancementSheet[]
+  sheets: LancementSheet[],
+  source?: LancementSource
 ): ExcelJS.Workbook {
   const wb = new ExcelJSLib.Workbook();
   wb.creator = "GestLog";
@@ -137,6 +160,26 @@ export function buildLancementWorkbook(
     ws.getColumn(1).width = 52;
     for (let c = 2; c <= L.totalTotal; c++) ws.getColumn(c).width = 11;
     ws.views = [{ state: "frozen", xSplit: 1, ySplit: 1 }];
+  }
+
+  // Feuille de traçabilité, en dernier. Elle ne porte pas les colonnes de quantité :
+  // la relecture du classeur (écran Recoupement) l'ignore donc d'elle-même.
+  if (source) {
+    const ws = wb.addWorksheet(safeSheetName("Source", taken));
+    const lines: [string, string | number][] = [
+      ["Fichier source", source.fileName],
+      ["Généré le", source.generatedAt],
+      ["Commandes retenues", source.statusFilter],
+      ["Pièces du fichier", source.filePieces],
+      ["Pièces dans le lancement", source.sheetPieces],
+      ["dont sans ventilation par taille", source.unsizedPieces],
+    ];
+    for (const [label, value] of lines) {
+      const row = ws.addRow([label, value]);
+      row.getCell(1).font = { bold: true };
+    }
+    ws.getColumn(1).width = 34;
+    ws.getColumn(2).width = 60;
   }
 
   return wb;

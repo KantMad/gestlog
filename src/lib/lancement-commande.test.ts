@@ -6,6 +6,10 @@ import {
   mergeSizeOrder,
   sortSizeScale,
   safeSheetName,
+  countByStatus,
+  countPieces,
+  keepValidatedOnly,
+  NO_SIZE,
 } from "./lancement-commande";
 import {
   buildLancementWorkbook,
@@ -202,5 +206,72 @@ describe("lancement de commande — classeur Excel", () => {
     expect(safeSheetName("Pièces à manches", taken)).toBe("Pièces à manches (2)");
     expect(safeSheetName("Cat/égorie: impossible*", taken)).toBe("Cat-égorie- impossible-");
     expect(safeSheetName("A".repeat(40), taken)).toHaveLength(31);
+  });
+});
+
+// ─── Pièces sans taille et statut de commande ────────────────────────────────
+// Reproduit deux travers de l'export TIO réel : une ligne dont la quantité couleur est
+// renseignée sans aucune taille, et des paniers encore au statut « created ».
+const CSV_REEL = [
+  "Numéro de commande;Statut de commande;Référence produit;Nom produit;Catégorie produit;Code couleur;Nom de la couleur;Type de taille;Quantité à la couleur;T0;T1;T2;T3",
+  '"PO-1";"validated";"SMCHML_C025";"Chemise rayée";"Chemise";"714";"Bleu ciel";"HAU";"10";"1";"3";"4";"2"',
+  // ⚠️ quantité couleur sans ventilation : c'est ce cas qui faisait mentir les totaux
+  '"PO-2";"validated";"SMCHML_C025";"Chemise rayée";"Chemise";"714";"Bleu ciel";"HAU";"3";"0";"0";"0";"0"',
+  // panier non validé
+  '"PO-3";"created";"SMCHML_C025";"Chemise rayée";"Chemise";"714";"Bleu ciel";"HAU";"14";"2";"4";"5";"3"',
+  // ligne entièrement vide → ignorée
+  '"PO-4";"validated";"SMCHML_C025";"Chemise rayée";"Chemise";"999";"Noir";"HAU";"0";"0";"0";"0";"0"',
+].join("\n");
+
+const SCALE_CHEMISE = { SMCHML_C025: ["S", "M", "L", "XL"] };
+
+describe("lancement de commande — pièces sans taille", () => {
+  const rows = parseLancementCsv(CSV_REEL);
+
+  it("conserve une ligne sans taille mais rejette une ligne vide", () => {
+    expect(rows).toHaveLength(3);
+    expect(countPieces(rows)).toBe(27); // 10 + 3 + 14
+  });
+
+  it("le total du lancement retombe sur celui du fichier", () => {
+    const { sheets } = buildLancementSheets(rows, SCALE_CHEMISE);
+    expect(sheets.reduce((s, x) => s + x.total, 0)).toBe(countPieces(rows));
+  });
+
+  it("place les pièces non ventilées dans une colonne dédiée, en dernier", () => {
+    const { sheets, warnings } = buildLancementSheets(rows, SCALE_CHEMISE);
+    expect(sheets[0].sizes).toEqual(["S", "M", "L", "XL", NO_SIZE]);
+    const produit = sheets[0].lines.find((l) => l.kind === "product")!;
+    expect(produit.bySize[NO_SIZE]).toBe(3);
+    expect(produit.total).toBe(27);
+    expect(warnings.join(" ")).toContain("sans ventilation par taille");
+  });
+
+  it("n'invente pas de colonne quand tout est ventilé", () => {
+    const { sheets } = buildLancementSheets(parseLancementCsv(CSV), SCALES);
+    expect(sheets.every((s) => !s.sizes.includes(NO_SIZE))).toBe(true);
+  });
+});
+
+describe("lancement de commande — statut des commandes", () => {
+  const rows = parseLancementCsv(CSV_REEL);
+
+  it("compte les pièces par statut, le plus gros d'abord", () => {
+    expect(countByStatus(rows)).toEqual([
+      { status: "created", pieces: 14, lines: 1 },
+      { status: "validated", pieces: 13, lines: 2 },
+    ]);
+  });
+
+  it("ne garde que les commandes validées", () => {
+    const kept = keepValidatedOnly(rows);
+    expect(countPieces(kept)).toBe(13);
+    const { sheets } = buildLancementSheets(kept, SCALE_CHEMISE);
+    expect(sheets.reduce((s, x) => s + x.total, 0)).toBe(13);
+  });
+
+  it("laisse passer un fichier sans colonne de statut", () => {
+    const sansStatut = parseLancementCsv(CSV);
+    expect(keepValidatedOnly(sansStatut)).toHaveLength(sansStatut.length);
   });
 });

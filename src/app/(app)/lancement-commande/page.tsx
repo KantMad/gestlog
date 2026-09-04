@@ -1,11 +1,12 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Topbar } from "@/components/layout/topbar";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import {
   Table,
   TableBody,
@@ -21,21 +22,40 @@ import { cn, formatNumber } from "@/lib/utils";
 import {
   parseLancementCsv,
   buildLancementSheets,
-  type LancementSheet,
+  countByStatus,
+  countPieces,
+  keepValidatedOnly,
+  NO_SIZE,
+  type LancementCsvRow,
 } from "@/lib/lancement-commande";
 import { buildLancementWorkbook } from "@/lib/lancement-commande-xlsx";
+import { fileStamp } from "@/lib/file-stamp";
 
 export default function LancementCommandePage() {
   const [file, setFile] = useState<File | null>(null);
-  const [sheets, setSheets] = useState<LancementSheet[]>([]);
-  const [warnings, setWarnings] = useState<string[]>([]);
+  const [rows, setRows] = useState<LancementCsvRow[]>([]);
+  const [sizeScales, setSizeScales] = useState<Record<string, string[]>>({});
+  const [validatedOnly, setValidatedOnly] = useState(false);
   const [busy, setBusy] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Le filtre de statut se rejoue sur les lignes déjà lues : changer d'avis ne
+  // demande pas de recharger le fichier.
+  const kept = useMemo(
+    () => (validatedOnly ? keepValidatedOnly(rows) : rows),
+    [rows, validatedOnly]
+  );
+  const { sheets, warnings } = useMemo(
+    () => buildLancementSheets(kept, sizeScales),
+    [kept, sizeScales]
+  );
+  const statuses = useMemo(() => countByStatus(rows), [rows]);
+
   const reset = () => {
     setFile(null);
-    setSheets([]);
-    setWarnings([]);
+    setRows([]);
+    setSizeScales({});
+    setValidatedOnly(false);
     if (inputRef.current) inputRef.current.value = "";
   };
 
@@ -43,8 +63,8 @@ export default function LancementCommandePage() {
     setFile(f);
     setBusy(true);
     try {
-      const rows = parseLancementCsv(await f.text());
-      if (rows.length === 0) {
+      const parsed = parseLancementCsv(await f.text());
+      if (parsed.length === 0) {
         toast.error("Format non reconnu", {
           description:
             "Le fichier doit contenir « Référence produit », « Catégorie produit » et les colonnes T0…T11.",
@@ -54,8 +74,8 @@ export default function LancementCommandePage() {
       }
 
       // Grilles de tailles depuis le référentiel : T0 = 1re taille du produit.
-      const references = [...new Set(rows.map((r) => r.reference))];
-      let sizeScales: Record<string, string[]> = {};
+      const references = [...new Set(parsed.map((r) => r.reference))];
+      let scales: Record<string, string[]> = {};
       try {
         const res = await fetch("/api/lancement-commande", {
           method: "POST",
@@ -63,15 +83,16 @@ export default function LancementCommandePage() {
           body: JSON.stringify({ references }),
         });
         const data = await res.json();
-        if (res.ok) sizeScales = data.sizeScales || {};
+        if (res.ok) scales = data.sizeScales || {};
       } catch {
         /* référentiel indisponible → les tailles seront nommées T0, T1… (averti) */
       }
 
-      const built = buildLancementSheets(rows, sizeScales);
-      setSheets(built.sheets);
-      setWarnings(built.warnings);
-      toast.success(`${built.sheets.length} catégorie(s) — ${rows.length} lignes lues`);
+      setSizeScales(scales);
+      setRows(parsed);
+      toast.success(
+        `${parsed.length} lignes lues — ${formatNumber(countPieces(parsed))} pièces`
+      );
     } catch (e) {
       toast.error("Impossible de lire le fichier", { description: String(e) });
       reset();
@@ -87,7 +108,14 @@ export default function LancementCommandePage() {
       // exceljs (et non la lib xlsx) : seule à écrire couleurs ET formules.
       // Import dynamique → son poids ne pèse pas sur le reste de l'app.
       const ExcelJS = (await import("exceljs")).default;
-      const wb = buildLancementWorkbook(ExcelJS, sheets);
+      const wb = buildLancementWorkbook(ExcelJS, sheets, {
+        fileName: file?.name || "—",
+        generatedAt: new Date().toLocaleString("fr-FR"),
+        filePieces: countPieces(kept),
+        sheetPieces: totalPieces,
+        unsizedPieces: unsized,
+        statusFilter: validatedOnly ? "commandes validées uniquement" : "tous statuts",
+      });
 
       const buffer = await wb.xlsx.writeBuffer();
       const blob = new Blob([buffer], {
@@ -97,7 +125,9 @@ export default function LancementCommandePage() {
       const a = document.createElement("a");
       a.href = url;
       const base = (file?.name || "lancement").replace(/\.[^.]+$/, "");
-      a.download = `Lancement de commande - ${base}.xlsx`;
+      // Horodatage à la minute : deux lancements bâtis sur le même CSV ne doivent pas
+      // se recouvrir dans le dossier de téléchargement.
+      a.download = `Lancement de commande - ${base}_${fileStamp()}.xlsx`;
       a.click();
       URL.revokeObjectURL(url);
       toast.success("Fichier généré");
@@ -113,6 +143,13 @@ export default function LancementCommandePage() {
     (s, x) => s + x.lines.filter((l) => l.kind === "product").length,
     0
   );
+  // Pièces sans ventilation par taille, reprises de la colonne dédiée des onglets.
+  const unsized = sheets.reduce(
+    (s, x) =>
+      s + x.lines.filter((l) => l.kind === "product").reduce((n, l) => n + (l.bySize[NO_SIZE] ?? 0), 0),
+    0
+  );
+  const filePieces = countPieces(kept);
 
   return (
     <div>
@@ -184,7 +221,7 @@ export default function LancementCommandePage() {
 
         {sheets.length > 0 && (
           <>
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <Card>
                 <CardContent>
                   <div className="text-2xl font-bold">{sheets.length}</div>
@@ -203,7 +240,68 @@ export default function LancementCommandePage() {
                   <p className="text-sm text-muted-foreground">Pièces commandées</p>
                 </CardContent>
               </Card>
+              <Card className={cn(totalPieces !== filePieces && "border-red-300 bg-red-50/60")}>
+                <CardContent>
+                  <div className="text-2xl font-bold">{formatNumber(filePieces)}</div>
+                  <p className="text-sm text-muted-foreground">
+                    Pièces dans le fichier
+                    {totalPieces === filePieces ? (
+                      <span className="ml-1 text-emerald-600">· total identique</span>
+                    ) : (
+                      <span className="ml-1 font-medium text-red-700">
+                        · écart de {formatNumber(Math.abs(filePieces - totalPieces))}
+                      </span>
+                    )}
+                  </p>
+                </CardContent>
+              </Card>
             </div>
+
+            {/* Contrôle : d'où viennent les pièces, et ce qu'on garde. */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Contrôle du fichier</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex flex-wrap items-center gap-2 text-sm">
+                  {statuses.map((s) => (
+                    <Badge
+                      key={s.status}
+                      variant={s.status === "validated" ? "secondary" : "outline"}
+                      className="font-normal"
+                    >
+                      {s.status === "validated"
+                        ? "Commandes validées"
+                        : s.status === "created"
+                          ? "Paniers non validés (created)"
+                          : s.status}{" "}
+                      · {formatNumber(s.pieces)} pcs
+                    </Badge>
+                  ))}
+                  {unsized > 0 && (
+                    <Badge variant="outline" className="font-normal text-amber-700">
+                      Sans taille · {formatNumber(unsized)} pcs
+                    </Badge>
+                  )}
+                </div>
+
+                <div className="flex items-start justify-between gap-4 rounded-lg border p-3">
+                  <div>
+                    <p className="text-sm font-medium">
+                      Ne garder que les commandes validées
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      Un panier au statut « created » n&apos;est pas figé : il peut encore
+                      changer, ou disparaître d&apos;un export à l&apos;autre.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={validatedOnly}
+                    onCheckedChange={(v) => setValidatedOnly(Boolean(v))}
+                  />
+                </div>
+              </CardContent>
+            </Card>
 
             {warnings.length > 0 && (
               <Card className="border-amber-200 bg-amber-50/50">
