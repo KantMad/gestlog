@@ -1322,7 +1322,8 @@ export const HELP_THEMES: HelpTheme[] = [
             h: "Commandes validées ou paniers en cours ?",
             lines: [
               "L'export TIO contient les commandes **validées** *et* les paniers encore au statut **`created`**. L'écran affiche le poids de chacun en pièces.",
-              "⚠️ Un panier `created` **n'est pas figé** : il peut changer de quantité, ou **disparaître** d'un export à l'autre. C'est la cause la plus fréquente d'un total qui « bouge » entre deux lancements.",
+              "⚠️ Un panier `created` est **en cours de saisie** : la boutique y ajoute et en retire des lignes jusqu'à la validation. C'est la cause la plus fréquente d'un total qui « bouge » entre deux lancements.",
+              "Exemple vécu : une commande passée de 1 099 à 925 pièces en une nuit, en perdant 16 lignes au moment d'être validée. Les commandes validées, elles, ne bougent plus.",
               "L'interrupteur **« Ne garder que les commandes validées »** relance le calcul immédiatement, sans recharger le fichier.",
             ],
           },

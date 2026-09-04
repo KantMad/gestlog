@@ -361,12 +361,15 @@ export function safeSheetName(name: string, taken: Set<string>): string {
 // L'export TIO mélange les commandes VALIDÉES et les paniers encore au statut
 // `created`.
 //
-// ⚠️ Un panier non validé peut encore changer, ou DISPARAÎTRE. *Cas réel : entre les
-// exports du 03 et du 04/09/2026, la commande `PO-754287027085` (MCS Saint-Germain-des-
-// Prés, statut `created`, 14 pièces) s'est volatilisée — à elle seule elle expliquait
-// l'écart constaté sur `SMCHML_C025`.* On n'exclut rien d'office (lancer sur les paniers
-// en cours est un choix légitime), mais l'écran affiche le poids de chaque statut et
-// permet de s'en tenir aux commandes validées.
+// ⚠️ Un panier `created` est un panier EN COURS DE SAISIE : il change encore, ligne par
+// ligne. *Cas réel : `PO-754287027085` (MCS Saint-Germain-des-Prés) était `created` le
+// 03/09/2026 avec 1 099 pièces sur 79 lignes ; validée le 04/09, elle en porte 925 sur
+// 68 lignes — 16 lignes retirées, 5 ajoutées, dont les 14 pièces de `SMCHML_C025`. Un
+// lancement bâti la veille sur tous les statuts annonçait donc 73 pièces sur cette
+// référence, contre 59 en ne gardant que les commandes validées — soit le chiffre
+// définitif, connu 24 h à l'avance.* On n'exclut rien d'office (lancer sur les paniers en
+// cours est un choix légitime), mais l'écran affiche le poids de chaque statut et permet
+// de s'en tenir aux commandes validées.
 
 /** Pièces commandées par statut (quantité à la couleur), statuts les plus gros d'abord. */
 export function countByStatus(rows: LancementCsvRow[]): { status: string; pieces: number; lines: number }[] {

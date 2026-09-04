@@ -543,12 +543,15 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
   L'écran affiche « Pièces dans le fichier » à côté de « Pièces commandées » : **tout écart
   passe en rouge**.
 - 🔴 **Statut des commandes : l'export mélange `validated` et `created`.** Un `created` est un
-  **panier non figé** — il peut changer, ou **disparaître**. *Cas réel : entre les exports du
-  03 et du 04/09/2026, `PO-754287027085` (MCS Saint-Germain-des-Prés, `created`, **14 pièces**)
-  s'est volatilisée ; à elle seule elle expliquait l'écart constaté sur `SMCHML_C025`.*
-  Rien n'est exclu d'office (lancer sur les paniers en cours est un choix légitime, et ils
-  pèsent **4 547 pièces sur 43 423**), mais l'écran affiche le **poids de chaque statut** et
-  propose **« Ne garder que les commandes validées »** — le filtre se rejoue sans recharger.
+  panier **en cours de saisie** : il change encore, ligne par ligne. *Cas réel :
+  `PO-754287027085` (MCS Saint-Germain-des-Prés) était `created` le 03/09/2026 avec
+  **1 099 pièces sur 79 lignes** ; **validée** le 04/09, elle en porte **925 sur 68 lignes** —
+  16 lignes retirées, 5 ajoutées, dont les **14 pièces de `SMCHML_C025`**. Un lancement bâti
+  la veille sur tous les statuts annonçait **73** pièces sur cette référence, contre **59** en
+  ne gardant que les validées : le chiffre définitif, connu 24 h à l'avance.* Rien n'est exclu
+  d'office (lancer sur les paniers en cours est un choix légitime, et ils pèsent **4 547 pièces
+  sur 43 423**), mais l'écran affiche le **poids de chaque statut** et propose **« Ne garder que
+  les commandes validées »** — le filtre se rejoue sans recharger le fichier.
 - **Traçabilité** : le classeur porte une dernière feuille **`Source`** (fichier d'origine,
   date et heure de génération, pièces du fichier / du lancement / sans taille, filtre de
   statut appliqué), et le nom du fichier est **horodaté à la minute** (`fileStamp`). Deux
