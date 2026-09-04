@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   splitCsvLine, parseColorOrdersCsv, filterRows, buildCrossTable, crossTableToAoa,
-  ROW_HEADER, parseLancementWorkbook, type ColorOrderRow,
+  ROW_HEADER, parseLancementWorkbook, findOverlap, mergeSources, type ColorOrderRow,
 } from "./recoupement";
 
 const HEADER =
@@ -294,5 +294,55 @@ describe("parseLancementWorkbook — choix de la colonne de quantité", () => {
     ]);
     // Les quantités retenues sont bien les TOTAUX du fichier : 70 + 266 + 185 + 67.
     expect(r.rows.reduce((s, x) => s + x.quantity, 0)).toBe(588);
+  });
+});
+
+describe("cumul de plusieurs fichiers", () => {
+  const fileA: ColorOrderRow[] = [
+    { reference: "P1", productName: "Chino", category: "Pantalons", subCategory: "", colorCode: "752", colorName: "Bleu marine", quantity: 10 },
+    { reference: "P1", productName: "Chino", category: "Pantalons", subCategory: "", colorCode: "005", colorName: "Sable", quantity: 5 },
+  ];
+  const fileB: ColorOrderRow[] = [
+    { reference: "P1", productName: "Chino", category: "Pantalons", subCategory: "", colorCode: "752", colorName: "Bleu marine", quantity: 3 },
+    { reference: "B1", productName: "Bermuda", category: "Bermudas", subCategory: "", colorCode: "819", colorName: "Vert sauge", quantity: 7 },
+  ];
+
+  it("additionne la même (référence, couleur) venue de deux fichiers", () => {
+    const t = buildCrossTable(mergeSources([
+      { name: "a.csv", rows: fileA },
+      { name: "b.xlsx", rows: fileB },
+    ]));
+    expect(t.rows.find((r) => r.reference === "P1")!.cells["752"]).toBe(13);
+    expect(t.grandTotal).toBe(25);
+  });
+
+  it("fait apparaître les modèles présents dans un seul fichier", () => {
+    const t = buildCrossTable(mergeSources([
+      { name: "a", rows: fileA },
+      { name: "b", rows: fileB },
+    ]));
+    expect(t.rows.map((r) => r.reference).sort()).toEqual(["B1", "P1"]);
+  });
+
+  it("SIGNALE les références communes — un cumul de deux fois la même commande double tout", () => {
+    const o = findOverlap([
+      { name: "a", rows: fileA },
+      { name: "b", rows: fileB },
+    ]);
+    expect(o.references).toEqual(["P1"]);
+    // 10 + 5 côté A, 3 côté B
+    expect(o.pieces).toBe(18);
+  });
+
+  it("ne signale rien quand les fichiers ne se recouvrent pas", () => {
+    const o = findOverlap([
+      { name: "a", rows: fileA },
+      { name: "b", rows: fileB.filter((r) => r.reference === "B1") },
+    ]);
+    expect(o).toEqual({ references: [], pieces: 0 });
+  });
+
+  it("ne signale rien avec un seul fichier", () => {
+    expect(findOverlap([{ name: "a", rows: fileA }])).toEqual({ references: [], pieces: 0 });
   });
 });

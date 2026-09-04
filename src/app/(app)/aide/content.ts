@@ -1014,6 +1014,16 @@ export const HELP_THEMES: HelpTheme[] = [
             tip: "Tout se passe dans ton navigateur : le fichier n'est ni envoyé ni enregistré. Aucune saison à choisir. 🔒",
           },
           {
+            h: "Cumuler plusieurs fichiers",
+            lines: [
+              "Tu peux déposer **plusieurs fichiers** : le bouton **Ajouter un fichier** les empile et le tableau devient leur **cumul**. Les deux formats se mélangent.",
+              "Chaque fichier est listé avec son nombre de pièces et peut être **retiré** seul. L'onglet **Critères** du fichier exporté nomme les sources utilisées.",
+              "🔴 **Le cumul additionne.** Si deux fichiers décrivent la **même commande**, elle est comptée **deux fois**. GestLog repère les références présentes dans plusieurs fichiers et te le dit en rouge, avec le nombre de pièces concernées.",
+              "Cumuler deux **lots différents** (deux saisons, deux commandes) ne déclenche aucun avertissement : c'est le cas normal.",
+            ],
+            tip: "Les deux formats ne comptent pas la même chose : le CSV donne le **commandé**, le classeur le **total** (commandé + site + réa). Les cumuler mélange deux natures de chiffre. ⚖️",
+          },
+          {
             h: "Si le fichier se contredit",
             lines: [
               "Dans un classeur **Lancement de commande**, chaque produit porte un sous-total, suivi du détail de ses coloris. Quand les deux ne collent pas, GestLog te le **signale en orange** avec l'écart exact.",

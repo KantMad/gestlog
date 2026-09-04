@@ -695,6 +695,22 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
     moments différents. Choisir sa source, pas mélanger.
   - **100 % local** : le fichier est lu dans le navigateur, rien n'est envoyé au serveur ni
     écrit en base. La carte ne dépend donc d'aucune saison.
+  - **Cumul de plusieurs fichiers** : on peut en déposer autant qu'on veut (les deux
+    formats sont mélangeables), le tableau est construit sur leurs lignes **réunies** et
+    une même (référence, couleur) s'additionne. Chaque fichier est listé avec sa
+    contribution et peut être retiré isolément ; l'onglet « Critères » de l'export nomme
+    les sources.
+  - 🔴 **Le cumul ADDITIONNE — deux fichiers décrivant la même commande doublent tout.**
+    `findOverlap` détecte les références présentes dans plusieurs fichiers et l'écran
+    affiche un bandeau **rouge** chiffré. *Cas réel : cumuler les deux exports fournis en
+    exemple donne **93 312 pièces** (43 597 + 49 715) avec **184 références communes** —
+    l'un est dérivé de l'autre.* On ne bloque pas (cumuler deux lots distincts est
+    légitime) : c'est le seul moyen de distinguer un cumul voulu d'un doublon.
+    *Contrôle sur deux lots disjoints (Pantalons + Bermudas) : aucun avertissement,
+    5 576 + 2 884 = 8 460.*
+  - ⚠️ Les deux formats n'ont pas la **même sémantique de quantité** (le CSV porte le
+    commandé, le classeur le total commandé + site + réa) : les cumuler mélange deux
+    natures de chiffre. L'écran affiche la colonne retenue pour chaque fichier.
   - Filtres : **catégories**, **sous-catégories** (elles suivent les catégories cochées) et
     **recherche produit** (référence ou désignation).
   - ⚠️ **La quantité retenue est « Quantité à la couleur », PAS la somme des colonnes de
