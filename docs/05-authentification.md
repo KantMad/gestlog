@@ -86,6 +86,31 @@ avec un repli « Autres » pour tout écran de `APP_SCREENS` qui n'aurait pas d'
 `/import`. Accorder « Import » donne donc les deux lignes du menu — comportement verrouillé
 par un test.
 
+## Saison mémorisée par utilisateur
+
+La saison choisie dans la barre du haut est **conservée d'une session à l'autre**, dans
+`localStorage`, sous une clé **propre à l'utilisateur** : `gestlog.season.<userId>`
+(`seasonStorageKey`). Plusieurs personnes se connectent depuis le même poste — la saison de
+l'une ne doit pas s'imposer à l'autre.
+
+Ordre de priorité, dans `pickSeasonId` (extrait du composant, donc **testé**) :
+1. la saison **déjà sélectionnée**, si elle existe encore — une actualisation de la liste ne
+   doit jamais déplacer l'utilisateur ;
+2. le **choix mémorisé** de ses sessions précédentes ;
+3. la saison marquée **active en base** ;
+4. à défaut, la première de la liste.
+
+- ⚠️ La lecture se fait dans un **effet**, jamais à l'initialisation de l'état :
+  `localStorage` n'existe pas au rendu serveur, et une valeur lue au premier rendu client
+  provoquerait une **divergence d'hydratation**.
+- ⚠️ Le choix mémorisé est tenu dans une **ref**, pas dans un état : `fetchSeasons` doit
+  pouvoir le consulter sans recharger la liste des saisons à chaque changement.
+- Les écritures/lectures sont sous `try/catch` (navigation privée) : la sélection reste
+  alors valable pour la session en cours.
+- **Ce que ça corrige** : seuls le **login** et le **logout** provoquent un rechargement
+  complet (`window.location` dans `auth-context`). C'est là que la saison retombait sur
+  celle marquée active en base, obligeant à la re-choisir à chaque connexion.
+
 ## Middleware (Edge) — `src/middleware.ts`
 
 Défense en profondeur, exécutée avant les pages/API :

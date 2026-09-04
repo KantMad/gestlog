@@ -155,6 +155,21 @@ export const HELP_THEMES: HelpTheme[] = [
         ],
       },
       {
+        id: "saison-memorisee",
+        icon: "\ud83d\udccc",
+        title: "Ta saison est mémorisée",
+        keywords: "saison sélection mémorisée conservée changement page connexion utilisateur",
+        sections: [
+          {
+            lines: [
+              "La saison choisie en haut de l'écran est **conservée** : tu la retrouves telle quelle en changeant de page, en te reconnectant, ou en revenant le lendemain.",
+              "Elle est mémorisée **pour toi seul** : si un collègue se connecte sur le même ordinateur, il retrouve la sienne, pas la tienne.",
+            ],
+            tip: "Si la saison que tu avais choisie a été supprimée entre-temps, l'outil revient automatiquement sur la saison active. 🗓️",
+          },
+        ],
+      },
+      {
         id: "saisons",
         icon: "📅",
         title: "Les saisons",
