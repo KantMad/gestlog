@@ -109,17 +109,50 @@ préalable — le dossier ressortait en `0775` alors que le script annonçait `0
 | Sinistre | Ce qu'on perd | Ce qui sauve |
 |---|---|---|
 | Fausse manipulation, données écrasées | jusqu'à 1 h de saisie | instantané horaire local |
-| Disque ou VPS détruit | **la configuration et les secrets** | ⚠️ rien pour l'instant — voir ci-dessous |
-| Perte du compte Supabase | la base | instantané horaire local |
+| Disque ou VPS détruit | **la configuration et les secrets** | copie hors-site chiffrée (Backblaze B2) |
+| Perte du compte Supabase | la base | instantané horaire, local et hors-site |
+| Perte du compte OVH | le serveur entier | hors-site chez un **autre** hébergeur |
 
 🔴 **Une sauvegarde posée sur la machine qu'elle protège ne protège pas de la perte
 de cette machine.** Le code vit sur GitHub et la base chez Supabase : un VPS détruit
 ne fait perdre que `config.tar.gz` — **10 Ko, mais sans lesquels on ne redémarre
-pas** (secrets, nginx, pm2, crons). Copie hors-site à récupérer depuis un poste :
+pas** (secrets, nginx, pm2, crons).
+
+### Copie hors-site chiffrée (`ops/backup-offsite.sh`)
+
+`backup-full.sh` appelle `backup-offsite.sh` en dernier, **après** avoir écrit l'état
+local : un hors-site en panne ne doit jamais faire passer pour ratée une sauvegarde
+locale valide. Tant que le remote n'existe pas, l'étape s'annonce et ne fait rien.
+
+Le distant est un remote rclone **`crypt`** : noms de fichiers ET contenus sont
+chiffrés **avant** de quitter le serveur — le fournisseur ne voit ni le `.env`, ni les
+données clients. Destination retenue : **Backblaze B2**, chez un autre hébergeur que
+le VPS (perdre le compte OVH ne doit pas emporter les deux), 10 Go gratuits pour un
+besoin de ~4,5 Go.
+
+Mise en service, **une seule fois, depuis le terminal de l'exploitant** :
 
 ```bash
-scp ubuntu@51.77.149.138:/var/backups/gestlog/snapshots/$(ssh ubuntu@51.77.149.138 'ls -1 /var/backups/gestlog/snapshots | sort | tail -1')/config.tar.gz ~/Documents/gestlog-config.tar.gz
+ssh ubuntu@51.77.149.138
+/var/www/gestlog/setup-hors-site.sh
 ```
+
+⚠️ Ce script demande le `keyID` et l'`applicationKey` B2 : ils ne doivent transiter
+par **aucune** conversation ni aucun fichier versionné. Il engendre lui-même le mot de
+passe de chiffrement et l'affiche **une seule fois**.
+
+🔴 **Ce mot de passe doit vivre dans un gestionnaire de mots de passe, hors du
+serveur.** Il est aussi dans `~/.config/rclone/rclone.conf` — donc dans la sauvegarde,
+elle-même chiffrée avec lui. C'est le seul secret racine : sans copie externe, un VPS
+détruit rend la copie hors-site définitivement illisible.
+
+⚠️ **`rclone sync` recopie aussi les suppressions** — c'est ce qui maintient le distant
+à la même rotation que le local, mais un effacement accidentel se propagerait.
+Deux filets : `--max-delete 5` (la rotation normale n'en retire qu'un ou deux par
+heure) et, côté bucket, `hard_delete=false` + un cycle de vie « conserver les versions
+précédentes 7 jours » à régler dans l'interface Backblaze.
+
+Dépannage : `rclone listremotes`, `rclone lsd hors-site:`, `rclone size hors-site:`.
 
 ### Essais à blanc
 

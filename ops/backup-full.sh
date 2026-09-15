@@ -124,9 +124,13 @@ mkdir -p "$STAGE/c/gestlog/scripts" "$STAGE/c/systeme"
 # eux qu'on retrouvera à l'extraction, où qu'elle ait lieu.
 chmod -R go-rwx "$STAGE/c"
 cp "$APP_DIR/.env" "$STAGE/c/gestlog/.env"
-for f in deploy.sh backup-db.sh caisse-retry.sh backup-full.sh restore-gestlog.sh; do
+for f in deploy.sh backup-db.sh caisse-retry.sh backup-full.sh restore-gestlog.sh backup-offsite.sh; do
   [ -f "$APP_DIR/$f" ] && cp "$APP_DIR/$f" "$STAGE/c/gestlog/scripts/$f"
 done
+# La configuration rclone porte la clé du hors-site : elle doit voyager avec.
+if [ -f "$HOME/.config/rclone/rclone.conf" ]; then
+  cp "$HOME/.config/rclone/rclone.conf" "$STAGE/c/systeme/rclone.conf"
+fi
 cp /etc/nginx/sites-available/gestlog "$STAGE/c/systeme/nginx-gestlog.conf" 2>/dev/null || true
 cp "$HOME/.pm2/dump.pm2" "$STAGE/c/systeme/pm2-dump.pm2" 2>/dev/null || true
 crontab -l > "$STAGE/c/systeme/crontab-ubuntu.txt" 2>/dev/null || true
@@ -159,7 +163,7 @@ chmod 600 "$SNAP/MANIFESTE.txt"
 # ─── 4. Dérive des scripts ───────────────────────────────────────────────────
 # Les scripts d'exploitation ont une copie de référence dans le dépôt (ops/).
 # Si celle du serveur s'en écarte, c'est la sauvegarde qui fait foi — on le dit.
-for f in deploy.sh backup-db.sh caisse-retry.sh backup-full.sh restore-gestlog.sh; do
+for f in deploy.sh backup-db.sh caisse-retry.sh backup-full.sh restore-gestlog.sh backup-offsite.sh; do
   if [ -f "$APP_DIR/$f" ] && [ -f "$APP_DIR/ops/$f" ] && ! cmp -s "$APP_DIR/$f" "$APP_DIR/ops/$f"; then
     log "  ⚠ $f diffère de ops/$f (la version du serveur est bien sauvegardée)"
   fi
@@ -215,5 +219,12 @@ log "  ✓ rotation : $PURGES purgé(s), $NB instantané(s) conservé(s), $(du -
   echo "Le plus ancien : $(ls -1 "$ROOT" | sort | head -1)"
   echo "Le plus récent : $STAMP"
 } > "$ETAT"
+
+# ─── 7. Copie hors-site ──────────────────────────────────────────────────────
+# Après l'état local, et sans pouvoir le contredire : un hors-site en panne ne
+# rend pas fausse une sauvegarde locale valide.
+if [ -x "$APP_DIR/backup-offsite.sh" ]; then
+  GESTLOG_BACKUP_DIR="$BASE" "$APP_DIR/backup-offsite.sh" || true
+fi
 
 log "✅ Sauvegarde complète terminée — $STAMP"
