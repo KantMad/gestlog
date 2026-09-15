@@ -49,9 +49,83 @@ Nettoie les fichiers `/tmp` après usage (local **et** VPS).
 | Où | Quoi | Fréquence |
 |---|---|---|
 | VPS | `caisse-retry.sh` (relance envois caisse `FAILED`) | toutes les **15 min** |
-| VPS | `backup-db.sh` (dump base) | avant chaque déploiement (+ éventuel cron) |
+| VPS | **`backup-full.sh` (sauvegarde complète : base + configuration)** | **toutes les heures, à HH:12** |
+| VPS | `backup-db.sh` (dump base seul) | avant chaque déploiement + cron 3 h |
+| VPS | `parse-bl-pdfs.mjs` (lecture des BL PDF) | tous les jours à 4 h |
 | n8n | Sync produits + EAN (`NvAbzIgKKw5OvTk1`) | toutes les **6 h** |
 | n8n | Sync commandes / BL-FAC / BtoC | selon planning des workflows |
+
+## Sauvegardes et reprise après sinistre
+
+**`ops/backup-full.sh`, toutes les heures à HH:12.** Une exécution produit un
+instantané autonome dans `/var/backups/gestlog/snapshots/AAAA-MM-JJ_HHMM/` :
+
+| Fichier | Contenu | Taille |
+|---|---|---|
+| `base.dump` | `pg_dump -Fc` de la base Supabase | ~50 Mo |
+| `config.tar.gz` | `.env`, scripts d'exploitation, nginx, pm2, crontab, commit git | ~10 Ko |
+| `MANIFESTE.txt` | inventaire, empreintes SHA-256, commande de restauration | 1 Ko |
+
+- **Coût** : 9 s de dump, 1 s de vérification. Indolore à la fréquence horaire.
+- **Rotation dégressive** : tout pendant 48 h, puis un par jour pendant 30 jours,
+  puis un par semaine pendant 12 semaines. Palier d'équilibre ≈ **90 instantanés,
+  4,5 Go** (éprouvé à blanc sur 150 jours simulés : 1 200 → 55, rien au-delà de
+  84 jours). Le disque fait 72 Go dont 60 libres.
+- 🔴 **La rotation n'a lieu qu'APRÈS un instantané prouvé valide.** Une exécution
+  ratée ne purge rien et ne laisse aucun résidu : le pire scénario est de vieillir
+  d'une heure, jamais de perdre ce qui existe.
+- 🔴 **La vérification DÉCODE l'archive en entier** (`pg_restore -f -` vers `wc`,
+  rien écrit sur disque), pas seulement sa table des matières : *l'index d'un dump
+  tronqué se lit encore très bien*. Contrôles : 42 tables de données minimum,
+  `pg_restore` muet, empreintes SHA-256 au manifeste.
+- **Garde-fous** : `flock` (deux exécutions ne se croisent jamais), arrêt si moins
+  de 5 Go libres, journal raccourci sur place (`cat >`, pas `mv` — cron garde le
+  fichier ouvert en ajout).
+- ⚠️ **`config.tar.gz` contient les secrets** (`.env`). Instantanés en `0700`/`0600`,
+  lisibles du seul compte `ubuntu`. Ne jamais les recopier ailleurs en clair.
+- ⚠️ **Ne touche pas à la caisse** (`caissepro-api`), qui a sa propre sauvegarde
+  (cron **root**, 3 h, `/var/backups/caissepro`).
+
+### Où on en est, et comment on revient
+
+```bash
+/var/www/gestlog/restore-gestlog.sh --liste                    # inventaire + état
+cat /var/backups/gestlog/ETAT.txt                              # dernière exécution
+/var/www/gestlog/restore-gestlog.sh 2026-09-15_1506 --verifier # empreintes + relecture
+/var/www/gestlog/restore-gestlog.sh 2026-09-15_1506 --extraire-config /tmp/reprise
+/var/www/gestlog/restore-gestlog.sh 2026-09-15_1506 --restaurer-base   # ⚠️ ÉCRASE
+```
+
+`--restaurer-base` exige de taper `RESTAURER`, prend d'abord un dump de sécurité de
+l'état courant (`AVANT-RESTAURATION-*.dump`), arrête pm2 le temps de l'opération et
+contrôle le retour en HTTP 200. Le retour arrière reste donc possible.
+
+⚠️ **`--extraire-config` : `chmod` APRÈS `tar`, jamais avant.** tar réapplique sur le
+dossier de destination les droits portés par l'archive et écraserait un `chmod`
+préalable — le dossier ressortait en `0775` alors que le script annonçait `0700`.
+
+### Ce qui survit à quoi
+
+| Sinistre | Ce qu'on perd | Ce qui sauve |
+|---|---|---|
+| Fausse manipulation, données écrasées | jusqu'à 1 h de saisie | instantané horaire local |
+| Disque ou VPS détruit | **la configuration et les secrets** | ⚠️ rien pour l'instant — voir ci-dessous |
+| Perte du compte Supabase | la base | instantané horaire local |
+
+🔴 **Une sauvegarde posée sur la machine qu'elle protège ne protège pas de la perte
+de cette machine.** Le code vit sur GitHub et la base chez Supabase : un VPS détruit
+ne fait perdre que `config.tar.gz` — **10 Ko, mais sans lesquels on ne redémarre
+pas** (secrets, nginx, pm2, crons). Copie hors-site à récupérer depuis un poste :
+
+```bash
+scp ubuntu@51.77.149.138:/var/backups/gestlog/snapshots/$(ssh ubuntu@51.77.149.138 'ls -1 /var/backups/gestlog/snapshots | sort | tail -1')/config.tar.gz ~/Documents/gestlog-config.tar.gz
+```
+
+### Essais à blanc
+
+`backup-full.sh` accepte `GESTLOG_DIR`, `GESTLOG_BACKUP_DIR` et `GESTLOG_LOCK` pour
+être rejoué sur des dossiers jetables — **cron n'en définit aucune**. Cas éprouvés :
+base injoignable, disque plein, exécutions concurrentes, rotation sur 150 jours.
 
 ## Pièges durement appris (gotchas)
 
