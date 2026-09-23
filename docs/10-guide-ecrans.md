@@ -456,6 +456,33 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
 - **Impacts** : sert d'appariement produit dans **tous** les imports et exports (EAN, tailles).
 - **Piège** : ces imports ne sont **pas tracés** en `ImportLog` (pas de saison envoyée).
 
+### Correspondances Fournisseur → Réf (`SupplierProductRef`)
+- **Quoi** : quel fournisseur fabrique quelle référence. Logique pure et testée dans
+  [`src/lib/supplier-refs.ts`](../src/lib/supplier-refs.ts) (`planSupplierRefImport`).
+- 🔴 **Information commercialement sensible.** Elle est stockée et consultable **dans ce seul
+  onglet** — délibérément affichée par **aucun** autre écran. Le middleware filtre pages **et**
+  API sur le droit `/product-info` (`API_SCREEN_MAP`, cf. `lib/screens.ts`) : au 23/09/2026,
+  **2 comptes sur 7** y ont accès. Ne pas la rediffuser sans décision explicite.
+- ⚠️ **Ne pas confondre avec le fournisseur affiché ailleurs** (répartition, réceptions,
+  exports) : celui-là vient de `SupplierOrder`/`SupplierReception`, jamais d'ici.
+- 🔴 **Le rapprochement des codes est insensible à la casse et aux accents.** L'import
+  d'origine faisait un `upsert` sur le code brut : « Enteks » ne reconnaissait pas le
+  `ENTEKS` déjà en base et **créait un second fournisseur**, pendant que ses 3 commandes
+  restaient sur le premier — le lien produit aurait désigné un fournisseur fantôme. Les
+  rapprochements effectués et les fournisseurs réellement créés sont **listés au
+  compte-rendu**, parce qu'une correspondance fausse ne se verrait pas autrement.
+- ⚠️ **Les références inconnues au catalogue sont signalées, jamais rejetées** : une
+  référence peut précéder sa synchro TIO. Quand elle existe, c'est **l'orthographe du
+  catalogue** qui est retenue — c'est elle qui servira de jointure plus tard.
+- 🔴 **Écritures par lots.** L'implémentation d'origine faisait deux `upsert` par ligne :
+  sur 3 000 références, 6 000 allers-retours vers Supabase, soit plusieurs minutes et un
+  délai d'attente dépassé avant la fin. Désormais 2 lectures + 2 écritures groupées.
+- **Réimport** : additif par défaut (`skipDuplicates`), donc un fichier corrigé laisserait
+  les lignes fautives du passage précédent. Case **« Remplacer les correspondances
+  existantes »** pour repartir du fichier seul ; les fournisseurs ne sont jamais supprimés.
+- **État au 23/09/2026** : table **vide** (0 correspondance pour 3 280 références produit).
+  Les 27 fournisseurs, eux, existent — créés par les imports de commandes fournisseurs.
+
 ## Répartition magasin (`/repartition`)
 - **Rôle** : transformer un export commande client TIO (mono-onglet) en Excel **1 onglet par
   fournisseur**, quantités replacées sous les bons libellés de taille.

@@ -55,6 +55,7 @@ import {
   GripVertical,
   Shuffle,
   ArrowRight,
+  CheckCircle2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -713,15 +714,132 @@ interface SupplierRefData {
   supplier: { code: string; name: string };
 }
 
+interface SupplierRefImportResult {
+  imported: number;
+  dejaPresentes: number;
+  total: number;
+  remplace: boolean;
+  newSuppliers: string[];
+  rapprochements: { fichier: string; base: string }[];
+  unknownRefs: string[];
+  multiSupplier: { reference: string; suppliers: string[] }[];
+  duplicates: number;
+  ignored: { line: number; reason: string }[];
+}
+
+/**
+ * Compte-rendu d'import. Il ne dit pas seulement « c'est passé » : il dit ce qui a été
+ * rapproché, ce qui a été créé, et ce qui mérite un coup d'œil. Une correspondance
+ * fausse ne se verrait pas autrement — on ne s'en servira que dans plusieurs mois.
+ */
+function SupplierRefImportReport({
+  result,
+  onReset,
+}: {
+  result: SupplierRefImportResult;
+  onReset: () => void;
+}) {
+  const liste = (items: string[], max = 12) =>
+    items.slice(0, max).join(", ") + (items.length > max ? `… (+${items.length - max})` : "");
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-start gap-3">
+        <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
+        <div>
+          <p className="font-medium">
+            {result.imported} correspondance{result.imported > 1 ? "s" : ""} enregistrée
+            {result.imported > 1 ? "s" : ""}
+          </p>
+          <p className="text-sm text-muted-foreground">
+            {result.total} au total dans GestLog
+            {result.dejaPresentes > 0 && ` · ${result.dejaPresentes} déjà présente(s)`}
+            {result.duplicates > 0 && ` · ${result.duplicates} doublon(s) dans le fichier`}
+            {result.remplace && " · les correspondances précédentes ont été remplacées"}
+          </p>
+        </div>
+      </div>
+
+      {result.rapprochements.length > 0 && (
+        <div className="rounded-lg border border-sky-200 bg-sky-50/60 p-3 text-sm text-sky-900">
+          <p className="font-medium">
+            {result.rapprochements.length} code(s) rattaché(s) à un fournisseur existant
+          </p>
+          <p className="mt-1">
+            {liste(result.rapprochements.map((r) => `${r.fichier} → ${r.base}`))}
+          </p>
+          <p className="mt-1 text-sky-800/80">
+            Aucun fournisseur en double n&apos;a été créé.
+          </p>
+        </div>
+      )}
+
+      {result.newSuppliers.length > 0 && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-3 text-sm text-amber-900">
+          <p className="font-medium">
+            {result.newSuppliers.length} fournisseur(s) créé(s)
+          </p>
+          <p className="mt-1">{liste(result.newSuppliers)}</p>
+          <p className="mt-1 text-amber-800/80">
+            Vérifier qu&apos;il s&apos;agit bien de nouveaux fournisseurs, et non d&apos;une
+            autre écriture d&apos;un fournisseur déjà connu.
+          </p>
+        </div>
+      )}
+
+      {result.unknownRefs.length > 0 && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-3 text-sm text-amber-900">
+          <p className="font-medium">
+            {result.unknownRefs.length} référence(s) inconnue(s) au catalogue
+          </p>
+          <p className="mt-1">{liste(result.unknownRefs)}</p>
+          <p className="mt-1 text-amber-800/80">
+            Conservées : une référence peut précéder sa synchronisation depuis TIO. Mais
+            une coquille ne correspondrait jamais à aucun produit.
+          </p>
+        </div>
+      )}
+
+      {result.multiSupplier.length > 0 && (
+        <div className="rounded-lg border p-3 text-sm">
+          <p className="font-medium">
+            {result.multiSupplier.length} référence(s) chez plusieurs fournisseurs
+          </p>
+          <p className="mt-1 text-muted-foreground">
+            {liste(
+              result.multiSupplier.map((m) => `${m.reference} (${m.suppliers.join(" + ")})`),
+              8
+            )}
+          </p>
+          <p className="mt-1 text-muted-foreground">
+            Légitime en double sourcing — signalé au cas où.
+          </p>
+        </div>
+      )}
+
+      {result.ignored.length > 0 && (
+        <div className="rounded-lg border border-red-200 bg-red-50/60 p-3 text-sm text-red-900">
+          <p className="font-medium">{result.ignored.length} ligne(s) ignorée(s)</p>
+          <p className="mt-1">
+            {liste(result.ignored.map((i) => `ligne ${i.line} (${i.reason})`))}
+          </p>
+        </div>
+      )}
+
+      <Button variant="outline" size="sm" onClick={onReset}>
+        Importer un autre fichier
+      </Button>
+    </div>
+  );
+}
+
 function SupplierRefsTab() {
   const [parsed, setParsed] = useState<ParsedData | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [mapping, setMapping] = useState<Record<string, string>>({});
   const [importing, setImporting] = useState(false);
-  const [result, setResult] = useState<{
-    imported: number;
-    errors: string[];
-  } | null>(null);
+  const [result, setResult] = useState<SupplierRefImportResult | null>(null);
+  const [replace, setReplace] = useState(false);
   const [refs, setRefs] = useState<SupplierRefData[]>([]);
   const [loadingData, setLoadingData] = useState(true);
   const [search, setSearch] = useState("");
@@ -777,6 +895,7 @@ function SupplierRefsTab() {
       const formData = new FormData();
       formData.append("file", file);
       formData.append("mapping", JSON.stringify(mapping));
+      formData.append("replace", String(replace));
       const res = await fetch("/api/product-info/supplier-refs", {
         method: "POST",
         body: formData,
@@ -836,7 +955,7 @@ function SupplierRefsTab() {
         <Card className="border-dashed">
           <CardContent className="space-y-4">
             {result ? (
-              <ImportResult result={result} onReset={reset} />
+              <SupplierRefImportReport result={result} onReset={reset} />
             ) : (
               <>
                 <Dropzone onFileSelected={handleFileSelected} />
@@ -864,6 +983,26 @@ function SupplierRefsTab() {
                       mapping={mapping}
                       onMappingChange={setMapping}
                     />
+                    {refs.length > 0 && (
+                      <label className="flex items-start gap-3 rounded-lg border p-3">
+                        <input
+                          type="checkbox"
+                          checked={replace}
+                          onChange={(e) => setReplace(e.target.checked)}
+                          className="mt-1"
+                        />
+                        <span className="text-sm">
+                          <span className="font-medium">
+                            Remplacer les {refs.length} correspondances existantes
+                          </span>
+                          <span className="block text-muted-foreground">
+                            Sans cette case, l&apos;import s&apos;ajoute à ce qui est déjà là :
+                            un fichier corrigé laisserait les lignes fautives du passage
+                            précédent en place.
+                          </span>
+                        </span>
+                      </label>
+                    )}
                     <Button
                       onClick={handleImport}
                       disabled={importing}

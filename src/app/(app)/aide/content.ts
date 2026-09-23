@@ -1645,6 +1645,46 @@ export const HELP_THEMES: HelpTheme[] = [
         ],
       },
       {
+        id: "fournisseur-reference",
+        icon: "🏭",
+        title: "Rattacher les produits à leur fournisseur",
+        keywords: "fournisseur produit référence import excel correspondance sourcing fabricant qui fabrique",
+        screen: "/product-info",
+        sections: [
+          {
+            lines: [
+              "**Marchandise → Infos produits → onglet « Fournisseur → Réf ».** C'est là qu'on enregistre **quel fournisseur fabrique quelle référence**.",
+              "⚠️ Information **sensible** : elle est consultable ici, et **nulle part ailleurs dans GestLog**. L'écran et ses données sont réservés aux comptes qui ont le droit « Infos produits ».",
+            ],
+            tip: "À ne pas confondre avec le fournisseur affiché en répartition ou en réception : celui-là vient des **commandes fournisseurs**, pas de cette table. 🧭",
+          },
+          {
+            h: "Le fichier à déposer",
+            lines: [
+              "Un Excel ou un CSV avec au minimum **deux colonnes** : le **code fournisseur** et la **référence produit**. Une troisième colonne de **nom** est acceptée, sinon le code sert de nom.",
+              "Les colonnes sont **reconnues toutes seules** à partir de leur titre ; tu peux les corriger à la main avant de valider.",
+            ],
+          },
+          {
+            h: "Ce que l'import vérifie pour toi",
+            lines: [
+              "**Il rattache aux fournisseurs déjà connus** sans se laisser piéger par la casse ou les accents : « Enteks » retrouve **ENTEKS** et n'en crée pas un deuxième. Le compte-rendu liste ces rapprochements.",
+              "**Il annonce tout fournisseur créé** : si un nom apparaît là, vérifie que c'est bien un nouveau fournisseur et pas une autre écriture d'un fournisseur existant.",
+              "**Il signale les références inconnues au catalogue** — elles sont conservées (un produit peut arriver avant sa synchro TIO), mais une coquille ne correspondra jamais à rien.",
+              "Il relève aussi les **doublons du fichier** et les références rattachées à **plusieurs fournisseurs** (légitime en double sourcing).",
+            ],
+          },
+          {
+            h: "Réimporter un fichier corrigé",
+            lines: [
+              "Par défaut, un import **s'ajoute** à ce qui existe : réimporter un fichier corrigé laisserait les lignes fautives du premier passage en place.",
+              "Coche **« Remplacer les correspondances existantes »** pour repartir du fichier seul. Les fournisseurs, eux, ne sont jamais supprimés.",
+            ],
+            tip: "Le même fichier importé deux fois sans cette case ne crée pas de doublon : les correspondances déjà présentes sont simplement ignorées. 👍",
+          },
+        ],
+      },
+      {
         id: "equivalences-couleur",
         icon: "🎨",
         title: "Équivalences de code couleur (produit introuvable)",
