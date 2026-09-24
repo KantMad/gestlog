@@ -361,6 +361,37 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
 - **Onglet plutôt qu'écran neuf** : le droit `/statistics` s'applique tel quel, sans avoir
   à accorder un nouvel écran à chaque utilisateur.
 
+### Onglet « TIO / Texas » (`/statistics`)
+- **Rôle** : comparer les commandes clients **importées** dans les deux sources — TIO
+  (prise de commande, archive) et TEXAS (ERP, vérité) — en commandes, lignes, pièces et
+  euros, par **catalogue** et par **boutique**. Logique pure et testée dans
+  [`src/lib/source-comparison.ts`](../src/lib/source-comparison.ts).
+- 🔴 **C'est le SEUL écran qui lit les deux sources.** Partout ailleurs
+  `resolveOrderSource` n'en retient qu'une (TEXAS dès qu'elle existe) : *ce que porte
+  l'autre n'apparaît nulle part, sans moyen de savoir ce qu'on ne voit plus.* L'écran
+  rappelle donc laquelle est lue.
+- ⚠️ **Les numéros de commande ne se recoupent PAS** d'une source à l'autre — *0 commun sur
+  AH26, chaque source a sa numérotation.* Le rapprochement se fait sur `tioOrderNumber`
+  (274 communs sur 320 TIO et 281 TEXAS) ; les volumes se comparent par boutique et par
+  catalogue.
+- 🔴 **Des boutiques ont DEUX fiches `Client`**, une par source, et leurs volumes sont donc
+  comptés séparément — chacune paraissant absente de l'autre source. *Sur AH26 :
+  « CLASSIC STOCK TALANGE » (TIO, 5 271 pcs) et « Classic stock Talange MCS » (TEXAS,
+  2 517 pcs) ; « BRANDS CORNER » et « BJB SAS / BRANDS CORNER » ; et une vingtaine de
+  « TERRITOIRE D'HOMME - … » au nom **rigoureusement identique**.* `nomsProches()` les
+  signale, **sans jamais fusionner**.
+  - ⚠️ **Le seuil de mots significatifs est à 3 lettres, pas 4.** À 4, « LE KORNER -
+    Saint-**Leu** » et « Saint-**Paul** » étaient déclarés proches : le mot court était
+    jeté, et c'est lui qui distingue. Il faut aussi **au moins deux mots** du côté inclus,
+    sinon « MCS » rapprocherait « MCS Romans ».
+  - ⚠️ Une jumelle n'est **appariée qu'une fois** : sans cela, plusieurs homonymes se
+    désigneraient tous la même et le compte des doublons serait faux.
+- **État au 24/09/2026** : **AH26 est la seule saison à porter les deux sources**.
+  TIO 334 commandes / 88 750 pcs / 2 469 429 € contre TEXAS 282 / 69 925 / 2 403 558 € —
+  **18 825 pièces et 65 871 € d'écart**, invisibles jusqu'ici. Trois catalogues n'existent
+  que dans TIO (`MCS BHV week W26`, `Territoire d'homme W26 actua`, `Stock hiver w26`), et
+  les commandes **sans catalogue** pèsent 10 066 pcs côté TIO contre 638 côté TEXAS.
+
 ## Comparaison commande / réception (`/comparison`)
 - **Rôle** : contrôler les **écarts commande fournisseur vs réception réelle**, par fournisseur
   puis par référence/couleur (conforme / écart mineur / majeur).

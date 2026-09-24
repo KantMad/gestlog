@@ -1677,6 +1677,38 @@ export const HELP_THEMES: HelpTheme[] = [
         ],
       },
       {
+        id: "sources-tio-texas",
+        icon: "⚖️",
+        title: "Comparer les commandes TIO et Texas",
+        keywords: "tio texas source comparaison commandes importées écart double fiche boutique",
+        screen: "/statistics",
+        sections: [
+          {
+            lines: [
+              "**Statistiques → onglet « TIO / Texas ».** Les commandes importées des deux côtés, en commandes, lignes, pièces et euros, par catalogue et par boutique.",
+              "⚠️ **C'est le seul écran qui montre les deux.** Partout ailleurs, GestLog ne lit qu'une source par saison — **Texas dès qu'elle existe**, TIO sinon. Ce que porte l'autre n'apparaît nulle part.",
+            ],
+            tip: "L'écran te rappelle laquelle est lue ailleurs, avec une pastille « source lue ». 🔎",
+          },
+          {
+            h: "Comment les commandes sont rapprochées",
+            lines: [
+              "Les **numéros de commande ne se recoupent pas** : chaque source a sa numérotation. Le lien se fait par le **n° de commande TIO** que les deux portent.",
+              "Les volumes, eux, se comparent par **boutique** et par **catalogue** : c'est là qu'on voit ce qui diffère.",
+            ],
+          },
+          {
+            h: "Attention aux fiches boutique en double",
+            lines: [
+              "Une même boutique peut avoir **deux fiches client**, une vue par TIO et l'autre par Texas. Leurs volumes sont alors comptés séparément, et chacune paraît absente de l'autre source.",
+              "L'écran signale ces cas sous le nom de la boutique — « même nom que… » quand c'est rigoureusement identique, « ressemble à… » sinon.",
+              "**Rien n'est fusionné automatiquement** : deux boutiques d'une même enseigne peuvent porter des noms voisins sans être la même.",
+            ],
+            tip: "Coche « Seulement les écarts » pour ne garder que les lignes qui divergent. 🎯",
+          },
+        ],
+      },
+      {
         id: "montants-repartition",
         icon: "💶",
         title: "Montants commandés, livrés et manquants",

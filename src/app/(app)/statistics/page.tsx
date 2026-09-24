@@ -7,11 +7,12 @@ import { Topbar } from "@/components/layout/topbar";
 import { PageHeader } from "@/components/layout/page-header";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MontantsRepartitionTab } from "@/components/statistics/montants-repartition-tab";
+import { SourcesTioTexasTab } from "@/components/statistics/sources-tio-texas-tab";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { BarChart3, Euro, Search, X } from "lucide-react";
+import { ArrowLeftRight, BarChart3, Euro, Search, X } from "lucide-react";
 import { cn, formatNumber, formatEuro } from "@/lib/utils";
 import {
   BarChart,
@@ -199,6 +200,10 @@ export default function StatisticsPage() {
             <TabsTrigger value="montants" className="gap-2">
               <Euro className="h-4 w-4" />
               Montants livraison
+            </TabsTrigger>
+            <TabsTrigger value="sources" className="gap-2">
+              <ArrowLeftRight className="h-4 w-4" />
+              TIO / Texas
             </TabsTrigger>
           </TabsList>
 
@@ -844,6 +849,22 @@ export default function StatisticsPage() {
               </Card>
             ) : (
               <MontantsRepartitionTab seasonId={activeSeason.id} />
+            )}
+          </TabsContent>
+
+          {/* Les deux sources de commandes côte à côte. Ailleurs, `resolveOrderSource`
+              n'en retient qu'une : ce que porte l'autre n'apparaît nulle part. */}
+          <TabsContent value="sources" className="mt-6">
+            {!activeSeason ? (
+              <Card className="border-dashed">
+                <CardContent className="flex flex-col items-center justify-center py-16">
+                  <p className="text-sm text-muted-foreground">
+                    Sélectionnez une saison pour comparer les sources
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              <SourcesTioTexasTab seasonId={activeSeason.id} />
             )}
           </TabsContent>
         </Tabs>
