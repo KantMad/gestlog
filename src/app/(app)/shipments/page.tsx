@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { useSeason } from "@/lib/season-context";
 import { Topbar } from "@/components/layout/topbar";
 import { PageHeader } from "@/components/layout/page-header";
+import { ImportLivraisonsCard } from "@/components/shipments/import-livraisons-card";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -281,6 +282,11 @@ export default function ShipmentsPage() {
           title="Livraisons"
           description="Bons de livraison et factures importés de l'entrepôt, regroupés par commande TIO"
         />
+
+        {/* ⚠️ La synchro FTP peut rester muette sans que rien ne le signale — le dépôt
+            `/in/EAN` n'a plus reçu un fichier depuis le 10/06/2026. L'import manuel
+            rend l'exploitant autonome pour rattraper. Replié, ce bloc n'est qu'un bouton. */}
+        <ImportLivraisonsCard onImported={load} />
 
         {/* Résumé */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

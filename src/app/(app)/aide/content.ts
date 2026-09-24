@@ -1710,6 +1710,37 @@ export const HELP_THEMES: HelpTheme[] = [
         ],
       },
       {
+        id: "import-livraisons",
+        icon: "🚚",
+        title: "Importer un fichier de livraisons",
+        keywords: "import livraison BL bon de livraison entrepôt xlsx codesbarres manuel rattrapage",
+        screen: "/shipments",
+        sections: [
+          {
+            lines: [
+              "**Livraisons → « Importer un fichier de livraisons ».** Dépose l'export **CodesBarres** de l'entrepôt : il peut contenir **un seul BL ou plusieurs centaines**, GestLog les découpe par **N° Document**.",
+              "Normalement les BL arrivent tout seuls par le dépôt FTP de l'entrepôt. Cet écran sert à **rattraper** quand ce dépôt s'est arrêté.",
+            ],
+            tip: "Rien n'est écrit tant que tu n'as pas cliqué une seconde fois : le premier dépôt ne fait qu'analyser. 🔍",
+          },
+          {
+            h: "Ce que l'aperçu te montre",
+            lines: [
+              "Le nombre de **documents**, de **pièces**, de **lignes** et de **boutiques**, ainsi que la **période de livraison** couverte.",
+              "Les documents **déjà en base** : ils seront **remplacés**, pas doublés. Réimporter deux fois le même fichier ne change rien.",
+              "Les **types de traitement** présents (`LIV`, `LIC`…) : tout est coché, décoche ce que tu ne veux pas importer.",
+            ],
+          },
+          {
+            h: "Une limite à connaître",
+            lines: [
+              "Quand les BL arrivent par le FTP, leur nom de fichier porte la référence de commande (`IS-…` ou `PO-…`), ce qui relie le BL à la commande TIO.",
+              "Un export groupé n'a pas cette information : les documents seront rattachés aux **boutiques** par leur code client, mais **pas à une commande précise**. L'écran te le signale avant l'import.",
+            ],
+          },
+        ],
+      },
+      {
         id: "fournisseur-reference",
         icon: "🏭",
         title: "Rattacher les produits à leur fournisseur",

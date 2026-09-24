@@ -256,6 +256,31 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
 ## Livraisons (`/shipments`)
 - **Rôle** : consulter les **BL et factures importés de l'entrepôt** (FTP), regroupés par
   commande TIO ; ouvrir le PDF, voir le détail des lignes.
+- **Import manuel** (`/api/shipments/import`, droit d'écran `/shipments` — **pas** la clé de
+  synchro) : dépose un export Texas « CodesBarres » contenant **un ou plusieurs BL**.
+  Aperçu obligatoire en `dryRun` avant toute écriture — documents, pièces, période,
+  boutiques, doublons, types de traitement — puis second clic pour écrire.
+  - 🔴 **Pourquoi cet écran alors que n8n synchronise déjà** : *le dépôt FTP `/in/EAN`
+    n'a plus reçu un seul fichier depuis le 10/06/2026*, et le workflow réimporte chaque
+    nuit les mêmes 294 fichiers **en succès**. Un flux mort et un flux sain se
+    ressemblaient exactement. L'import manuel rend le rattrapage possible sans l'entrepôt.
+  - 🔴 **Découpage par « N° Document »** (`src/lib/warehouse-import.ts`, testé).
+    L'implémentation d'origine lisait l'en-tête sur la **première ligne du fichier** et
+    sommait tout le reste : le fichier réel de **475 documents / 63 679 pièces** serait
+    devenu **un seul document** portant le premier numéro, sans erreur. Les deux chemins
+    (FTP et manuel) partagent désormais ce découpage.
+  - ⚠️ **Un export groupé ne porte aucun `IS-`/`PO-` dans son nom** : `tioOrderNumber`
+    reste nul, donc **pas de lien BL ↔ commande TIO**. Le rattachement se fait par le
+    seul `clientCode`. L'écran le dit avant d'importer.
+  - ⚠️ **`Type Traitement`** (`LIV` / `LIC`) est exposé et cochable. *Sur le fichier réel,
+    `LIC` = 100 % Country Classic (16 738 pcs, 12 clients) et `LIV` = tout le reste
+    (46 941 pcs) — c'est un partage par MARQUE, pas par nature de livraison.* Tout est
+    coché par défaut : on ne décide pas à la place de l'exploitant.
+  - ⚠️ **`Prix du Document` n'est PAS un total de document.** *Sur le document 143718 :
+    99,67 € au maximum pour 1 439 pièces, là où `Prix Unitaire × Qté` donne 51 844 €.*
+    La règle historique (le maximum de la colonne) est **conservée** pour ne pas diverger
+    des 5 030 documents déjà en base — et parce que `documentTotal` **n'est lu nulle part
+    dans l'application**. Le corriger demande de trancher quelle colonne fait foi.
 - **Source** : `WarehouseDocument` (`source='warehouse_ftp'`) + `WarehouseDocumentLine` ;
   rattachement client/saison par `orderNumber = tioOrderNumber`. PDF via `/api/shipments/pdf`.
 - **Pièges** : un doc sans commande TIO correspondante est exclu quand une saison est active ;
