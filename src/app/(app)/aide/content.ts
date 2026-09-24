@@ -1698,6 +1698,15 @@ export const HELP_THEMES: HelpTheme[] = [
             ],
           },
           {
+            h: "« Sans catalogue », c'est quoi ?",
+            lines: [
+              "Ce n'est **pas un catalogue** : c'est la ligne qui regroupe les commandes dont le champ catalogue est vide, pour qu'elles n'échappent pas au tableau.",
+              "Côté **TIO**, le catalogue vient de la colonne « Nom du catalogue de vente » du fichier importé : vide, rien n'est rattaché. En pratique ce sont des **mises à disposition de stock**, sans chiffre d'affaires.",
+              "Côté **Texas**, les fichiers ne portent aucun catalogue : GestLog le reprend de la commande TIO correspondante. Sans correspondance, pas de catalogue — ce sont surtout des **réassorts**, et c'est normal.",
+            ],
+            tip: "L'écart de cette ligne ne compare donc pas la même chose des deux côtés : à lire avec prudence. ⚠️",
+          },
+          {
             h: "Attention aux fiches boutique en double",
             lines: [
               "Une même boutique peut avoir **deux fiches client**, une vue par TIO et l'autre par Texas. Leurs volumes sont alors comptés séparément, et chacune paraît absente de l'autre source.",

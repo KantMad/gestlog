@@ -386,6 +386,19 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
     sinon « MCS » rapprocherait « MCS Romans ».
   - ⚠️ Une jumelle n'est **appariée qu'une fois** : sans cela, plusieurs homonymes se
     désigneraient tous la même et le compte des doublons serait faux.
+- 🔴 **« Sans catalogue » n'est pas un catalogue** : c'est `ClientOrder.catalogId` vide, et
+  il recouvre **deux choses sans rapport** selon la source, ce qui rend l'écart de cette
+  seule ligne ininterprétable.
+  - **TIO** : le catalogue vient de la colonne « Nom du catalogue de vente » du fichier
+    (`lib/import/client-order-mapper.ts`) ; vide → rien n'est rattaché. *Sur AH26 :
+    14 commandes, 629 lignes, 10 066 pièces et **0 €**, sans référence `IS-`/`PO-`, toutes
+    avec une fenêtre de livraison, presque toutes vers des points de déstockage
+    (CLASSIC STOCK Talange/Franconville/Corbeil, PJ Company, PMC-Brooklyn…). Des mises à
+    disposition de stock, saisies sans catalogue de vente.*
+  - **TEXAS** : les fichiers Texas ne portent AUCUN catalogue ; il est **hérité de la
+    commande TIO jumelle** via `tioOrderNumber` (`lib/import/mcs-mapper.ts`). Sans jumelle,
+    pas de catalogue — et c'est **correct** : ce sont des **réassorts** (`IS-…`), qui n'ont
+    pas de commande de collection en face. *Sur AH26 : 8 commandes, 638 pièces, 19 005 €.*
 - **État au 24/09/2026** : **AH26 est la seule saison à porter les deux sources**.
   TIO 334 commandes / 88 750 pcs / 2 469 429 € contre TEXAS 282 / 69 925 / 2 403 558 € —
   **18 825 pièces et 65 871 € d'écart**, invisibles jusqu'ici. Trois catalogues n'existent

@@ -197,7 +197,23 @@ export function SourcesTioTexasTab({ seasonId }: { seasonId: string }) {
         </div>
       )}
 
-      <Comparatif titre="Par catalogue" colonne="Catalogue" lignes={data.catalogues} />
+      <Comparatif
+        titre="Par catalogue"
+        colonne="Catalogue"
+        lignes={data.catalogues}
+        note={
+          <>
+            <strong>« Sans catalogue » n&apos;est pas un catalogue</strong> : ce sont les
+            commandes dont le champ est vide, et il recouvre deux choses différentes selon
+            la source. Côté <strong>TIO</strong>, des commandes importées sans « Nom du
+            catalogue de vente » — en pratique des mises à disposition de stock, sans
+            chiffre d&apos;affaires. Côté <strong>Texas</strong>, des commandes dont la
+            jumelle TIO est introuvable : surtout des <strong>réassorts</strong>, qui
+            n&apos;ont pas de commande de collection en face. L&apos;écart de cette ligne
+            ne compare donc pas la même chose des deux côtés.
+          </>
+        }
+      />
 
       <Card>
         <CardHeader className="pb-3">
@@ -254,7 +270,17 @@ function CarteSource({ titre, cote, actif }: { titre: string; cote: Cote; actif:
   );
 }
 
-function Comparatif({ titre, colonne, lignes }: { titre: string; colonne: string; lignes: Ligne[] }) {
+function Comparatif({
+  titre,
+  colonne,
+  lignes,
+  note,
+}: {
+  titre: string;
+  colonne: string;
+  lignes: Ligne[];
+  note?: React.ReactNode;
+}) {
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -263,8 +289,9 @@ function Comparatif({ titre, colonne, lignes }: { titre: string; colonne: string
           <Badge variant="secondary">{lignes.length}</Badge>
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-3">
         <TableComparatif colonne={colonne} lignes={lignes} />
+        {note && <p className="text-xs text-muted-foreground">{note}</p>}
       </CardContent>
     </Card>
   );
