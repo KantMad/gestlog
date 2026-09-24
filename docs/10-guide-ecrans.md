@@ -277,6 +277,44 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
 - **Piège clé** : ici « livré » = **Delivery internes** (statut EXPEDIEE/VALIDEE_DEPOT), tandis
   que Réassort utilise les **BL entrepôt** — les deux notions peuvent diverger.
 
+### Onglet « Montants répartition » (`/statistics`)
+- **Rôle** : lire en euros ce que le pipeline de répartition a fait — **commandé**,
+  **réparti**, **manquant**, par **boutique** et par **catalogue**, avec taux.
+- **Source, volontairement étroite** : `ClientOrderLine.amount` (montant des commandes
+  clients importées) et `AllocationLine.allocatedBySize` des sessions **`VALIDATED`**.
+  Rien d'autre : ni BL entrepôt, ni factures, ni stock. Logique pure et testée dans
+  [`src/lib/repartition-montants.ts`](../src/lib/repartition-montants.ts).
+- 🔴 **Pourquoi pas `Delivery` ?** La table est **vide** et **aucun chemin de code de
+  GestLog n'en crée jamais** — elle n'est que lue (Récap clients, Préparation, Vue dépôt,
+  `api/statistics/*`). *Le « livré » de ces écrans vaut donc 0 depuis toujours.* Ce que la
+  répartition produit réellement, ce sont des `AllocationLine`.
+- 🔴 **Aucun montant n'est stocké sur une quantité répartie** : `AllocationLine` et
+  `DeliveryLine` ne portent que des quantités. Le montant réparti est **déduit au prorata
+  de la pièce** (`montant de la ligne ÷ quantité commandée × quantité répartie`) — exact
+  tant que le prix est uniforme sur les tailles d'un coloris, ce qu'il est chez MCS.
+- ⚠️ **Le soldé est retiré du manquant** : une pièce soldée ne manque pas, elle n'existe
+  plus. Même règle que le Récap clients.
+- ⚠️ **Source active uniquement** (`resolveOrderSource`). *AH26 porte 282 commandes TEXAS
+  et 334 TIO ; les répartitions ne référencent que les TEXAS (90 sur 282).* Lire les deux
+  doublerait tout.
+- ⚠️ **Sessions `CANCELLED` exclues.** *Une existe en base, 460 lignes : la compter
+  ferait apparaître comme répartie une distribution annulée.*
+- 🔴 **Sur-répartition signalée, jamais écrêtée.** *362 lignes AH26 (21 % des couples
+  servis) portent un `allocatedBySize` SUPÉRIEUR à `originalBySize`, dans une seule
+  session — 437 pièces en trop sur 23 022, soit 1,9 %.* Présent **dès la première session
+  du 17/07/2026**, donc antérieur au correctif de répartition du 04/09 : ce n'est pas une
+  régression. L'écart n'est pas corrigé — le manquant devient négatif là où c'est le cas,
+  pour que l'anomalie se voie.
+- **État au 24/09/2026** : seule **AH26** porte des répartitions (16 sessions validées,
+  1 735 lignes, 88 boutiques). Résultat : **2 403 558 € commandés, 589 235 € répartis
+  (24,5 %), 1 814 324 € manquants**. Lecture marquante — le catalogue `MCS Homme W26`,
+  1 633 676 €, est à **0 %** de répartition, alors que `MCS Country classic W26` est à
+  84,7 % et `Territoire d'homme W26` à 81,3 %.
+- ⚠️ **Les montants ne sont pas fiables sur toutes les saisons** : *PE25 n'a un montant que
+  sur 438 lignes sur 7 831*. L'onglet compte les lignes sans montant et l'affiche.
+- **Onglet plutôt qu'écran neuf** : le droit `/statistics` s'applique tel quel, sans avoir
+  à accorder un nouvel écran à chaque utilisateur.
+
 ## Comparaison commande / réception (`/comparison`)
 - **Rôle** : contrôler les **écarts commande fournisseur vs réception réelle**, par fournisseur
   puis par référence/couleur (conforme / écart mineur / majeur).

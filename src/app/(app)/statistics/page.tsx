@@ -5,11 +5,13 @@ import { toast } from "sonner";
 import { useSeason } from "@/lib/season-context";
 import { Topbar } from "@/components/layout/topbar";
 import { PageHeader } from "@/components/layout/page-header";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { MontantsRepartitionTab } from "@/components/statistics/montants-repartition-tab";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { BarChart3, Search, X } from "lucide-react";
+import { BarChart3, Euro, Search, X } from "lucide-react";
 import { cn, formatNumber, formatEuro } from "@/lib/utils";
 import {
   BarChart,
@@ -188,6 +190,19 @@ export default function StatisticsPage() {
           description="Graphiques et analyses par client, fournisseur et saison"
         />
 
+        <Tabs defaultValue="graphiques">
+          <TabsList className="w-full justify-start bg-muted/50 p-1">
+            <TabsTrigger value="graphiques" className="gap-2">
+              <BarChart3 className="h-4 w-4" />
+              Graphiques
+            </TabsTrigger>
+            <TabsTrigger value="montants" className="gap-2">
+              <Euro className="h-4 w-4" />
+              Montants répartition
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="graphiques" className="mt-6 space-y-6">
         {!activeSeason ? (
           <Card className="border-dashed">
             <CardContent className="flex flex-col items-center justify-center py-16">
@@ -813,6 +828,25 @@ export default function StatisticsPage() {
             )}
           </>
         )}
+          </TabsContent>
+
+          {/* Montants du pipeline de répartition : commandé → réparti → manquant.
+              Onglet plutôt qu'écran neuf : les droits « Statistiques » s'appliquent
+              immédiatement, sans avoir à en accorder un nouveau à chaque utilisateur. */}
+          <TabsContent value="montants" className="mt-6">
+            {!activeSeason ? (
+              <Card className="border-dashed">
+                <CardContent className="flex flex-col items-center justify-center py-16">
+                  <p className="text-sm text-muted-foreground">
+                    Sélectionnez une saison pour voir les montants
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              <MontantsRepartitionTab seasonId={activeSeason.id} />
+            )}
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );
