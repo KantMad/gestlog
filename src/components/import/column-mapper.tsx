@@ -7,6 +7,23 @@ interface ColumnMapperProps {
   fields: { key: string; label: string; required?: boolean }[];
   mapping: Record<string, string>;
   onMappingChange: (mapping: Record<string, string>) => void;
+  /** Première valeur de chaque colonne — sert à nommer celles qui n'ont pas de titre. */
+  samples?: Record<string, string>;
+}
+
+// ⚠️ Une colonne sans titre ressort de la lecture du tableur sous le nom `__EMPTY`
+// (`__EMPTY_1`, `__EMPTY_2`…). *Cas réel : dans l'export Texas « CodesBarres », le
+// FOURNISSEUR est en 79ᵉ colonne et son en-tête est vide.* Laisser « __EMPTY » dans la
+// liste, c'est laisser l'utilisateur devant un choix qu'il ne peut pas faire.
+const SANS_TITRE = /^__EMPTY(_\d+)?$/;
+
+export function libelleColonne(header: string, sample?: string): string {
+  const m = SANS_TITRE.exec(header);
+  if (!m) return header;
+  // `__EMPTY` est la 1re sans titre, `__EMPTY_1` la 2e, etc.
+  const rang = m[1] ? Number(m[1].slice(1)) + 1 : 0;
+  const base = `(colonne sans titre${rang ? ` ${rang}` : ""})`;
+  return sample ? `${base} — ex. « ${sample} »` : base;
 }
 
 export function ColumnMapper({
@@ -14,6 +31,7 @@ export function ColumnMapper({
   fields,
   mapping,
   onMappingChange,
+  samples,
 }: ColumnMapperProps) {
   return (
     <div className="space-y-3">
@@ -35,7 +53,7 @@ export function ColumnMapper({
               <option value="">— Non mappé —</option>
               {headers.map((h) => (
                 <option key={h} value={h}>
-                  {h}
+                  {libelleColonne(h, samples?.[h])}
                 </option>
               ))}
             </select>

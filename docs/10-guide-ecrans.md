@@ -480,7 +480,18 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
 - **Réimport** : additif par défaut (`skipDuplicates`), donc un fichier corrigé laisserait
   les lignes fautives du passage précédent. Case **« Remplacer les correspondances
   existantes »** pour repartir du fichier seul ; les fournisseurs ne sont jamais supprimés.
-- **État au 23/09/2026** : table **vide** (0 correspondance pour 3 280 références produit).
+- 🔴 **Un code peut être une TRONCATURE d'un fournisseur existant** — écart que la clé
+  normalisée ne voit pas. *Cas réel, export Texas du 24/09/2026 : `RASENTEKSTIL` sur
+  21 jeans et `RASEN` sur un 22ᵉ, le même fabricant tronqué à la saisie.* `ressembleA()`
+  signale ces cas (préfixe commun, 4 caractères minimum), y compris entre deux codes du
+  même fichier — mais **ne fusionne jamais** : une troncature et un vrai nouveau
+  fournisseur se ressemblent, seul l'humain tranche.
+- ⚠️ **La colonne fournisseur de l'export Texas « CodesBarres » n'a PAS d'en-tête** (79ᵉ
+  colonne). La lecture du tableur la nomme `__EMPTY` — illisible dans la liste de
+  rapprochement. `libelleColonne()` (cf. `components/import/column-mapper.tsx`) l'affiche
+  « (colonne sans titre) — ex. « KESSLY » » ; la détection automatique, elle, ne peut rien
+  pour une colonne anonyme : à choisir à la main.
+- **État au 24/09/2026** : table **vide** (0 correspondance pour 3 280 références produit).
   Les 27 fournisseurs, eux, existent — créés par les imports de commandes fournisseurs.
 
 ## Répartition magasin (`/repartition`)

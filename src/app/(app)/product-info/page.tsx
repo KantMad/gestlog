@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { Topbar } from "@/components/layout/topbar";
 import { PageHeader } from "@/components/layout/page-header";
 import { Dropzone } from "@/components/import/dropzone";
@@ -720,6 +720,7 @@ interface SupplierRefImportResult {
   total: number;
   remplace: boolean;
   newSuppliers: string[];
+  suspects: { fichier: string; ressemble: string }[];
   rapprochements: { fichier: string; base: string }[];
   unknownRefs: string[];
   multiSupplier: { reference: string; suppliers: string[] }[];
@@ -770,6 +771,26 @@ function SupplierRefImportReport({
           </p>
           <p className="mt-1 text-sky-800/80">
             Aucun fournisseur en double n&apos;a été créé.
+          </p>
+        </div>
+      )}
+
+      {result.suspects.length > 0 && (
+        <div className="rounded-lg border border-red-300 bg-red-50/70 p-3 text-sm text-red-900">
+          <p className="font-medium">
+            {result.suspects.length} code(s) ressemblant à un fournisseur déjà connu
+          </p>
+          <ul className="mt-1 space-y-0.5">
+            {result.suspects.map((s) => (
+              <li key={s.fichier}>
+                <span className="font-mono">{s.fichier}</span> ressemble à{" "}
+                <span className="font-mono">{s.ressemble}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-1 text-red-800/80">
+            Rien n&apos;a été fusionné — une troncature de saisie et un vrai nouveau
+            fournisseur se ressemblent. Corriger le fichier et réimporter, ou laisser.
           </p>
         </div>
       )}
@@ -922,6 +943,20 @@ function SupplierRefsTab() {
     setResult(null);
   };
 
+  // Première valeur de chaque colonne : c'est le seul repère utilisable pour une
+  // colonne sans titre (le fournisseur, dans l'export Texas « CodesBarres »).
+  const echantillons = useMemo(() => {
+    const out: Record<string, string> = {};
+    for (const row of parsed?.rows.slice(0, 50) ?? []) {
+      for (const [k, v] of Object.entries(row)) {
+        if (!out[k] && v !== null && v !== undefined && String(v).trim() !== "") {
+          out[k] = String(v).trim().slice(0, 28);
+        }
+      }
+    }
+    return out;
+  }, [parsed]);
+
   // Unique suppliers for dropdown
   const suppliers = Array.from(
     new Map(refs.map((r) => [r.supplier.code, r.supplier])).values()
@@ -967,6 +1002,7 @@ function SupplierRefsTab() {
                     />
                     <ColumnMapper
                       headers={parsed.headers}
+                      samples={echantillons}
                       fields={[
                         {
                           key: "supplierCode",

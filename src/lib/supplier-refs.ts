@@ -25,6 +25,8 @@ export interface ImportPlan {
   links: { supplierCode: string; reference: string }[];
   /** Fournisseurs absents de la base — seront créés, dans l'orthographe du fichier. */
   newSuppliers: { code: string; name: string }[];
+  /** Nouveaux codes qui RESSEMBLENT à un fournisseur existant — à trancher à la main. */
+  suspects: { fichier: string; ressemble: string }[];
   /** Codes du fichier rattachés à un fournisseur existant écrit différemment. */
   rapprochements: { fichier: string; base: string }[];
   /** Références du fichier introuvables au catalogue produit. */
@@ -52,6 +54,27 @@ export function normalizeKey(value: string): string {
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
     .replace(/\s+/g, " ");
+}
+
+/**
+ * Un nouveau code est-il une TRONCATURE (ou une extension) d'un code existant ?
+ *
+ * ⚠️ Le rapprochement par clé normalisée ne voit que les écarts de casse et d'accent.
+ * *Cas réel, export Texas du 24/09/2026 : le fichier porte `RASENTEKSTIL` sur 21 jeans
+ * et `RASEN` sur un 22ᵉ — le même fabricant, tronqué à la saisie.* Importé tel quel,
+ * `RASEN` devient un 28ᵉ fournisseur détenant un seul produit.
+ *
+ * On ne fusionne PAS d'office : deux fournisseurs distincts peuvent légitimement
+ * partager un préfixe. On signale, et c'est l'humain qui tranche.
+ */
+function ressembleA(nouveau: string, existants: string[]): string | null {
+  // En dessous de 4 caractères, un préfixe commun ne veut plus rien dire.
+  if (nouveau.length < 4) return null;
+  for (const e of existants) {
+    if (e.length < 4 || e === nouveau) continue;
+    if (nouveau.startsWith(e) || e.startsWith(nouveau)) return e;
+  }
+  return null;
 }
 
 /**
@@ -128,6 +151,23 @@ export function planSupplierRefImport(
     fournisseursParRef.set(refRetenue, set);
   });
 
+  // Fournisseurs « nouveaux » qui ressemblent à un existant — ou à un autre code du
+  // MÊME fichier, car la troncature cohabite souvent avec la forme complète.
+  const suspects: ImportPlan["suspects"] = [];
+  const libelleParCle = new Map<string, string>();
+  for (const [cle, f] of parCle) libelleParCle.set(cle, f.code);
+  for (const n of nouveaux.values()) libelleParCle.set(normalizeKey(n.code), n.code);
+  for (const n of nouveaux.values()) {
+    const cle = normalizeKey(n.code);
+    const candidats = [...libelleParCle.keys()].filter((k) => k !== cle);
+    const proche = ressembleA(cle, candidats);
+    // Entre deux nouveaux, seul le plus COURT est signalé : c'est lui la troncature,
+    // et se signaler l'un l'autre ne dirait rien de plus.
+    if (proche && !(nouveaux.has(proche) && cle.length > proche.length)) {
+      suspects.push({ fichier: n.code, ressemble: libelleParCle.get(proche)! });
+    }
+  }
+
   const multiSupplier = [...fournisseursParRef.entries()]
     .filter(([, s]) => s.size > 1)
     .map(([reference, s]) => ({ reference, suppliers: [...s].sort() }))
@@ -136,6 +176,7 @@ export function planSupplierRefImport(
   return {
     links,
     newSuppliers: [...nouveaux.values()].sort((a, b) => a.code.localeCompare(b.code, "fr")),
+    suspects: suspects.sort((a, b) => a.fichier.localeCompare(b.fichier, "fr")),
     rapprochements: [...rapprochements.entries()]
       .map(([fichier, base]) => ({ fichier, base }))
       .sort((a, b) => a.fichier.localeCompare(b.fichier, "fr")),

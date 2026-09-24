@@ -1670,6 +1670,8 @@ export const HELP_THEMES: HelpTheme[] = [
             lines: [
               "**Il rattache aux fournisseurs déjà connus** sans se laisser piéger par la casse ou les accents : « Enteks » retrouve **ENTEKS** et n'en crée pas un deuxième. Le compte-rendu liste ces rapprochements.",
               "**Il annonce tout fournisseur créé** : si un nom apparaît là, vérifie que c'est bien un nouveau fournisseur et pas une autre écriture d'un fournisseur existant.",
+              "**Il signale en rouge les codes tronqués** : `RASEN` à côté de `RASENTEKSTIL`, par exemple. Rien n'est fusionné tout seul — à toi de corriger le fichier ou de laisser.",
+              "Si ton fichier a une **colonne sans titre** (c'est le cas du fournisseur dans l'export Texas « CodesBarres »), elle apparaît comme **« (colonne sans titre) — ex. « KESSLY » »** : choisis-la à la main, la détection automatique ne peut pas deviner.",
               "**Il signale les références inconnues au catalogue** — elles sont conservées (un produit peut arriver avant sa synchro TIO), mais une coquille ne correspondra jamais à rien.",
               "Il relève aussi les **doublons du fichier** et les références rattachées à **plusieurs fournisseurs** (légitime en double sourcing).",
             ],

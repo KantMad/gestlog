@@ -120,6 +120,7 @@ export async function POST(request: NextRequest) {
         total,
         remplace: replace,
         newSuppliers: plan.newSuppliers.map((s) => s.code),
+        suspects: plan.suspects,
         rapprochements: plan.rapprochements,
         unknownRefs: plan.unknownRefs,
         multiSupplier: plan.multiSupplier,

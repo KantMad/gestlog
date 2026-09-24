@@ -108,3 +108,43 @@ describe("normalizeKey", () => {
     expect(normalizeKey(undefined as unknown as string)).toBe("");
   });
 });
+
+describe("correspondances fournisseur — fournisseurs qui se ressemblent", () => {
+  // Cas réel de l'export Texas du 24/09/2026.
+  it("signale une troncature d'un fournisseur existant sans la fusionner", () => {
+    const r = planSupplierRefImport(
+      [
+        { supplierCode: "RASENTEKSTIL", reference: "SMPTCH_C001" },
+        { supplierCode: "RASEN", reference: "SMCHML_C025" },
+      ],
+      { suppliers: [{ code: "RASENTEKSTIL", name: "RASENTEKSTIL" }], catalogueRefs: CATALOGUE }
+    );
+    expect(r.suspects).toEqual([{ fichier: "RASEN", ressemble: "RASENTEKSTIL" }]);
+    // Signalé, pas corrigé : le lien est bien créé sous RASEN.
+    expect(r.newSuppliers.map((s) => s.code)).toEqual(["RASEN"]);
+  });
+
+  it("repère aussi la troncature quand AUCUNE des deux formes n'est en base", () => {
+    const r = planSupplierRefImport(
+      [
+        { supplierCode: "NOUVOTEXTILE", reference: "SMPTCH_C001" },
+        { supplierCode: "NOUVO", reference: "SMCHML_C025" },
+      ],
+      { suppliers: [], catalogueRefs: CATALOGUE }
+    );
+    // Seul le plus court est signalé : c'est lui la troncature.
+    expect(r.suspects).toEqual([{ fichier: "NOUVO", ressemble: "NOUVOTEXTILE" }]);
+  });
+
+  it("ne crie pas sur des codes courts qui partagent un début", () => {
+    const r = planSupplierRefImport([{ supplierCode: "ABC", reference: "SMCHML_C025" }], {
+      suppliers: [{ code: "ABCDEF", name: "ABCDEF" }],
+      catalogueRefs: CATALOGUE,
+    });
+    expect(r.suspects).toEqual([]);
+  });
+
+  it("ne signale rien quand le fournisseur est franchement nouveau", () => {
+    expect(plan([{ supplierCode: "ZARATEX", reference: "SMCHML_C025" }]).suspects).toEqual([]);
+  });
+});
