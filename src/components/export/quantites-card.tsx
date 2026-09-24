@@ -29,6 +29,29 @@ interface SheetResponse {
   meta: { source: string; lineCount: number; undatedOrders: number };
 }
 
+interface SupplierSheetPayload {
+  supplier: string;
+  sheetName: string;
+  sheet: { header: string[]; rows: (string | number)[][]; groupCount: number; grandTotal: number };
+}
+interface SupplierResponse {
+  workbook: {
+    sheets: SupplierSheetPayload[];
+    supplierCount: number;
+    unknownPieces: number;
+    grandTotal: number;
+  };
+  meta: {
+    source: string;
+    lineCount: number;
+    undatedOrders: number;
+    refCount: number;
+    withoutSupplier: number;
+    supplierOrigins: { correspondance: number; commande: number };
+    conflicts: { reference: string; suppliers: string[] }[];
+  };
+}
+
 type ClientMode = "include" | "exclude";
 
 export function QuantitesCard({
@@ -48,6 +71,7 @@ export function QuantitesCard({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [boutiqueSearch, setBoutiqueSearch] = useState("");
   const [withBoutique, setWithBoutique] = useState(false);
+  const [bySupplier, setBySupplier] = useState(false);
   const [busy, setBusy] = useState(false);
   const [preview, setPreview] = useState<SheetResponse["meta"] & { groupCount: number; grandTotal: number } | null>(null);
   const [counting, setCounting] = useState(false);
@@ -121,23 +145,51 @@ export function QuantitesCard({
   const exportExcel = useCallback(async () => {
     setBusy(true);
     try {
-      const res = await fetch(`/api/export/quantites?${query}`);
-      const d: SheetResponse = await res.json();
+      const res = await fetch(`/api/export/quantites?${query}${bySupplier ? "&bySupplier=1" : ""}`);
+      const json = await res.json();
       if (!res.ok) {
         toast.error("Export impossible");
         return;
       }
-      if (d.groupCount === 0) {
-        toast.warning("Aucune quantité ne correspond à ces critères");
-        return;
-      }
+
       const wb = XLSX.utils.book_new();
-      const ws = XLSX.utils.aoa_to_sheet([d.header, ...d.rows]);
       // Réf / Libellé 1 / Catégorie / Coloris / Libellé coloris [/ Boutique], puis tailles.
       const WIDTHS = [18, 34, 16, 9, 18, ...(withBoutique ? [28] : [])];
-      ws["!cols"] = d.header.map((_, i) => ({ wch: WIDTHS[i] ?? 7 }));
-      ws["!freeze"] = { xSplit: WIDTHS.length, ySplit: 1 };
-      XLSX.utils.book_append_sheet(wb, ws, "Quantités");
+      const feuille = (header: string[], rows: (string | number)[][]) => {
+        const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
+        ws["!cols"] = header.map((_, i) => ({ wch: WIDTHS[i] ?? 7 }));
+        ws["!freeze"] = { xSplit: WIDTHS.length, ySplit: 1 };
+        return ws;
+      };
+
+      let resume: string;
+      let meta: SheetResponse["meta"] | SupplierResponse["meta"];
+      let sansFournisseur = 0;
+      let conflits: { reference: string; suppliers: string[] }[] = [];
+
+      if (bySupplier) {
+        const d = json as SupplierResponse;
+        if (d.workbook.sheets.length === 0) {
+          toast.warning("Aucune quantité ne correspond à ces critères");
+          return;
+        }
+        for (const s of d.workbook.sheets) {
+          XLSX.utils.book_append_sheet(wb, feuille(s.sheet.header, s.sheet.rows), s.sheetName);
+        }
+        meta = d.meta;
+        sansFournisseur = d.meta.withoutSupplier;
+        conflits = d.meta.conflicts;
+        resume = `${d.workbook.supplierCount} fournisseur(s) — ${d.workbook.grandTotal} pièces`;
+      } else {
+        const d = json as SheetResponse;
+        if (d.groupCount === 0) {
+          toast.warning("Aucune quantité ne correspond à ces critères");
+          return;
+        }
+        XLSX.utils.book_append_sheet(wb, feuille(d.header, d.rows), "Quantités");
+        meta = d.meta;
+        resume = `${d.groupCount} référence(s) x coloris — ${d.grandTotal} pièces`;
+      }
 
       const boutiqueLabel =
         selected.size === 0
@@ -154,23 +206,49 @@ export function QuantitesCard({
           { Critère: "SKU / référence", Valeur: sku.trim() || "Toutes" },
           { Critère: "Boutiques", Valeur: boutiqueLabel },
           { Critère: "Détail boutique", Valeur: withBoutique ? "Oui" : "Non" },
-          { Critère: "Source des commandes", Valeur: d.meta.source },
+          { Critère: "Onglet par fournisseur", Valeur: bySupplier ? "Oui" : "Non" },
+          { Critère: "Source des commandes", Valeur: meta.source },
           { Critère: "Type de commande", Valeur: "COMMANDE (hors VSS)" },
           { Critère: "Quantités", Valeur: "Commandées — soldés non déduits" },
-          { Critère: "Références x coloris", Valeur: d.groupCount },
-          { Critère: "Total pièces", Valeur: d.grandTotal },
+          ...(bySupplier
+            ? [
+                {
+                  Critère: "Références sans fournisseur",
+                  Valeur: `${sansFournisseur} (onglet « Sans fournisseur »)`,
+                },
+                ...(conflits.length > 0
+                  ? [
+                      {
+                        Critère: "Références à plusieurs fournisseurs",
+                        Valeur: conflits
+                          .map((c) => `${c.reference} (${c.suppliers.join(" + ")})`)
+                          .join(" · "),
+                      },
+                    ]
+                  : []),
+              ]
+            : []),
+          { Critère: "Résumé", Valeur: resume },
         ]),
         "Critères"
       );
-      const suffix = withBoutique ? "detail-boutique" : "global";
+      const suffix = [bySupplier ? "par-fournisseur" : null, withBoutique ? "detail-boutique" : "global"]
+        .filter(Boolean)
+        .join("_");
       XLSX.writeFile(wb, `quantites-commandees_${seasonName}_${suffix}_${fileStamp()}.xlsx`);
-      toast.success(`${d.groupCount} référence(s) x coloris — ${d.grandTotal} pièces`);
+      if (bySupplier && sansFournisseur > 0) {
+        toast.warning(`${resume} — ${sansFournisseur} référence(s) sans fournisseur`, {
+          description: "Elles sont dans l'onglet « Sans fournisseur », jamais écartées.",
+        });
+      } else {
+        toast.success(resume);
+      }
     } catch {
       toast.error("Export impossible");
     } finally {
       setBusy(false);
     }
-  }, [query, seasonName, catalogId, catalogs, dateFrom, dateTo, sku, selected, clientMode, boutiques, withBoutique]);
+  }, [query, seasonName, catalogId, catalogs, dateFrom, dateTo, sku, selected, clientMode, boutiques, withBoutique, bySupplier]);
 
   const datesActive = !!(dateFrom || dateTo);
 
@@ -323,6 +401,38 @@ export function QuantitesCard({
             </span>
           </span>
         </label>
+
+        {/* ── Onglet par fournisseur ── */}
+        <label className="flex cursor-pointer items-start gap-2 rounded-lg border p-3 text-sm hover:bg-muted/40">
+          <input
+            type="checkbox"
+            checked={bySupplier}
+            onChange={(e) => setBySupplier(e.target.checked)}
+            className="mt-0.5 h-4 w-4"
+          />
+          <span>
+            <span className="font-medium">Un onglet par fournisseur</span>
+            <span className="mt-0.5 block text-xs text-muted-foreground">
+              {bySupplier
+                ? "Chaque fournisseur a son onglet, avec ses propres colonnes de tailles. Ce dont le fournisseur est inconnu va dans un onglet « Sans fournisseur », jamais écarté."
+                : "Décoché : une feuille unique, tous fournisseurs confondus."}
+            </span>
+          </span>
+        </label>
+
+        {/* ⚠️ Le fournisseur n'est connu que pour une partie du catalogue : le dire ICI,
+            avant l'export, évite de découvrir un gros onglet « Sans fournisseur ». */}
+        {bySupplier && (
+          <div className="flex items-start gap-2 rounded-lg border border-sky-300 bg-sky-50 p-3 text-xs text-sky-900">
+            <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>
+              Le fournisseur vient des <strong>correspondances importées</strong> (Infos
+              produits → Fournisseur → Réf), et à défaut des <strong>commandes
+              fournisseurs</strong> déjà saisies. Tout ce qui n&apos;est couvert ni par
+              l&apos;une ni par l&apos;autre atterrit dans l&apos;onglet « Sans fournisseur ».
+            </span>
+          </div>
+        )}
 
         {/* ⚠️ Toutes les commandes n'ont pas de date : sans avertissement, un filtre de
             période renverrait un fichier vide sans qu'on comprenne pourquoi. */}

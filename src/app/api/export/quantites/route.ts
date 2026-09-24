@@ -2,7 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { handleApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { resolveOrderSource } from "@/lib/order-source";
-import { buildQuantitySheet, type QuantityLine } from "@/lib/export-quantites";
+import {
+  buildQuantitySheet,
+  buildSupplierSheets,
+  type QuantityLine,
+} from "@/lib/export-quantites";
+import { resolveProductSuppliers } from "@/lib/product-supplier";
 
 export const maxDuration = 60;
 
@@ -14,6 +19,7 @@ export const maxDuration = 60;
 //     include = "aucune boutique SAUF celles-ci"
 //     exclude = "toutes les boutiques SAUF celles-ci"
 // ?withBoutique=1     (détail par boutique)
+// ?bySupplier=1       (un onglet par fournisseur)
 //
 // ⚠️ Source des commandes : `resolveOrderSource` (TEXAS dès qu'il existe des commandes
 // Texas sur la saison, sinon TIO). Interroger la table sans ce filtre ferait DOUBLER les
@@ -40,6 +46,7 @@ export async function GET(request: NextRequest) {
     const skus = (p.get("sku") || "")
       .split(",").map((s) => s.trim().toUpperCase()).filter(Boolean);
     const withBoutique = p.get("withBoutique") === "1";
+    const bySupplier = p.get("bySupplier") === "1";
 
     const source = await resolveOrderSource(seasonId);
 
@@ -125,11 +132,58 @@ export async function GET(request: NextRequest) {
       quantitiesBySize: l.quantitiesBySize,
     }));
 
-    const sheet = buildQuantitySheet(rows, { withBoutique });
+    if (!bySupplier) {
+      const sheet = buildQuantitySheet(rows, { withBoutique });
+      return NextResponse.json({
+        ...sheet,
+        meta: { source, lineCount: lines.length, undatedOrders },
+      });
+    }
+
+    // ─── Éclatement par fournisseur ──────────────────────────────────────────
+    // Deux sources cumulées, cf. lib/product-supplier.ts. La table des
+    // correspondances est petite (une ligne par référence) : on la lit en entier.
+    // Les commandes fournisseurs, elles, passent par un DISTINCT en SQL — les lire
+    // ligne à ligne ramènerait des milliers de lignes pour 253 références.
+    const [correspondances, commandes] = await Promise.all([
+      prisma.supplierProductRef.findMany({
+        select: { reference: true, supplier: { select: { name: true } } },
+      }),
+      prisma.$queryRawUnsafe<{ reference: string; supplier: string }[]>(
+        `SELECT DISTINCT p."reference" AS reference, s."name" AS supplier
+           FROM "SupplierOrderLine" sol
+           JOIN "Product" p ON p.id = sol."productId"
+           JOIN "SupplierOrder" so ON so.id = sol."supplierOrderId"
+           JOIN "Supplier" s ON s.id = so."supplierId"`
+      ),
+    ]);
+
+    const resolution = resolveProductSuppliers(
+      correspondances.map((c) => ({ reference: c.reference, supplier: c.supplier.name })),
+      commandes
+    );
+
+    const workbook = buildSupplierSheets(
+      rows.map((r) => ({ ...r, supplier: resolution.byReference.get(r.reference) })),
+      { withBoutique }
+    );
+
+    // Références du PÉRIMÈTRE seulement : dire « 1 767 sans fournisseur » alors que
+    // l'export n'en contient que 40 ne renseignerait sur rien.
+    const refsExport = new Set(rows.map((r) => r.reference));
+    const sansFournisseur = [...refsExport].filter((r) => !resolution.byReference.has(r));
 
     return NextResponse.json({
-      ...sheet,
-      meta: { source, lineCount: lines.length, undatedOrders },
+      workbook,
+      meta: {
+        source,
+        lineCount: lines.length,
+        undatedOrders,
+        refCount: refsExport.size,
+        withoutSupplier: sansFournisseur.length,
+        supplierOrigins: resolution.counts,
+        conflicts: resolution.conflicts.filter((c) => refsExport.has(c.reference)),
+      },
     });
   } catch (e) {
     return handleApiError(e, "api/export/quantites");

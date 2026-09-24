@@ -1645,6 +1645,38 @@ export const HELP_THEMES: HelpTheme[] = [
         ],
       },
       {
+        id: "export-quantites-fournisseur",
+        icon: "🏷️",
+        title: "Export des quantités commandées, un onglet par fournisseur",
+        keywords: "export quantités commandées onglet fournisseur excel tailles colonnes boutique sans fournisseur",
+        screen: "/export",
+        sections: [
+          {
+            lines: [
+              "**Exports → Quantités commandées**, puis coche **« Un onglet par fournisseur »**.",
+              "Tu obtiens un classeur avec **un onglet par fournisseur**, du plus gros volume au plus petit : produits en lignes coloris, tailles en colonnes, et les mêmes filtres que d'habitude (saison, catalogue, période, SKU, boutiques).",
+            ],
+            tip: "Combine avec « Avec le détail boutique » pour voir qui a commandé quoi chez chaque fournisseur. 🧾",
+          },
+          {
+            h: "Chaque onglet a ses propres tailles",
+            lines: [
+              "Un jeanier sort en `29 → 44`, un chemisier en `S → 4XL`, un chausseur en `39-42 / 43-46`. Une grille commune rendrait chaque onglet aux trois quarts vide.",
+              "Un fournisseur qui fabrique plusieurs familles aura donc beaucoup de colonnes : c'est normal.",
+            ],
+          },
+          {
+            h: "L'onglet « Sans fournisseur »",
+            lines: [
+              "Le fournisseur est cherché **d'abord dans les correspondances importées** (Infos produits → Fournisseur → Réf), **puis dans les commandes fournisseurs** déjà saisies.",
+              "Tout ce que ni l'une ni l'autre ne couvre va dans un onglet **« Sans fournisseur »**, placé en dernier. **Rien n'est jamais écarté** : le total du classeur est toujours égal à celui de la feuille unique.",
+              "Cet onglet se vide à mesure que tu importes les fichiers CodesBarres des autres saisons.",
+            ],
+            tip: "Un message te dit combien de références sont sans fournisseur au moment de l'export — pas besoin d'ouvrir le fichier pour le savoir. 👀",
+          },
+        ],
+      },
+      {
         id: "fournisseur-reference",
         icon: "🏭",
         title: "Rattacher les produits à leur fournisseur",

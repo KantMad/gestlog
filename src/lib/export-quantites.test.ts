@@ -149,3 +149,90 @@ describe("cas limites", () => {
     for (const r of sheet.rows) expect(r).toHaveLength(sheet.header.length);
   });
 });
+
+// ─── Un onglet par fournisseur ───────────────────────────────────────────────
+import { buildSupplierSheets, NO_SUPPLIER } from "./export-quantites";
+
+const ligne = (
+  reference: string,
+  colorCode: string,
+  clientCode: string,
+  q: Record<string, number>,
+  supplier?: string
+): QuantityLine => ({
+  reference,
+  label: "Produit",
+  category: "Cat",
+  colorCode,
+  colorLabel: "Coloris",
+  clientCode,
+  clientName: clientCode,
+  quantitiesBySize: JSON.stringify(q),
+  supplier,
+});
+
+describe("quantités commandées — un onglet par fournisseur", () => {
+  const LIGNES = [
+    ligne("SMCHML_C025", "714", "A", { S: 1, M: 3 }, "ENTEKS"),
+    ligne("SMCHML_C025", "714", "B", { M: 2 }, "ENTEKS"),
+    ligne("SMD201_D110", "000", "A", { "30": 4, "32": 6 }, "RASENTEKSTIL"),
+    ligne("SMVEST_C001", "001", "A", { L: 5 }), // fournisseur inconnu
+  ];
+
+  it("un onglet par fournisseur, du plus gros volume au plus petit", () => {
+    const wb = buildSupplierSheets(LIGNES, { withBoutique: false });
+    expect(wb.sheets.map((s) => s.supplier)).toEqual([
+      "RASENTEKSTIL", // 10 pièces
+      "ENTEKS", // 6 pièces
+      NO_SUPPLIER, // 5 pièces, mais toujours en dernier
+    ]);
+  });
+
+  it("chaque onglet a SES tailles, pas une grille commune", () => {
+    const wb = buildSupplierSheets(LIGNES, { withBoutique: false });
+    const par = Object.fromEntries(wb.sheets.map((s) => [s.supplier, s.sheet.sizes]));
+    expect(par["ENTEKS"]).toEqual(["S", "M"]);
+    expect(par["RASENTEKSTIL"]).toEqual(["30", "32"]);
+  });
+
+  it("aucune pièce perdue ni doublée", () => {
+    const wb = buildSupplierSheets(LIGNES, { withBoutique: false });
+    expect(wb.grandTotal).toBe(21); // 4 + 2 + 10 + 5
+    expect(wb.unknownPieces).toBe(5);
+    expect(wb.supplierCount).toBe(2);
+  });
+
+  it("regroupe les boutiques par défaut et les déplie sur demande", () => {
+    const sans = buildSupplierSheets(LIGNES, { withBoutique: false });
+    const avec = buildSupplierSheets(LIGNES, { withBoutique: true });
+    const enteksSans = sans.sheets.find((s) => s.supplier === "ENTEKS")!.sheet;
+    const enteksAvec = avec.sheets.find((s) => s.supplier === "ENTEKS")!.sheet;
+    // Sans détail : une seule ligne, toutes boutiques confondues.
+    expect(enteksSans.rows.filter((r) => r[0] === "SMCHML_C025")).toHaveLength(1);
+    // Avec détail : une ligne par boutique, PLUS la ligne de total du coloris.
+    const avecLignes = enteksAvec.rows.filter((r) => r[0] === "SMCHML_C025");
+    expect(avecLignes).toHaveLength(3);
+    expect(avecLignes.map((r) => r[5])).toEqual(["A", "B", "Total SMCHML_C025 714"]);
+    // Le total ne bouge pas selon la façon de le lire.
+    expect(enteksSans.grandTotal).toBe(enteksAvec.grandTotal);
+  });
+
+  it("nomme les onglets sans collision", () => {
+    const wb = buildSupplierSheets(
+      [
+        ligne("A", "1", "A", { S: 1 }, "FOURNISSEUR AU NOM INTERMINABLE NUMERO 1"),
+        ligne("B", "1", "A", { S: 1 }, "FOURNISSEUR AU NOM INTERMINABLE NUMERO 2"),
+      ],
+      { withBoutique: false }
+    );
+    const noms = wb.sheets.map((s) => s.sheetName);
+    expect(new Set(noms).size).toBe(2);
+    noms.forEach((n) => expect(n.length).toBeLessThanOrEqual(31));
+  });
+
+  it("ne crée pas d'onglet « Sans fournisseur » quand tout est renseigné", () => {
+    const wb = buildSupplierSheets(LIGNES.slice(0, 3), { withBoutique: false });
+    expect(wb.sheets.map((s) => s.supplier)).not.toContain(NO_SUPPLIER);
+    expect(wb.unknownPieces).toBe(0);
+  });
+});

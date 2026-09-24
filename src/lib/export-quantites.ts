@@ -1,4 +1,7 @@
 import { sortSizeScale } from "@/lib/size-order";
+// Nom d'onglet Excel valide et unique — même règle que le classeur « Lancement de
+// commande », pour que deux exports ne nomment pas différemment le même fournisseur.
+import { safeSheetName } from "@/lib/lancement-commande";
 
 // Construction de l'export "Quantités commandées" (écran Exports).
 //
@@ -25,6 +28,8 @@ export interface QuantityLine {
   clientName: string;
   /** JSON { taille: quantité } tel que stocké dans ClientOrderLine.quantitiesBySize. */
   quantitiesBySize: string;
+  /** Fournisseur du produit ; vide si inconnu (cf. `NO_SUPPLIER`). */
+  supplier?: string;
 }
 
 export interface QuantitySheet {
@@ -173,4 +178,84 @@ export function buildQuantitySheet(
   ]);
 
   return { sizes, header, rows, groupCount: groups.size, grandTotal };
+}
+
+// ─── Un onglet par fournisseur ───────────────────────────────────────────────
+// Même tableau que ci-dessus, éclaté par fournisseur. Chaque onglet recalcule SES
+// colonnes de tailles : un jeanier se décline en 29-44, un chemisier en S-4XL ; une
+// grille commune rendrait chaque onglet aux trois quarts vide.
+
+/**
+ * Onglet des produits dont le fournisseur est inconnu.
+ *
+ * ⚠️ Toujours produit, jamais écarté. *Au 24/09/2026, 250 références sur les 2 017
+ * commandées ont un fournisseur connu* : les faire disparaître en silence donnerait un
+ * classeur qui a l'air complet et ne l'est pas. L'onglet est placé en DERNIER — c'est
+ * une liste de travail, pas un fournisseur.
+ */
+export const NO_SUPPLIER = "Sans fournisseur";
+
+export interface SupplierQuantitySheet {
+  supplier: string;
+  /** Nom d'onglet Excel, tronqué et rendu unique. */
+  sheetName: string;
+  sheet: QuantitySheet;
+}
+
+export interface SupplierWorkbook {
+  sheets: SupplierQuantitySheet[];
+  /** Fournisseurs réellement présents (hors onglet « Sans fournisseur »). */
+  supplierCount: number;
+  /** Pièces dont le fournisseur est inconnu. */
+  unknownPieces: number;
+  grandTotal: number;
+}
+
+/**
+ * Éclate les lignes en un onglet par fournisseur, du plus gros volume au plus petit.
+ *
+ * ⚠️ Une ligne n'apparaît que dans UN onglet. Un produit partagé entre deux fournisseurs
+ * doit avoir été tranché en amont (l'API retient le premier par ordre alphabétique et le
+ * signale) : le recopier des deux côtés doublerait les quantités du classeur.
+ */
+export function buildSupplierSheets(
+  lines: QuantityLine[],
+  { withBoutique }: { withBoutique: boolean }
+): SupplierWorkbook {
+  const parFournisseur = new Map<string, QuantityLine[]>();
+  for (const l of lines) {
+    const f = (l.supplier || "").trim() || NO_SUPPLIER;
+    const bucket = parFournisseur.get(f);
+    if (bucket) bucket.push(l);
+    else parFournisseur.set(f, [l]);
+  }
+
+  const construits = [...parFournisseur.entries()]
+    .map(([supplier, ls]) => ({ supplier, sheet: buildQuantitySheet(ls, { withBoutique }) }))
+    // Un fournisseur dont toutes les lignes sont à zéro ne mérite pas d'onglet.
+    .filter((x) => x.sheet.groupCount > 0)
+    .sort((a, b) => {
+      // « Sans fournisseur » en dernier, quel que soit son volume.
+      if (a.supplier === NO_SUPPLIER) return 1;
+      if (b.supplier === NO_SUPPLIER) return -1;
+      return (
+        b.sheet.grandTotal - a.sheet.grandTotal ||
+        a.supplier.localeCompare(b.supplier, "fr")
+      );
+    });
+
+  const taken = new Set<string>();
+  const sheets = construits.map((x) => ({
+    supplier: x.supplier,
+    sheetName: safeSheetName(x.supplier, taken),
+    sheet: x.sheet,
+  }));
+
+  return {
+    sheets,
+    supplierCount: sheets.filter((s) => s.supplier !== NO_SUPPLIER).length,
+    unknownPieces:
+      sheets.find((s) => s.supplier === NO_SUPPLIER)?.sheet.grandTotal ?? 0,
+    grandTotal: sheets.reduce((n, s) => n + s.sheet.grandTotal, 0),
+  };
 }

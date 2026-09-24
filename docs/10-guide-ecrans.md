@@ -726,6 +726,29 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
   exclues ; **saison lue dans le fichier commande fournisseur** = `SupplierOrder.tioSeason`) +
   **Comparaison** xlsx. Sélecteur de réceptions (recherche fournisseur). Liens vers les exports
   contextuels (répartition, comparaison saisons, magasin, livraisons).
+- **Quantités commandées — un onglet par fournisseur** (case à cocher ; `bySupplier=1`) :
+  même tableau, éclaté en un onglet par fournisseur, du plus gros volume au plus petit.
+  - **Chaque onglet recalcule SES colonnes de tailles.** Une grille commune rendrait chaque
+    onglet aux trois quarts vide : sur AH26, ENTEKS sort en `29→44`, KESSLY en `TU/S-M/L-XL`,
+    DARINDA en `39-42/43-46`. Un fournisseur multi-familles (KATA) porte légitimement
+    27 colonnes.
+  - 🔴 **Le fournisseur vient de DEUX sources cumulées** (`src/lib/product-supplier.ts`,
+    testé) : les **correspondances importées** (`SupplierProductRef`) d'abord, puis les
+    **commandes fournisseurs** (`SupplierOrderLine`). *Ni l'une ni l'autre ne suffit : au
+    24/09/2026, sur 2 017 références commandées, les commandes fournisseurs n'en couvrent
+    que 250 — dont 245 sur la seule AH26 — et les correspondances importées 207, toutes
+    sur PE27.* Résultat réel : AH26 → 245/343 réfs (4 % des pièces sans fournisseur),
+    PE27 → 222/376 dont **201 grâce aux correspondances importées** (22 % des pièces).
+  - 🔴 **Onglet « Sans fournisseur », toujours produit et toujours en dernier.** Les
+    références non couvertes ne sont **jamais écartées** : un classeur amputé aurait l'air
+    complet. L'onglet est en fin de classeur parce que c'est une liste de travail, pas un
+    fournisseur. Vérifié sur données réelles : feuille unique et classeur éclaté donnent
+    le **même total** (AH26 : 69 925 ; PE27 : 82 926).
+  - ⚠️ **Une référence à plusieurs fournisseurs n'est mise que dans UN onglet** (le premier
+    par ordre alphabétique) et l'écart est écrit dans l'onglet `Critères`. La recopier des
+    deux côtés doublerait ses quantités : un total faux est pire qu'un choix assumé.
+  - Les **commandes fournisseurs** sont lues par un `DISTINCT` SQL (253 lignes) et non
+    ligne à ligne (des milliers) ; la table des correspondances, minuscule, est lue en entier.
 - **Recoupement modèle × couleurs** (`/api` : aucun — `src/lib/recoupement.ts`, testé ;
   `components/export/recoupement-card.tsx`) : produit un **tableau croisé** — une ligne par
   modèle, une colonne par couleur, un total par modèle (`Total Modèle`) et par couleur
