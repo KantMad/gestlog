@@ -22,9 +22,12 @@ import { Progress } from "@/components/ui/progress";
 import { Loader2, Search, TriangleAlert } from "lucide-react";
 import { cn, formatEuro, formatNumber } from "@/lib/utils";
 
-// Montants du pipeline de répartition : commandé (import commande client) → réparti
-// (sessions validées) → manquant. Cf. src/lib/repartition-montants.ts pour le pourquoi
-// du périmètre et pour la déduction du montant réparti.
+// Commandé (commandes clients importées) → réparti (sessions validées) → livré (bons de
+// livraison entrepôt) → manquant. Cf. src/lib/repartition-montants.ts pour le pourquoi de
+// chaque source et pour la déduction des montants au prorata de la pièce.
+//
+// ⚠️ Réparti et livré sont deux étapes distinctes, volontairement affichées côte à côte :
+// ce que GestLog a décidé n'est pas ce qui est parti.
 
 interface Groupe {
   id: string;
@@ -32,10 +35,13 @@ interface Groupe {
   commande: number;
   solde: number;
   reparti: number;
+  livre: number;
   manquant: number;
   qCommandee: number;
   qRepartie: number;
+  qLivree: number;
   taux: number;
+  tauxLivre: number;
 }
 interface Rapport {
   total: Omit<Groupe, "id" | "label">;
@@ -43,11 +49,15 @@ interface Rapport {
   parCatalogue: Groupe[];
   lignesSansMontant: number;
   surRepartition: number;
+  surLivraison: number;
   meta: {
     source: string;
     lineCount: number;
     orderLineDuplicates: number;
     validatedSessions: number;
+    blSeason: string | null;
+    blPiecesTotal: number;
+    blPiecesHorsCommande: number;
   };
 }
 
@@ -170,9 +180,13 @@ export function MontantsRepartitionTab({ seasonId }: { seasonId: string }) {
         </Card>
         <Card>
           <CardContent>
-            <div className="text-2xl font-bold text-emerald-700">{formatEuro(t.reparti)}</div>
+            <div className="text-2xl font-bold text-emerald-700">{formatEuro(t.livre)}</div>
             <p className="text-sm text-muted-foreground">
-              Réparti · {formatNumber(t.qRepartie)} pcs
+              Livré · {formatNumber(t.qLivree)} pcs
+            </p>
+            <Progress value={Math.min(100, t.tauxLivre)} className="mt-2" />
+            <p className="mt-1 text-xs text-muted-foreground">
+              {t.tauxLivre.toLocaleString("fr-FR")} % du commandé
             </p>
           </CardContent>
         </Card>
@@ -180,27 +194,65 @@ export function MontantsRepartitionTab({ seasonId }: { seasonId: string }) {
           <CardContent>
             <div className="text-2xl font-bold text-red-700">{formatEuro(t.manquant)}</div>
             <p className="text-sm text-muted-foreground">
-              Manquant
-              {t.solde > 0 && ` · hors ${formatEuro(t.solde)} soldés`}
+              Manquant · commandé − soldé − livré
+              {t.solde > 0 && ` (${formatEuro(t.solde)} soldés)`}
             </p>
           </CardContent>
         </Card>
         <Card>
           <CardContent>
-            <div className="text-2xl font-bold">{t.taux.toLocaleString("fr-FR")} %</div>
-            <Progress value={Math.min(100, t.taux)} className="mt-2" />
-            <p className="mt-1 text-sm text-muted-foreground">du montant commandé réparti</p>
+            <div className="text-2xl font-bold">{formatEuro(t.reparti)}</div>
+            <p className="text-sm text-muted-foreground">
+              Réparti · {formatNumber(t.qRepartie)} pcs
+            </p>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Ce que GestLog a attribué — à ne pas confondre avec ce qui est parti.
+            </p>
           </CardContent>
         </Card>
       </div>
 
       {/* ── Ce qui rendrait les chiffres trompeurs ── */}
+      {data.meta.blPiecesHorsCommande > 0 && (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+          <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>
+            <strong>
+              {formatNumber(data.meta.blPiecesHorsCommande)} pièce(s) livrée(s) sans ligne de
+              commande
+            </strong>{" "}
+            sur {formatNumber(data.meta.blPiecesTotal)} : la boutique a reçu un produit
+            qu&apos;elle n&apos;a pas commandé sur ce périmètre. Sans commande, ni prix ni
+            catalogue — ces pièces ne sont pas dans les euros ci-dessus.
+          </span>
+        </div>
+      )}
+      {data.meta.blPiecesTotal === 0 && (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+          <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>
+            <strong>Aucun bon de livraison sur cette saison</strong>
+            {data.meta.blSeason && ` (code entrepôt « ${data.meta.blSeason} »)`} : le livré
+            vaut 0 et tout apparaît comme manquant. Importer les BL depuis l&apos;écran
+            Livraisons.
+          </span>
+        </div>
+      )}
+      {data.surLivraison > 0 && (
+        <div className="flex items-start gap-2 rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-900">
+          <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>
+            <strong>{data.surLivraison} ligne(s) livrées au-delà du commandé.</strong> Rien
+            n&apos;est écrêté : le manquant devient négatif là où c&apos;est le cas.
+          </span>
+        </div>
+      )}
       {data.meta.validatedSessions === 0 && (
         <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
           <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
           <span>
-            <strong>Aucune répartition validée sur cette saison.</strong> Le réparti vaut donc
-            0 et tout apparaît comme manquant — ce n&apos;est pas une anomalie de données.
+            <strong>Aucune répartition validée sur cette saison.</strong> La colonne
+            « Réparti » vaut donc 0 — cela n&apos;empêche pas d&apos;avoir été livré.
           </span>
         </div>
       )}
@@ -267,9 +319,11 @@ export function MontantsRepartitionTab({ seasonId }: { seasonId: string }) {
       <p className="text-xs text-muted-foreground">
         Commandes lues sur la source <strong>{data.meta.source}</strong> ·{" "}
         {formatNumber(data.meta.lineCount)} lignes de commande ·{" "}
-        {data.meta.validatedSessions} répartition(s) validée(s). Le montant réparti est
-        déduit au prorata de la pièce : aucun montant n&apos;est stocké sur une quantité
-        répartie.
+        {data.meta.validatedSessions} répartition(s) validée(s) ·{" "}
+        {formatNumber(data.meta.blPiecesTotal)} pièce(s) en bons de livraison
+        {data.meta.blSeason && ` (saison entrepôt « ${data.meta.blSeason} »)`}. Les montants
+        réparti et livré sont déduits au prorata de la pièce, au prix de la commande :
+        aucun montant n&apos;est stocké sur une quantité répartie ou livrée.
       </p>
     </div>
   );
@@ -286,11 +340,12 @@ function TableMontants({ lignes, colonne }: { lignes: Groupe[]; colonne: string 
           <TableRow>
             <TableHead>{colonne}</TableHead>
             <TableHead className="text-right">Commandé</TableHead>
-            <TableHead className="text-right">Réparti</TableHead>
+            <TableHead className="text-right">Livré</TableHead>
             <TableHead className="text-right">Manquant</TableHead>
-            <TableHead className="text-right">Taux</TableHead>
+            <TableHead className="text-right">Taux livré</TableHead>
+            <TableHead className="text-right">Réparti</TableHead>
             <TableHead className="text-right">Pcs cmd.</TableHead>
-            <TableHead className="text-right">Pcs rép.</TableHead>
+            <TableHead className="text-right">Pcs livr.</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -299,7 +354,7 @@ function TableMontants({ lignes, colonne }: { lignes: Groupe[]; colonne: string 
               <TableCell className="font-medium">{l.label}</TableCell>
               <TableCell className="text-right tabular-nums">{formatEuro(l.commande)}</TableCell>
               <TableCell className="text-right tabular-nums text-emerald-700">
-                {formatEuro(l.reparti)}
+                {formatEuro(l.livre)}
               </TableCell>
               <TableCell className="text-right tabular-nums text-red-700">
                 {formatEuro(l.manquant)}
@@ -309,21 +364,24 @@ function TableMontants({ lignes, colonne }: { lignes: Groupe[]; colonne: string 
                 <span
                   className={cn(
                     "rounded px-1.5 py-0.5 text-xs font-medium tabular-nums",
-                    l.taux >= 80
+                    l.tauxLivre >= 80
                       ? "bg-emerald-100 text-emerald-800"
-                      : l.taux >= 40
+                      : l.tauxLivre >= 40
                         ? "bg-amber-100 text-amber-800"
                         : "bg-red-100 text-red-800"
                   )}
                 >
-                  {l.taux.toLocaleString("fr-FR")} %
+                  {l.tauxLivre.toLocaleString("fr-FR")} %
                 </span>
+              </TableCell>
+              <TableCell className="text-right tabular-nums text-muted-foreground">
+                {formatEuro(l.reparti)}
               </TableCell>
               <TableCell className="text-right tabular-nums text-muted-foreground">
                 {formatNumber(l.qCommandee)}
               </TableCell>
               <TableCell className="text-right tabular-nums text-muted-foreground">
-                {formatNumber(l.qRepartie)}
+                {formatNumber(l.qLivree)}
               </TableCell>
             </TableRow>
           ))}

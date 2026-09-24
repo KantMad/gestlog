@@ -1,23 +1,29 @@
-// Montants commandés / répartis / manquants, vus du SEUL pipeline de répartition.
+// Montants commandés / livrés / manquants, boutique par boutique et catalogue par catalogue.
 //
-// ⚠️ PÉRIMÈTRE VOLONTAIREMENT ÉTROIT. Deux chiffres seulement entrent ici :
-//   • le montant des **commandes clients importées** (`ClientOrderLine.amount`, le CA net
-//     de la ligne réparti depuis le total de la commande) ;
-//   • les quantités **attribuées par les répartitions validées**
-//     (`AllocationLine.allocatedBySize`, sessions `VALIDATED` uniquement).
-// Rien d'autre : ni BL entrepôt, ni factures, ni stock. C'est ce qui rend l'écran
-// lisible — commandé, réparti, manquant parlent tous du même pipeline.
+// Trois chiffres, trois sources distinctes, volontairement séparées :
+//   • **commandé** — `ClientOrderLine.amount`, le CA net de la ligne ;
+//   • **réparti**  — `AllocationLine.allocatedBySize` des sessions `VALIDATED` : ce que
+//     GestLog a DÉCIDÉ d'attribuer ;
+//   • **livré**    — les bons de livraison de l'entrepôt (`WarehouseDocumentLine`) : ce
+//     qui est RÉELLEMENT parti.
+//
+// 🔴 Réparti et livré ne se confondent pas, et l'écart est le sujet. *Sur AH26 : 23 022
+// pièces réparties, 63 676 livrées. Le catalogue MCS Homme n'a jamais été réparti et a
+// pourtant reçu 31 118 pièces.* C'est pourquoi les deux colonnes cohabitent.
 //
 // 🔴 POURQUOI PAS `Delivery` ? Parce que la table est VIDE et qu'**aucun chemin de code
 // de GestLog n'en crée jamais** : elle n'est que lue (Récap clients, Préparation, Vue
-// dépôt, statistiques). Le « livré » de ces écrans vaut donc 0 depuis toujours. Ce que la
-// répartition produit réellement, ce sont des `AllocationLine` — c'est donc elles qui
-// font le « réparti » ici.
+// dépôt, statistiques). Le « livré » de ces écrans vaut donc 0 depuis toujours.
 //
-// ⚠️ LE MONTANT LIVRÉ N'EXISTE PAS EN BASE. `DeliveryLine` ne porte que des quantités, et
-// `AllocationLine` aussi. Le montant réparti est donc DÉDUIT au prorata de la pièce :
-// `montant de la ligne ÷ quantité commandée × quantité répartie`. C'est exact dès que le
-// prix est uniforme sur les tailles d'un même coloris — ce qu'il est chez MCS.
+// ⚠️ AUCUN MONTANT N'EXISTE SUR UNE QUANTITÉ RÉPARTIE OU LIVRÉE. `AllocationLine` et
+// `WarehouseDocumentLine` ne portent que des quantités (le `unitPrice` des BL n'est
+// renseigné que pour les factures). Les deux montants sont donc DÉDUITS au prorata de la
+// pièce : `montant de la ligne ÷ quantité commandée × quantité concernée`. C'est exact dès
+// que le prix est uniforme sur les tailles d'un même coloris — ce qu'il est chez MCS.
+//
+// ⚠️ Valoriser au prix de la COMMANDE, et non à celui du BL, est délibéré : commandé et
+// livré doivent se comparer sur la même base tarifaire, sinon l'écart mélange un écart de
+// volume et un écart de prix.
 
 /** Une ligne de commande, augmentée de ce que les répartitions lui ont attribué. */
 export interface MontantLine {
@@ -33,6 +39,8 @@ export interface MontantLine {
   cancelledQty: number;
   /** Pièces attribuées par les répartitions validées. */
   allocatedQty: number;
+  /** Pièces réellement livrées, d'après les bons de livraison entrepôt. */
+  deliveredQty: number;
 }
 
 export interface MontantTotals {
@@ -40,15 +48,20 @@ export interface MontantTotals {
   commande: number;
   /** Montant des pièces soldées (€) — ni livrables, ni manquantes. */
   solde: number;
-  /** Montant réparti (€), au prorata de la pièce. */
+  /** Montant réparti (€), au prorata de la pièce — ce que GestLog a décidé. */
   reparti: number;
-  /** Ce qu'il manque (€) = commandé − soldé − réparti. */
+  /** Montant livré (€), au prorata de la pièce — ce qui est réellement parti. */
+  livre: number;
+  /** Ce qu'il manque (€) = commandé − soldé − LIVRÉ. */
   manquant: number;
   qCommandee: number;
   qSoldee: number;
   qRepartie: number;
+  qLivree: number;
   /** Part du montant commandé effectivement répartie, en % (une décimale). */
   taux: number;
+  /** Part du montant commandé effectivement livrée, en % (une décimale). */
+  tauxLivre: number;
 }
 
 export interface MontantGroup extends MontantTotals {
@@ -71,14 +84,16 @@ export interface MontantReport {
    * un écrêtage silencieux masquerait une anomalie de données.
    */
   surRepartition: number;
+  /** Lignes où la LIVRAISON dépasse le commandé net. Même règle : on signale. */
+  surLivraison: number;
 }
 
 /** Libellé de repli pour les commandes sans catalogue. */
 export const SANS_CATALOGUE = "Sans catalogue";
 
 const vide = (): MontantTotals => ({
-  commande: 0, solde: 0, reparti: 0, manquant: 0,
-  qCommandee: 0, qSoldee: 0, qRepartie: 0, taux: 0,
+  commande: 0, solde: 0, reparti: 0, livre: 0, manquant: 0,
+  qCommandee: 0, qSoldee: 0, qRepartie: 0, qLivree: 0, taux: 0, tauxLivre: 0,
 });
 
 const cumuler = (t: MontantTotals, l: MontantLine) => {
@@ -88,17 +103,22 @@ const cumuler = (t: MontantTotals, l: MontantLine) => {
   t.commande += l.amount;
   t.solde += pu * l.cancelledQty;
   t.reparti += pu * l.allocatedQty;
+  t.livre += pu * l.deliveredQty;
   t.qCommandee += l.totalQuantity;
   t.qSoldee += l.cancelledQty;
   t.qRepartie += l.allocatedQty;
+  t.qLivree += l.deliveredQty;
 };
 
 const clore = <T extends MontantTotals>(t: T): T => {
   // ⚠️ Le manquant se calcule à la FIN, sur les cumuls : ligne à ligne, les arrondis
   // s'additionneraient. Le soldé est retiré — une pièce soldée ne manque pas, elle
-  // n'existe plus.
-  t.manquant = t.commande - t.solde - t.reparti;
-  t.taux = t.commande > 0 ? Math.round((t.reparti / t.commande) * 1000) / 10 : 0;
+  // n'existe plus. Et c'est le LIVRÉ qui le détermine : ce qui est réparti mais pas parti
+  // manque encore à la boutique.
+  t.manquant = t.commande - t.solde - t.livre;
+  const part = (n: number) => (t.commande > 0 ? Math.round((n / t.commande) * 1000) / 10 : 0);
+  t.taux = part(t.reparti);
+  t.tauxLivre = part(t.livre);
   return t;
 };
 
@@ -113,6 +133,7 @@ export function buildMontantReport(lines: MontantLine[]): MontantReport {
   const catalogues = new Map<string, MontantGroup>();
   let lignesSansMontant = 0;
   let surRepartition = 0;
+  let surLivraison = 0;
 
   const groupe = (
     m: Map<string, MontantGroup>,
@@ -129,7 +150,9 @@ export function buildMontantReport(lines: MontantLine[]): MontantReport {
 
   for (const l of lines) {
     if (l.amount <= 0 && l.totalQuantity > 0) lignesSansMontant++;
-    if (l.allocatedQty > l.totalQuantity - l.cancelledQty) surRepartition++;
+    const net = l.totalQuantity - l.cancelledQty;
+    if (l.allocatedQty > net) surRepartition++;
+    if (l.deliveredQty > net) surLivraison++;
 
     cumuler(total, l);
     cumuler(groupe(boutiques, l.clientId, l.clientName), l);
@@ -150,5 +173,6 @@ export function buildMontantReport(lines: MontantLine[]): MontantReport {
     parCatalogue: trier(catalogues),
     lignesSansMontant,
     surRepartition,
+    surLivraison,
   };
 }

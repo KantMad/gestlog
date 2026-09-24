@@ -156,3 +156,15 @@ export function tioOrderFromFileName(fileName: string): string | null {
 export function docTypeFromFileName(fileName: string): "BL" | "FAC" {
   return /^FAC/i.test(String(fileName)) ? "FAC" : "BL";
 }
+
+/**
+ * Saison GestLog → code saison porté par les documents entrepôt.
+ * `AH 2026` → « W26 » (Winter), `PE 2027` → « S27 » (Summer).
+ *
+ * ⚠️ C'est l'inverse de `parseSeasonFromCatalog` (lib/utils.ts), qui lit W/S/H. On
+ * n'émet que W et S : `H` n'apparaît qu'en lecture, sur d'anciens libellés.
+ */
+export function warehouseSeasonCode(type: string, year: number): string {
+  const lettre = String(type).toUpperCase() === "PE" ? "S" : "W";
+  return `${lettre}${String(year % 100).padStart(2, "0")}`;
+}

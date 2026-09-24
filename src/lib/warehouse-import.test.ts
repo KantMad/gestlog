@@ -4,6 +4,7 @@ import {
   parseFrDate,
   tioOrderFromFileName,
   docTypeFromFileName,
+  warehouseSeasonCode,
   type Row,
 } from "./warehouse-import";
 
@@ -120,5 +121,20 @@ describe("import entrepôt — informations portées par le nom de fichier", () 
     expect(docTypeFromFileName("FAC_x.xlsx")).toBe("FAC");
     expect(docTypeFromFileName("BL_x.xlsx")).toBe("BL");
     expect(docTypeFromFileName("CodesBarres_Livraison.xlsx")).toBe("BL");
+  });
+});
+
+describe("saison GestLog → code saison entrepôt", () => {
+  it("traduit AH en W et PE en S", () => {
+    expect(warehouseSeasonCode("AH", 2026)).toBe("W26");
+    expect(warehouseSeasonCode("PE", 2027)).toBe("S27");
+  });
+
+  it("garde deux chiffres pour les petites années", () => {
+    expect(warehouseSeasonCode("PE", 2005)).toBe("S05");
+  });
+
+  it("tolère une casse inattendue", () => {
+    expect(warehouseSeasonCode("pe", 2026)).toBe("S26");
   });
 });

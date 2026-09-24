@@ -198,7 +198,7 @@ export default function StatisticsPage() {
             </TabsTrigger>
             <TabsTrigger value="montants" className="gap-2">
               <Euro className="h-4 w-4" />
-              Montants répartition
+              Montants livraison
             </TabsTrigger>
           </TabsList>
 

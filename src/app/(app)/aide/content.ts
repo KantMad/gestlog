@@ -1679,21 +1679,21 @@ export const HELP_THEMES: HelpTheme[] = [
       {
         id: "montants-repartition",
         icon: "💶",
-        title: "Montants commandés, répartis et manquants",
+        title: "Montants commandés, livrés et manquants",
         keywords: "statistiques montants euros commandé réparti manquant boutique catalogue taux répartition",
         screen: "/statistics",
         sections: [
           {
             lines: [
-              "**Statistiques → onglet « Montants répartition ».** Quatre chiffres en haut : **commandé**, **réparti**, **manquant**, et le **taux**. Puis le détail **par catalogue** et **par boutique**, filtrables.",
-              "Tout est en euros, et tout vient du **seul pipeline de répartition** : le montant des commandes clients importées d'un côté, ce que les répartitions validées ont attribué de l'autre.",
+              "**Statistiques → onglet « Montants livraison ».** Quatre chiffres en haut : **commandé**, **livré**, **manquant** et **réparti**. Puis le détail **par catalogue** et **par boutique**, filtrables.",
+              "Tout est en euros. Le **livré** vient des **bons de livraison de l'entrepôt**, le **réparti** de ce que GestLog a attribué : ce ne sont pas la même chose, et voir les deux côte à côte est tout l'intérêt.",
             ],
             tip: "Le taux est colorié : vert au-dessus de 80 %, orange entre 40 et 80, rouge en dessous. On repère d'un coup d'œil qui n'a rien reçu. 🚦",
           },
           {
             h: "Ce que « réparti » veut dire ici",
             lines: [
-              "C'est ce que les **répartitions validées** ont attribué à la boutique — pas ce que l'entrepôt a physiquement expédié, et pas les BL.",
+              "**Livré** = les bons de livraison de l'entrepôt, ce qui est réellement parti. **Réparti** = ce que GestLog a décidé d'attribuer. Une boutique peut être livrée sans avoir jamais été répartie, et l'inverse.",
               "Les répartitions **annulées** ne comptent pas.",
               "⚠️ Aucun montant n'est enregistré sur une quantité répartie : le montant est **déduit au prorata de la pièce** à partir du montant de la ligne de commande.",
             ],
@@ -1701,11 +1701,12 @@ export const HELP_THEMES: HelpTheme[] = [
           {
             h: "Comment lire « manquant »",
             lines: [
-              "**Manquant = commandé − soldé − réparti.** Les pièces soldées sont retirées : elles ne seront jamais livrées, donc elles ne manquent pas.",
-              "Un produit jamais servi par aucune répartition manque à 100 % — c'est normal tant que la marchandise n'est pas arrivée.",
+              "**Manquant = commandé − soldé − livré.** Les pièces soldées sont retirées : elles ne seront jamais livrées, donc elles ne manquent pas. Une pièce répartie mais pas encore expédiée manque toujours.",
+              "⚠️ Un catalogue à **0 % livré** peut simplement vouloir dire que ses BL ne sont pas encore importés. Vérifie dans **Livraisons** avant de conclure.",
+              "Des pièces livrées à une boutique pour un produit qu'elle n'a pas commandé ne peuvent pas être valorisées : l'écran les compte à part.",
               "Si un montant devient **négatif**, c'est qu'une répartition a attribué plus que la quantité commandée. L'écran le signale et ne corrige rien, pour que l'anomalie se voie.",
             ],
-            tip: "Un catalogue entier à 0 % veut généralement dire que ses réceptions fournisseurs ne sont pas encore arrivées, pas qu'il y a un bug. 📦",
+            tip: "Aucun montant n'est stocké sur une quantité livrée : il est déduit au prorata de la pièce, **au prix de la commande**, pour que commandé et livré se comparent sur la même base. 💶",
           },
         ],
       },

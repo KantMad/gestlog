@@ -302,13 +302,32 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
 - **Piège clé** : ici « livré » = **Delivery internes** (statut EXPEDIEE/VALIDEE_DEPOT), tandis
   que Réassort utilise les **BL entrepôt** — les deux notions peuvent diverger.
 
-### Onglet « Montants répartition » (`/statistics`)
-- **Rôle** : lire en euros ce que le pipeline de répartition a fait — **commandé**,
-  **réparti**, **manquant**, par **boutique** et par **catalogue**, avec taux.
-- **Source, volontairement étroite** : `ClientOrderLine.amount` (montant des commandes
-  clients importées) et `AllocationLine.allocatedBySize` des sessions **`VALIDATED`**.
-  Rien d'autre : ni BL entrepôt, ni factures, ni stock. Logique pure et testée dans
-  [`src/lib/repartition-montants.ts`](../src/lib/repartition-montants.ts).
+### Onglet « Montants livraison » (`/statistics`)
+- **Rôle** : lire en euros **commandé / livré / manquant**, par **boutique** et par
+  **catalogue**, avec le **réparti** en regard.
+- **Trois sources distinctes**, volontairement séparées (logique pure et testée dans
+  [`src/lib/repartition-montants.ts`](../src/lib/repartition-montants.ts)) :
+  `ClientOrderLine.amount` pour le commandé, `AllocationLine.allocatedBySize` des sessions
+  **`VALIDATED`** pour le réparti, et les **bons de livraison entrepôt**
+  (`WarehouseDocumentLine`, `docType='BL'`) pour le livré.
+- 🔴 **Réparti ≠ livré, et l'écart est le sujet.** *AH26 au 24/09/2026 : 23 022 pièces
+  réparties pour 63 676 livrées. Le catalogue `MCS Homme W26` n'a JAMAIS été réparti et
+  affiche pourtant **82,1 % livré** (1 340 907 €).* Les deux colonnes cohabitent pour que
+  la divergence se voie.
+- **Jointure du livré** : boutique par `WarehouseDocument.clientCode` = `Client.code`,
+  produit par `reference` + `colorCode`. *Sur AH26 : 179 codes boutique sur 179 et 730
+  couples référence-coloris sur 731 sont reconnus.* Saison via `warehouseSeasonCode`
+  (AH 2026 → `W26`).
+- 🔴 **Le rattachement se fait à (boutique, produit), pas à la commande** : les BL importés
+  en masse ne portent aucun `tioOrderNumber`. Quand une boutique a commandé le même produit
+  sur deux commandes, la quantité livrée n'est portée que par la **première** — sinon elle
+  compterait deux fois.
+- ⚠️ **Pièces livrées sans ligne de commande** : sans commande, ni prix ni catalogue, donc
+  **hors des euros**. Comptées et affichées. *AH26 : 12 964 pièces sur 63 676, soit 20 %
+  — la boutique a reçu un produit qu'elle n'avait pas commandé sur le périmètre lu.*
+- 🔴 **Un catalogue à 0 % livré ne prouve pas qu'il n'a rien reçu.** *`Territoire d'homme
+  W26` sort à 0 € livré pour 214 954 € répartis : le fichier de livraisons importé ne
+  contient AUCUNE référence `TH`.* Absence de donnée, pas absence de livraison.
 - 🔴 **Pourquoi pas `Delivery` ?** La table est **vide** et **aucun chemin de code de
   GestLog n'en crée jamais** — elle n'est que lue (Récap clients, Préparation, Vue dépôt,
   `api/statistics/*`). *Le « livré » de ces écrans vaut donc 0 depuis toujours.* Ce que la
@@ -324,17 +343,19 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
   doublerait tout.
 - ⚠️ **Sessions `CANCELLED` exclues.** *Une existe en base, 460 lignes : la compter
   ferait apparaître comme répartie une distribution annulée.*
-- 🔴 **Sur-répartition signalée, jamais écrêtée.** *362 lignes AH26 (21 % des couples
+- ⚠️ **Le manquant se mesure sur le LIVRÉ** (`commandé − soldé − livré`), pas sur le
+  réparti : une pièce attribuée mais jamais expédiée manque toujours à la boutique.
+- 🔴 **Sur-répartition ET sur-livraison signalées, jamais écrêtées.** *362 lignes AH26 (21 % des couples
   servis) portent un `allocatedBySize` SUPÉRIEUR à `originalBySize`, dans une seule
   session — 437 pièces en trop sur 23 022, soit 1,9 %.* Présent **dès la première session
   du 17/07/2026**, donc antérieur au correctif de répartition du 04/09 : ce n'est pas une
   régression. L'écart n'est pas corrigé — le manquant devient négatif là où c'est le cas,
   pour que l'anomalie se voie.
-- **État au 24/09/2026** : seule **AH26** porte des répartitions (16 sessions validées,
-  1 735 lignes, 88 boutiques). Résultat : **2 403 558 € commandés, 589 235 € répartis
-  (24,5 %), 1 814 324 € manquants**. Lecture marquante — le catalogue `MCS Homme W26`,
-  1 633 676 €, est à **0 %** de répartition, alors que `MCS Country classic W26` est à
-  84,7 % et `Territoire d'homme W26` à 81,3 %.
+- **État au 24/09/2026 (AH26)** : **2 403 558 € commandés**, **1 776 950 € livrés
+  (73,9 %)**, **626 609 € manquants**, pour seulement **589 235 € répartis (24,5 %)**.
+  Par catalogue : `MCS Homme W26` 82,1 % livré / 0 % réparti, `MCS Country classic W26`
+  87,9 % / 84,7 %, `Territoire d'homme W26` **0 % livré** / 81,3 % réparti (voir
+  ci-dessus : aucun `TH` dans le fichier importé).
 - ⚠️ **Les montants ne sont pas fiables sur toutes les saisons** : *PE25 n'a un montant que
   sur 438 lignes sur 7 831*. L'onglet compte les lignes sans montant et l'affiche.
 - **Onglet plutôt qu'écran neuf** : le droit `/statistics` s'applique tel quel, sans avoir
