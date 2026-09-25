@@ -79,6 +79,9 @@ Sauvegarde → code → deps → **tests bloquants** → schéma → build → r
      code est compilé mais pas servi.
   Le script affiche les trois horodatages (commit, build, démarrage pm2) et échoue en
   nommant le geste de rattrapage.
+  - ⚠️ **Le serveur tourne en UTC** : les heures du journal portent donc `UTC`, deux heures
+    derrière l'horloge parisienne en été. La comparaison se fait sur des **secondes epoch**,
+    indifférentes au fuseau — seul l'affichage était ambigu.
 - ⚠️ **`git rev-parse` ne prouve rien.** Il dit que le code est arrivé sur le disque, pas
   qu'il est compilé ni servi. Ne jamais annoncer un déploiement sur cette seule base.
 - **Essais à blanc** : `GESTLOG_DIR`, `GESTLOG_DEPLOY_LOG`, `GESTLOG_DEPLOY_STATUS` et

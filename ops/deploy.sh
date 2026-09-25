@@ -53,7 +53,7 @@ trap publier EXIT
 # Repère de départ : tout artefact plus ancien que T0 n'a PAS été produit par ce
 # déploiement. C'est la base du contrôle de fraîcheur.
 T0=$(date +%s)
-echo "── $(date '+%Y-%m-%d %H:%M:%S') — déploiement de $(git rev-parse --short HEAD 2>/dev/null || echo '?') ──"
+echo "── $(date '+%Y-%m-%d %H:%M:%S %Z') — déploiement de $(git rev-parse --short HEAD 2>/dev/null || echo '?') ──"
 
 echo "▶ [1/8] Sauvegarde de la base…"
 ./backup-db.sh && echo "   ✓ sauvegarde OK"
@@ -108,7 +108,10 @@ except Exception:
     print(0)
 ' 2>/dev/null || echo 0)
 
-dateh() { [ "$1" -gt 0 ] && date -d "@$1" '+%H:%M:%S' || echo "inconnue"; }
+# ⚠️ Le serveur tourne en UTC : on AFFICHE le fuseau, sinon un lecteur parisien croit
+# lire son heure et se trompe de deux heures. La comparaison, elle, se fait sur des
+# secondes epoch — indifférentes au fuseau.
+dateh() { [ "$1" -gt 0 ] && date -d "@$1" '+%H:%M:%S %Z' || echo "inconnue"; }
 echo "   commit $COMMIT · build $(dateh "$BUILD") · pm2 démarré $(dateh "$DEMARRAGE") · déploiement lancé $(dateh "$T0")"
 
 if [ "$BUILD" -lt "$T0" ]; then
