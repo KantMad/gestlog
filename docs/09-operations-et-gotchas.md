@@ -55,6 +55,38 @@ Nettoie les fichiers `/tmp` après usage (local **et** VPS).
 | n8n | Sync produits + EAN (`NvAbzIgKKw5OvTk1`) | toutes les **6 h** |
 | n8n | Sync commandes / BL-FAC / BtoC | selon planning des workflows |
 
+## Déploiement (`ops/deploy.sh`)
+
+Sauvegarde → code → deps → **tests bloquants** → schéma → build → redémarrage →
+**contrôle de santé** → **contrôle de fraîcheur**.
+
+- 🔴 **Le script se détache tout seul du terminal appelant** (`setsid nohup`), et l'appelant
+  ne fait que SUIVRE le journal `/var/backups/gestlog/deploy.log`. *Le 24/09/2026, une
+  connexion SSH est tombée juste après `git pull` : le build et le redémarrage n'ont jamais
+  tourné, et l'application a continué à servir un build vieux de deux heures.* Désormais
+  une coupure tue le suivi, plus le déploiement.
+  - Le **code de sortie** reste celui du travail réel : le processus détaché écrit le sien
+    dans `deploy.status`, que l'appelant attend puis relaie. Un `tail` interrompu ne fait
+    donc pas passer un échec pour un succès.
+  - `flock` refuse un **second déploiement concurrent** : deux `npm ci` se marcheraient
+    dessus.
+- 🔴 **Contrôle de fraîcheur, parce qu'un HTTP 200 ne prouve rien sur la version servie** —
+  l'ancienne répond tout aussi bien. Deux vérifications, exactement les deux indicateurs
+  que personne n'avait regardés le 24/09 :
+  1. `.next/BUILD_ID` doit être **postérieur au début du déploiement** — sinon le build n'a
+     pas tourné ;
+  2. l'heure de démarrage de **pm2** doit être **postérieure au build** — sinon le nouveau
+     code est compilé mais pas servi.
+  Le script affiche les trois horodatages (commit, build, démarrage pm2) et échoue en
+  nommant le geste de rattrapage.
+- ⚠️ **`git rev-parse` ne prouve rien.** Il dit que le code est arrivé sur le disque, pas
+  qu'il est compilé ni servi. Ne jamais annoncer un déploiement sur cette seule base.
+- **Essais à blanc** : `GESTLOG_DIR`, `GESTLOG_DEPLOY_LOG`, `GESTLOG_DEPLOY_STATUS` et
+  `GESTLOG_DEPLOY_LOCK` permettent de rejouer le script sur des dossiers jetables, avec des
+  leurres `git`/`npm`/`pm2`/`curl` dans le `PATH` — aucune de ces variables n'est définie en
+  exploitation. Cas éprouvés : succès, build non produit, pm2 antérieur au build, tests en
+  échec, santé HTTP non conforme, déploiement concurrent.
+
 ## Sauvegardes et reprise après sinistre
 
 **`ops/backup-full.sh`, toutes les heures à HH:12.** Une exécution produit un

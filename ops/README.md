@@ -10,7 +10,7 @@ ici parce qu'ils n'existaient nulle part ailleurs : un serveur perdu les emporta
 | `backup-offsite.sh` | copie chiffrée des instantanés vers Backblaze B2 | `backup-full.sh`, en fin de course |
 | `setup-hors-site.sh` | mise en service du hors-site (une seule fois) | à la main, sur le VPS |
 | `backup-db.sh` | dump de la base seul | `deploy.sh` + cron 3 h |
-| `deploy.sh` | déploiement (sauvegarde → git → tests bloquants → build → pm2) | à la main |
+| `deploy.sh` | déploiement (sauvegarde → git → tests bloquants → build → pm2 → **fraîcheur**), **détaché du terminal** | à la main |
 | `caisse-retry.sh` | relance des envois caisse en échec | cron, toutes les 15 min |
 
 ⚠️ **La version qui fait foi est celle du serveur** — c'est elle que la sauvegarde
