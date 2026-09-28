@@ -266,7 +266,24 @@ export async function POST(request: NextRequest) {
                   productId: product.id,
                 },
               },
-              update: { quantitiesBySize, totalQuantity, amount: lineAmount, category: category || null, sizeTypeCode: sizeTypeCode || null },
+              update: {
+                quantitiesBySize,
+                totalQuantity,
+                // 🔴 ON N'ÉCRASE JAMAIS UN MONTANT CONNU PAR UN ZÉRO. La synchro calcule
+                // le montant d'une ligne comme `brut × (total ÷ Σ brut)`, le brut venant
+                // des prix de `product_data`. *TIO ne porte plus ces prix sur les
+                // commandes antérieures à 2026 : Σ brut = 0, donc ratio = 0, donc toutes
+                // les lignes passaient à 0 € à chaque resynchro. 299 commandes de 2025
+                // avaient déjà été vidées, soit 3 276 978 €, et cela progressait.*
+                //
+                // ⚠️ Conséquence assumée : une ligne dont le montant tomberait
+                // LÉGITIMEMENT à 0 garde son ancienne valeur. C'est le moindre mal — une
+                // ligne réellement annulée voit sa quantité tomber à 0 et est supprimée
+                // par le nettoyage des lignes périmées, plus bas.
+                ...(lineAmount > 0 ? { amount: lineAmount } : {}),
+                category: category || null,
+                sizeTypeCode: sizeTypeCode || null,
+              },
               create: {
                 clientOrderId: clientOrder.id,
                 productId: product.id,
