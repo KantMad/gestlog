@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { handleApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
+import { coverageFromTotals, comparablePrices } from "@/lib/amount-coverage";
 
 // GET — Comparaison CLIENT entre deux saisons B2B.
 // Par client (boutique/enseigne) : CA + quantité des 2 saisons. CA = ClientOrderLine.amount.
@@ -30,14 +31,28 @@ export async function GET(request: NextRequest) {
     // sous-select corrélé (même logique que resolveOrderSource). Aucun paramètre requis.
     const srcFilter = `AND co."source" = (CASE WHEN EXISTS (SELECT 1 FROM "ClientOrder" c2 WHERE c2."seasonId" = co."seasonId" AND c2."source" = 'TEXAS') THEN 'TEXAS' ELSE 'TIO' END)`;
 
+    // ⚠️ On ramène aussi de quoi mesurer la COUVERTURE du CA — cf. lib/amount-coverage.ts.
+    // *`ClientOrderLine.amount` est vide sur 52,8 % des lignes d'AH25 et 94,4 % de PE25 :
+    // comparer deux saisons dont l'une est trouée laissait croire à un CA multiplié.*
     const rows = await prisma.$queryRawUnsafe<
-      { code: string; name: string; qty1: bigint; ca1: number; qty2: bigint; ca2: number }[]
+      {
+        code: string; name: string;
+        qty1: bigint; ca1: number; qty2: bigint; ca2: number;
+        qv1: bigint; lg1: bigint; lv1: bigint;
+        qv2: bigint; lg2: bigint; lv2: bigint;
+      }[]
     >(
       `SELECT cl.code, cl.name,
               COALESCE(SUM(col."totalQuantity") FILTER (WHERE se.name = $1), 0)::bigint AS qty1,
               COALESCE(SUM(col.amount)          FILTER (WHERE se.name = $1), 0)::float8 AS ca1,
               COALESCE(SUM(col."totalQuantity") FILTER (WHERE se.name = $2), 0)::bigint AS qty2,
-              COALESCE(SUM(col.amount)          FILTER (WHERE se.name = $2), 0)::float8 AS ca2
+              COALESCE(SUM(col.amount)          FILTER (WHERE se.name = $2), 0)::float8 AS ca2,
+              COALESCE(SUM(col."totalQuantity") FILTER (WHERE se.name = $1 AND col.amount > 0), 0)::bigint AS qv1,
+              COUNT(*) FILTER (WHERE se.name = $1)::bigint AS lg1,
+              COUNT(*) FILTER (WHERE se.name = $1 AND col.amount > 0)::bigint AS lv1,
+              COALESCE(SUM(col."totalQuantity") FILTER (WHERE se.name = $2 AND col.amount > 0), 0)::bigint AS qv2,
+              COUNT(*) FILTER (WHERE se.name = $2)::bigint AS lg2,
+              COUNT(*) FILTER (WHERE se.name = $2 AND col.amount > 0)::bigint AS lv2
        FROM "ClientOrder" co
        JOIN "Client" cl ON cl.id = co."clientId"
        ${dimJoin}
@@ -83,6 +98,23 @@ export async function GET(request: NextRequest) {
       catByClient.set(r.code, arr);
     }
 
+    // Couverture par élément comparé, agrégée sur les mêmes lignes que les totaux.
+    const n = (v: bigint | number) => Number(v);
+    const coverage1 = coverageFromTotals({
+      lines: rows.reduce((a, r) => a + n(r.lg1), 0),
+      linesWithAmount: rows.reduce((a, r) => a + n(r.lv1), 0),
+      pieces: rows.reduce((a, r) => a + n(r.qty1), 0),
+      piecesWithAmount: rows.reduce((a, r) => a + n(r.qv1), 0),
+      amount: rows.reduce((a, r) => a + n(r.ca1), 0),
+    });
+    const coverage2 = coverageFromTotals({
+      lines: rows.reduce((a, r) => a + n(r.lg2), 0),
+      linesWithAmount: rows.reduce((a, r) => a + n(r.lv2), 0),
+      pieces: rows.reduce((a, r) => a + n(r.qty2), 0),
+      piecesWithAmount: rows.reduce((a, r) => a + n(r.qv2), 0),
+      amount: rows.reduce((a, r) => a + n(r.ca2), 0),
+    });
+
     const pct = (num: number, den: number) => (den > 0 ? (num / den) * 100 : 0);
 
     const clients = rows
@@ -118,11 +150,13 @@ export async function GET(request: NextRequest) {
       season1,
       season2,
       global: {
-        s1,
-        s2,
+        s1: { ...s1, coverage: coverage1 },
+        s2: { ...s2, coverage: coverage2 },
         clientsPct: pct(s2.clients, s1.clients),
         caPct: pct(s2.ca, s1.ca),
         qtyPct: pct(s2.qty, s1.qty),
+        // 🔴 Les deux CA sont-ils sur la même base tarifaire ?
+        prices: comparablePrices(coverage1, coverage2),
       },
       clients,
     });

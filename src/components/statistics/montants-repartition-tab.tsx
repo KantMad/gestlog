@@ -21,6 +21,7 @@ import {
 import { Progress } from "@/components/ui/progress";
 import { Loader2, Search, TriangleAlert } from "lucide-react";
 import { cn, formatEuro, formatNumber } from "@/lib/utils";
+import { CouvertureAlerte, type Couverture } from "@/components/statistics/couverture-alerte";
 
 // Commandé (commandes clients importées) → réparti (sessions validées) → livré (bons de
 // livraison entrepôt) → manquant. Cf. src/lib/repartition-montants.ts pour le pourquoi de
@@ -58,6 +59,7 @@ interface Rapport {
     blSeason: string | null;
     blPiecesTotal: number;
     blPiecesHorsCommande: number;
+    coverage: Couverture;
   };
 }
 
@@ -256,18 +258,9 @@ export function MontantsRepartitionTab({ seasonId }: { seasonId: string }) {
           </span>
         </div>
       )}
-      {data.lignesSansMontant > 0 && (
-        <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-          <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>
-            <strong>
-              {formatNumber(data.lignesSansMontant)} ligne(s) commandée(s) sans montant
-            </strong>{" "}
-            sur {formatNumber(data.meta.lineCount)} : elles pèsent dans les pièces mais pas
-            dans les euros. Le taux en € est donc calculé sur un périmètre plus étroit.
-          </span>
-        </div>
-      )}
+      {/* Mesure partagée avec les écrans de comparaison : un seul endroit décide de ce
+          qui est fiable (cf. lib/amount-coverage.ts). */}
+      <CouvertureAlerte items={[{ name: "Cette saison", coverage: data.meta.coverage }]} />
       {data.surRepartition > 0 && (
         <div className="flex items-start gap-2 rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-900">
           <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />

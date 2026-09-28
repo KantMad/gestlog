@@ -5,6 +5,7 @@ import { parseSizeQuantities, sumQuantities } from "@/lib/utils";
 import { resolveOrderSource } from "@/lib/order-source";
 import { buildMontantReport, type MontantLine } from "@/lib/repartition-montants";
 import { warehouseSeasonCode } from "@/lib/warehouse-import";
+import { amountCoverage } from "@/lib/amount-coverage";
 
 export const maxDuration = 60;
 
@@ -154,6 +155,13 @@ export async function GET(request: NextRequest) {
 
     const report = buildMontantReport(rows);
 
+    // ⚠️ Fiabilité du CA : `ClientOrderLine.amount` est vide sur 52,8 % des lignes d'AH25
+    // et 94,4 % de PE25. Sans cette mesure, les euros de ces saisons sont muets sur leur
+    // propre incomplétude (cf. lib/amount-coverage.ts).
+    const coverage = amountCoverage(
+      rows.map((r) => ({ amount: r.amount, quantity: r.totalQuantity }))
+    );
+
     const sessions = await prisma.allocationSession.count({
       where: { seasonId, status: "VALIDATED" },
     });
@@ -172,6 +180,7 @@ export async function GET(request: NextRequest) {
         lineCount: lines.length,
         orderLineDuplicates: doublons,
         validatedSessions: sessions,
+        coverage,
         blSeason,
         blPiecesTotal: livreTotal,
         blPiecesHorsCommande: Math.max(0, livreTotal - livreRattache),

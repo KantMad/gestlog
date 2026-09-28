@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { useSeason } from "@/lib/season-context";
 import { Topbar } from "@/components/layout/topbar";
 import { PageHeader } from "@/components/layout/page-header";
+import { CouvertureAlerte } from "@/components/statistics/couverture-alerte";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
@@ -45,14 +46,29 @@ interface CatRow {
   qtyWeightGap: number;
   caWeightGap: number;
 }
+// Fiabilité du CA affiché : part des pièces portant réellement un montant.
+// Cf. src/lib/amount-coverage.ts pour le pourquoi.
+interface Coverage {
+  pieces: number;
+  piecesWithoutAmount: number;
+  percent: number;
+  pricePerPiece: number;
+  verdict: "fiable" | "partiel" | "inexploitable";
+}
+
 interface CompData {
-  season1: { name: string; qty: number; ca: number };
+  season1: { name: string; qty: number; ca: number; coverage: Coverage };
   season2: {
     name: string; qty: number; ca: number; endDate: string | null;
     /** Commandes sans date de commande, écartées par la date de fin. */
     undatedOrders?: number;
+    coverage: Coverage;
   };
-  global: { qtyPct: number; caPct: number };
+  global: {
+    qtyPct: number;
+    caPct: number;
+    prices: { comparable: boolean; ecart: number };
+  };
   categories: CatRow[];
 }
 interface Catalog { name: string; seasonName: string | null }
@@ -355,6 +371,15 @@ export default function SeasonComparisonPage() {
           <div className="flex items-center justify-center py-16 text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin" /></div>
         ) : !data ? null : (
           <>
+            {/* 🔴 AVANT toute lecture : le CA est-il comparable ? Signalé le 28/09/2026 —
+                « MCS Homme W25 » (69 % de lignes à 0 €) affiché contre « MCS Homme W26 »
+                (0 %) laissait croire à un CA triplé, alors que les volumes sont
+                comparables et le prix unitaire presque identique là où il existe. */}
+            <CouvertureAlerte
+              items={[data.season1, data.season2]}
+              prices={data.global.prices}
+            />
+
             {/* KPI globaux */}
             <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
               <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">CA — {data.season1.name} (total)</p><p className="text-2xl font-bold">{formatEuro(data.season1.ca)}</p></CardContent></Card>
@@ -484,3 +509,4 @@ export default function SeasonComparisonPage() {
     </div>
   );
 }
+

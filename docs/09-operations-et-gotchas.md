@@ -55,6 +55,65 @@ Nettoie les fichiers `/tmp` après usage (local **et** VPS).
 | n8n | Sync produits + EAN (`NvAbzIgKKw5OvTk1`) | toutes les **6 h** |
 | n8n | Sync commandes / BL-FAC / BtoC | selon planning des workflows |
 
+## Fiabilité du CA B2B (`src/lib/amount-coverage.ts`)
+
+🔴 **`ClientOrderLine.amount` est loin d'être toujours renseigné, et rien ne le disait.**
+*Signalé le 28/09/2026 sur la comparaison de catalogues : « MCS Homme W25 » affichait
+524 668 € contre 1 633 676 € pour « MCS Homme W26 » — un CA apparemment triplé. En réalité
+**68 % des pièces de W25 n'ont aucun montant**, et le prix unitaire là où il existe est
+presque identique : **38,02 € contre 39,86 €**. Les volumes, eux, sont comparables (43 266
+contre 40 708 pièces).*
+
+- **La couverture se mesure en PIÈCES, pas en lignes** : une ligne de 200 pièces sans
+  montant ne pèse pas comme une ligne de 1.
+- **Seuils** : ≥ 95 % fiable · < 70 % inexploitable · entre les deux, partiel.
+- **Le prix unitaire là où le montant existe est le révélateur** : un rapport de 1 à 3 entre
+  deux éléments comparés trahit un trou de couverture, jamais une hausse de prix.
+  `comparablePrices()` le signale au-delà de 40 % d'écart.
+- ⚠️ **On n'extrapole RIEN.** Reconstituer le CA manquant depuis le prix moyen serait
+  inventer des euros. On mesure, on publie, l'écran prévient — et les **quantités** restent
+  la lecture fiable.
+
+**Périmètre touché** (tout ce qui lit `ClientOrderLine.amount`) : comparaison saisons /
+catalogues, comparaison clients, onglets « Montants livraison » et « TIO / Texas ». Les
+quatre affichent désormais le bandeau `CouvertureAlerte`.
+**Non touchés** : `/statistics` et ses graphiques lisent `WarehouseDocumentLine.amount`
+(montants de FACTURE), qui est renseigné.
+
+**État au 28/09/2026** — seule la **saison 2025** est trouée, le reste est sain :
+
+| Saison | Couverture | €/pièce | Verdict |
+|---|---|---|---|
+| PE2025 | **3,8 %** | 26,20 | inexploitable |
+| AH2025 | **60,4 %** | 28,53 | inexploitable |
+| Divers | 65,7 % | 39,16 | inexploitable |
+| Réassort | 71,3 % | 18,95 | partiel |
+| PE2023 → PE2027 | **97,2 à 100 %** | 24 à 35 | fiable |
+
+Le prix unitaire est cohérent partout : **les prix sont bons, c'est l'import 2025 qui n'a
+pas apporté les montants.** La correction de fond est à faire À LA SOURCE (réimport de ces
+saisons avec la colonne de montant rapprochée).
+
+**Diagnostic** : `node ops/check-coherence.cjs` sur le VPS — couverture par saison et par
+catalogue. À lancer quand un chiffre en euros paraît faux.
+
+## Tests : garde-fou avant chaque push (`ops/git-hooks/pre-push`)
+
+🔴 Les tests étaient déjà **bloquants dans `deploy.sh`**, mais **rien ne les exécutait avant
+que le code quitte le poste** : on pouvait pousser du code cassé et ne l'apprendre qu'au
+déploiement suivant, potentiellement des jours plus tard et par quelqu'un d'autre.
+
+Le hook `pre-push` lance `tsc --noEmit` puis `vitest run` et refuse le push en cas d'échec.
+
+```bash
+git config core.hooksPath ops/git-hooks   # une fois par clone
+```
+
+- Contourner en connaissance de cause : `git push --no-verify`.
+- ⚠️ **Un test unitaire n'aurait pas attrapé le défaut du 28/09** : le code était juste, les
+  DONNÉES étaient trouées. C'est le rôle de `ops/check-coherence.cjs`, complémentaire — les
+  tests gardent le calcul, le diagnostic garde les données.
+
 ## Déploiement (`ops/deploy.sh`)
 
 Sauvegarde → code → deps → **tests bloquants** → schéma → build → redémarrage →

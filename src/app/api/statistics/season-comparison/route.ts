@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { handleApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
+import { coverageFromTotals, comparablePrices } from "@/lib/amount-coverage";
 
 // GET — Comparaison de deux SAISONS ou deux CATALOGUES DE VENTE B2B, par catégorie.
 //  - item 1 : TOTAL (toutes les commandes).
@@ -21,7 +22,19 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "season1 et season2 requis" }, { status: 400 });
     }
 
-    type Row = { cat: string; qty: bigint; ca: number };
+    // ⚠️ On ramène aussi de quoi mesurer la COUVERTURE du CA. *Signalé le 28/09/2026 :
+    // « MCS Homme W25 » porte 69 % de ses lignes à 0 € et affichait 524 668 € contre
+    // 1 633 676 € pour W26, laissant croire à un CA triplé — alors que les volumes sont
+    // comparables et le prix unitaire presque identique là où il existe.* Sans cette
+    // mesure, l'écran ne peut pas savoir qu'il compare deux bases différentes.
+    type Row = {
+      cat: string;
+      qty: bigint;
+      ca: number;
+      qtyValued: bigint;
+      lines: bigint;
+      linesValued: bigint;
+    };
     const groupQuery = async (itemName: string, end: string | null) => {
       const params: unknown[] = [itemName];
       const dimJoin =
@@ -56,7 +69,10 @@ export async function GET(request: NextRequest) {
       return prisma.$queryRawUnsafe<Row[]>(
         `SELECT COALESCE(NULLIF(p.category,''),'Sans catégorie') AS cat,
                 SUM(col."totalQuantity")::bigint AS qty,
-                COALESCE(SUM(col.amount),0)::float8 AS ca
+                COALESCE(SUM(col.amount),0)::float8 AS ca,
+                SUM(CASE WHEN col.amount > 0 THEN col."totalQuantity" ELSE 0 END)::bigint AS "qtyValued",
+                COUNT(*)::bigint AS lines,
+                COUNT(CASE WHEN col.amount > 0 THEN 1 END)::bigint AS "linesValued"
          FROM "ClientOrder" co
          JOIN "ClientOrderLine" col ON col."clientOrderId" = co.id
          JOIN "Product" p ON p.id = col."productId"
@@ -95,6 +111,18 @@ export async function GET(request: NextRequest) {
       );
       undatedOrders = Number(undated[0]?.n ?? 0);
     }
+
+    // Couverture par élément comparé, agrégée depuis les mêmes lignes que les totaux.
+    const couverture = (rows: Row[]) =>
+      coverageFromTotals({
+        lines: rows.reduce((n, r) => n + Number(r.lines), 0),
+        linesWithAmount: rows.reduce((n, r) => n + Number(r.linesValued), 0),
+        pieces: rows.reduce((n, r) => n + Number(r.qty), 0),
+        piecesWithAmount: rows.reduce((n, r) => n + Number(r.qtyValued), 0),
+        amount: rows.reduce((n, r) => n + Number(r.ca), 0),
+      });
+    const coverage1 = couverture(rows1);
+    const coverage2 = couverture(rows2);
 
     const map1 = new Map(rows1.map((r) => [r.cat, { qty: Number(r.qty), ca: Number(r.ca) }]));
     const map2 = new Map(rows2.map((r) => [r.cat, { qty: Number(r.qty), ca: Number(r.ca) }]));
@@ -136,14 +164,17 @@ export async function GET(request: NextRequest) {
       .sort((x, y) => y.s1.ca - x.s1.ca);
 
     return NextResponse.json({
-      season1: { name: season1, qty: s1TotalQty, ca: Math.round(s1TotalCa) },
+      season1: { name: season1, qty: s1TotalQty, ca: Math.round(s1TotalCa), coverage: coverage1 },
       season2: {
-        name: season2, qty: s2TotalQty, ca: Math.round(s2TotalCa),
+        name: season2, qty: s2TotalQty, ca: Math.round(s2TotalCa), coverage: coverage2,
         endDate: endDate || null, undatedOrders,
       },
       global: {
         qtyPct: pct(s2TotalQty, s1TotalQty),
         caPct: pct(s2TotalCa, s1TotalCa),
+        // 🔴 Les deux CA sont-ils sur la même base tarifaire ? Un rapport de prix
+        // unitaire de 1 à 3 trahit un trou de couverture, pas une hausse de prix.
+        prices: comparablePrices(coverage1, coverage2),
       },
       categories,
     });

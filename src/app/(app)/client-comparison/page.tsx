@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { useSeason } from "@/lib/season-context";
 import { Topbar } from "@/components/layout/topbar";
 import { PageHeader } from "@/components/layout/page-header";
+import { CouvertureAlerte } from "@/components/statistics/couverture-alerte";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
@@ -38,10 +39,22 @@ interface ClientRow {
   qtyPct: number;
   categories: CatRow[];
 }
+interface Couverture {
+  pieces: number;
+  piecesWithoutAmount: number;
+  percent: number;
+  pricePerPiece: number;
+  verdict: "fiable" | "partiel" | "inexploitable";
+}
 interface CompData {
   season1: string;
   season2: string;
   clients: ClientRow[];
+  global: {
+    s1: { coverage: Couverture };
+    s2: { coverage: Couverture };
+    prices: { comparable: boolean; ecart: number };
+  };
 }
 interface Catalog {
   name: string;
@@ -289,6 +302,16 @@ export default function ClientComparisonPage() {
           <div className="flex items-center justify-center py-16 text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin" /></div>
         ) : !data ? null : (
           <>
+            {/* 🔴 Le CA est-il comparable ? La couverture porte sur l'élément entier, pas
+                sur la sélection de boutiques : c'est une complétude de données. */}
+            <CouvertureAlerte
+              items={[
+                { name: data.season1, coverage: data.global.s1.coverage },
+                { name: data.season2, coverage: data.global.s2.coverage },
+              ]}
+              prices={data.global.prices}
+            />
+
             {/* Résumé (scopé au filtre) */}
             <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
               <Card><CardContent className="p-4">

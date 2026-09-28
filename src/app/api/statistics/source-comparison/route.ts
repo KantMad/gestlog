@@ -7,6 +7,7 @@ import {
   totauxComparaison,
   type SourceAgg,
 } from "@/lib/source-comparison";
+import { coverageFromTotals } from "@/lib/amount-coverage";
 
 export const maxDuration = 60;
 
@@ -34,7 +35,11 @@ export async function GET(request: NextRequest) {
           ? `COALESCE(cl.name, cl.code, '—')`
           : `COALESCE(cat.name, 'Sans catalogue')`;
       return prisma.$queryRawUnsafe<
-        { source: string; id: string; label: string; orders: bigint; lines: bigint; pieces: bigint; amount: number }[]
+        {
+          source: string; id: string; label: string;
+          orders: bigint; lines: bigint; pieces: bigint; amount: number;
+          piecesValued: bigint; linesValued: bigint;
+        }[]
       >(
         `SELECT co.source AS source,
                 ${idCol} AS id,
@@ -42,7 +47,9 @@ export async function GET(request: NextRequest) {
                 COUNT(DISTINCT co.id)::bigint AS orders,
                 COUNT(col.id)::bigint AS lines,
                 COALESCE(SUM(col."totalQuantity"), 0)::bigint AS pieces,
-                COALESCE(SUM(col.amount), 0)::float8 AS amount
+                COALESCE(SUM(col.amount), 0)::float8 AS amount,
+                COALESCE(SUM(col."totalQuantity") FILTER (WHERE col.amount > 0), 0)::bigint AS "piecesValued",
+                COUNT(col.id) FILTER (WHERE col.amount > 0)::bigint AS "linesValued"
            FROM "ClientOrder" co
            JOIN "ClientOrderLine" col ON col."clientOrderId" = co.id
            JOIN "Client" cl ON cl.id = co."clientId"
@@ -76,6 +83,22 @@ export async function GET(request: NextRequest) {
         amount: Number(r.amount),
       }));
 
+    // Couverture du CA par SOURCE : sur AH26, TIO a 8,4 % de lignes sans montant et
+    // TEXAS aucune — comparer les euros des deux sources sans le dire serait trompeur.
+    const couvertureSource = (src: "TIO" | "TEXAS") => {
+      const rs = parClient.filter((r) => r.source === src);
+      const n = (v: bigint | number) => Number(v);
+      return coverageFromTotals({
+        lines: rs.reduce((a, r) => a + n(r.lines), 0),
+        linesWithAmount: rs.reduce((a, r) => a + n(r.linesValued), 0),
+        pieces: rs.reduce((a, r) => a + n(r.pieces), 0),
+        piecesWithAmount: rs.reduce((a, r) => a + n(r.piecesValued), 0),
+        amount: rs.reduce((a, r) => a + n(r.amount), 0),
+      });
+    };
+    const coverageTio = couvertureSource("TIO");
+    const coverageTexas = couvertureSource("TEXAS");
+
     const boutiques = buildComparison(toAgg(parClient));
     const catalogues = buildComparison(toAgg(parCatalogue));
     const totaux = totauxComparaison(boutiques);
@@ -94,6 +117,7 @@ export async function GET(request: NextRequest) {
       catalogues,
       meta: {
         sourceActive: source,
+        coverage: { tio: coverageTio, texas: coverageTexas },
         // Une saison sans commandes Texas ne se compare à rien : l'écran le dit.
         lesDeuxSources: totaux.tio.orders > 0 && totaux.texas.orders > 0,
         // Fiches boutique en double : la même enseigne sous deux `Client` distincts

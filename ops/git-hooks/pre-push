@@ -1,0 +1,25 @@
+#!/bin/bash
+# Garde-fou avant tout `git push` : types puis tests.
+#
+# 🔴 Pourquoi ici et pas seulement au déploiement. Les tests étaient déjà bloquants dans
+# `deploy.sh`, mais RIEN ne les exécutait avant que le code quitte le poste : on pouvait
+# pousser du code cassé et ne l'apprendre qu'au déploiement suivant, potentiellement des
+# jours plus tard et par quelqu'un d'autre.
+#
+# Contourner en connaissance de cause : `git push --no-verify`.
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+
+echo "▶ pre-push — vérification des types…"
+if ! npx tsc --noEmit; then
+  echo "❌ Erreurs de types — push interrompu."
+  exit 1
+fi
+
+echo "▶ pre-push — tests unitaires…"
+if ! npx vitest run; then
+  echo "❌ Tests en échec — push interrompu."
+  exit 1
+fi
+
+echo "✅ pre-push — types et tests OK."

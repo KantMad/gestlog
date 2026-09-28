@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/table";
 import { Loader2, Search, TriangleAlert, ArrowLeftRight } from "lucide-react";
 import { cn, formatEuro, formatNumber } from "@/lib/utils";
+import { CouvertureAlerte, type Couverture } from "@/components/statistics/couverture-alerte";
 
 // Commandes clients importées : TIO (prise de commande, archive) contre TEXAS (ERP).
 //
@@ -43,6 +44,7 @@ interface Donnees {
   catalogues: Ligne[];
   meta: {
     sourceActive: string;
+    coverage: { tio: Couverture; texas: Couverture };
     lesDeuxSources: boolean;
     fichesEnDouble: number;
     fichesEnDoubleExactes: number;
@@ -155,6 +157,15 @@ export function SourcesTioTexasTab({ seasonId }: { seasonId: string }) {
           ailleurs.
         </span>
       </div>
+
+      {/* 🔴 Les euros des deux sources sont-ils sur la même base ? Sur AH26, TIO a 8,4 %
+          de lignes sans montant et TEXAS aucune. */}
+      <CouvertureAlerte
+        items={[
+          { name: "TIO", coverage: data.meta.coverage.tio },
+          { name: "Texas", coverage: data.meta.coverage.texas },
+        ]}
+      />
 
       {/* ── Rapprochement des commandes ── */}
       <Card>
