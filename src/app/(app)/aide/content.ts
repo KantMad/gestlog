@@ -1015,6 +1015,38 @@ export const HELP_THEMES: HelpTheme[] = [
         ],
       },
       {
+        id: "export-ean-fournisseurs",
+        icon: "\ud83c\udfed",
+        title: "Commandes par fournisseur (EAN)",
+        keywords: "fournisseur onglet ean sku taille export commandes ean csv excel prix donn\u00e9es personnelles",
+        screen: "/export",
+        sections: [
+          {
+            lines: [
+              "Dans **Exports**, d\u00e9pose l'export **commandes EAN** : GestLog te rend un classeur avec **un onglet par fournisseur**, **une ligne par taille** avec son **EAN** et son **SKU**.",
+              "Le **fichier** donne les lignes, la **base** donne le fournisseur : les correspondances que tu as import\u00e9es d'abord, puis les commandes fournisseurs.",
+            ],
+            tip: "Le fichier est lu dans ton navigateur : seule la **liste des r\u00e9f\u00e9rences** part au serveur pour retrouver les fournisseurs. \ud83d\udd12",
+          },
+          {
+            h: "Ce qui ne part PAS chez le fournisseur",
+            lines: [
+              "\ud83d\udd34 Les colonnes **nominatives** du fichier ne sont **jamais** reprises : nom, pr\u00e9nom, genre et e-mail du client, le responsable commercial, les adresses de facturation. C'est un choix assum\u00e9, pas un oubli \u2014 l'onglet **Crit\u00e8res** le rappelle.",
+              "\ud83d\udd34 Le **prix \u00e0 la variation** reste dehors par d\u00e9faut : c'est le prix pay\u00e9 par la **boutique**. La case *Inclure le prix* permet de l'ajouter quand le classeur reste en interne.",
+              "Le classeur garde ce dont un fournisseur a besoin : boutique, n\u00b0 de commande, catalogue, produit, couleur, taille, SKU, EAN, quantit\u00e9.",
+            ],
+          },
+          {
+            h: "Les r\u00e9f\u00e9rences sans fournisseur",
+            lines: [
+              "Un onglet **Sans fournisseur** est **toujours** produit et toujours **en dernier** : aucune ligne n'est \u00e9cart\u00e9e, un classeur amput\u00e9 aurait l'air complet.",
+              "Pour les rattacher, importe la correspondance dans **Infos produits \u2192 Fournisseur \u2192 R\u00e9f\u00e9rence**, puis relance l'export.",
+              "\u26a0\ufe0f Une r\u00e9f\u00e9rence connue chez **plusieurs** fournisseurs ne va que dans **un** onglet, et l'\u00e9cran te le dit : la recopier doublerait ses quantit\u00e9s.",
+            ],
+          },
+        ],
+      },
+      {
         id: "export-recoupement",
         icon: "\ud83d\udd33",
         title: "Recoupement modèle × couleurs",

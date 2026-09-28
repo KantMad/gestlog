@@ -25,6 +25,7 @@ import { toast } from "sonner";
 import * as XLSX from "xlsx";
 import { QuantitesCard } from "@/components/export/quantites-card";
 import { RecoupementCard } from "@/components/export/recoupement-card";
+import { EanSuppliersCard } from "@/components/export/ean-suppliers-card";
 
 interface ReceptionRow {
   id: string;
@@ -405,6 +406,11 @@ export default function ExportPage() {
             {/* Ne dépend d'aucune saison : tout est calculé depuis le fichier déposé. */}
             <div className="sm:col-span-2">
               <RecoupementCard />
+            </div>
+
+            {/* Le fichier donne les lignes, la BASE donne le fournisseur. */}
+            <div className="sm:col-span-2">
+              <EanSuppliersCard />
             </div>
           </div>
         </div>

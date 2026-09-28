@@ -877,6 +877,44 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
     deux côtés doublerait ses quantités : un total faux est pire qu'un choix assumé.
   - Les **commandes fournisseurs** sont lues par un `DISTINCT` SQL (253 lignes) et non
     ligne à ligne (des milliers) ; la table des correspondances, minuscule, est lue en entier.
+- **Commandes par fournisseur (export EAN)** (`/api/export/supplier-by-reference` — ne rend
+  QUE la correspondance référence → fournisseur ; logique pure dans
+  `lib/export-ean-suppliers.ts`, testée ; `components/export/ean-suppliers-card.tsx`) : on
+  dépose l'export TIO **« commandes EAN »** (une ligne par commande × produit × coloris ×
+  **taille**, avec son EAN) et on obtient un classeur **un onglet par fournisseur**,
+  **une ligne par taille** — la ligne du fichier conservée telle quelle, EAN et SKU compris.
+  - Le **fichier** donne les lignes, la **base** donne le fournisseur : mêmes deux sources
+    cumulées que l'export Quantités (`SupplierProductRef` d'abord, puis
+    `SupplierOrderLine`), et l'onglet « Sans fournisseur » est **toujours produit, toujours
+    en dernier**. *Mesuré sur l'export du 28/09/2026 : 70 des 79 références couvertes →
+    10 onglets fournisseurs (JUGROUP 43 réfs, ENTEKS 7, KESSLY 5, IMDER 4, ARETEX 3,
+    LIZAY 3, TOPMONDAY 2, WENLOS 1, RASENTEKSTIL 1, KATA 1) + 9 références sans
+    fournisseur.*
+  - 🔴 **Les colonnes NOMINATIVES ne sont jamais reprises** : nom, prénom, genre et e-mail
+    du client, les quatre colonnes du responsable commercial, l'adresse / le code postal /
+    la ville de facturation. *Le fichier source les porte pourtant : 8 e-mails clients
+    distincts et 12 adresses sur l'export du 28/09/2026.* Un onglet part chez un
+    fournisseur — c'est un **choix explicite**, écrit dans l'onglet `Critères`, et un test
+    (`n'emporte AUCUNE donnée personnelle`) échoue si une de ces valeurs réapparaît.
+  - 🔴 **Le prix à la variation est HORS du classeur par défaut** (case *Inclure le prix*) :
+    c'est le prix payé par la **boutique**, un fournisseur n'a pas à le connaître. 77 prix
+    distincts dans l'export réel.
+  - Le classeur garde en revanche la **boutique**, le n° de commande, le catalogue, le
+    produit, la taille, le SKU, l'EAN et la quantité : un fournisseur qui prépare une
+    expédition en a besoin.
+  - ⚠️ **La colonne « Référence produit » apparaît DEUX FOIS** dans ce format (positions 19
+    et 25). *Vérifié sur les 6 763 lignes : toujours identiques.* On lit la première.
+  - ⚠️ **Une référence à plusieurs fournisseurs ne va que dans UN onglet** et l'écart est
+    affiché à l'écran : la recopier doublerait ses quantités.
+  - **Le fichier est lu dans le navigateur** ; seule la **liste des références distinctes**
+    (79, pas 6 763 lignes) part au serveur. Envoyer 3 Mo pour n'en tirer qu'une liste de
+    références serait du gaspillage — et ferait voyager les colonnes nominatives.
+  - Lignes triées par **pièces décroissantes**, `Sans fournisseur` en dernier ;
+    `safeSheetName` garantit des noms d'onglets uniques et valides ; filtre automatique et
+    volet figé sur l'en-tête (un onglet de plusieurs milliers de lignes se lit en filtrant).
+  - Les lignes **sans référence** ou à **quantité ≤ 0** sont écartées à la lecture.
+  - *Validé sur l'export réel : 6 763 lignes / 31 855 pièces / 12 commandes / 2 004 EANs,
+    total du classeur éclaté = total du fichier.*
 - **Recoupement modèle × couleurs** (`/api` : aucun — `src/lib/recoupement.ts`, testé ;
   `components/export/recoupement-card.tsx`) : produit un **tableau croisé** — une ligne par
   modèle, une colonne par couleur, un total par modèle (`Total Modèle`) et par couleur
