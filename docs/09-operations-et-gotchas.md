@@ -88,6 +88,43 @@ qui écrasait le résultat.** Déduire au lieu de vérifier a coûté un faux di
 - ⚠️ **« ponctuel » ne veut pas dire inactif** : deux workflows nommés « (ponctuel) » étaient
   actifs, dont un sur un cron quotidien. À vérifier périodiquement (`n8n_list_workflows`).
 
+### Audit des 15 workflows n8n actifs (28/09/2026)
+
+**Le défaut n'était pas dans les workflows, il était dans le point d'entrée.** Un appelant
+partiel pouvait écraser des données ; c'est la route qui doit s'en protéger, pas chaque
+appelant se souvenir de tout envoyer.
+
+| Point d'entrée | Protection | Verdict |
+|---|---|---|
+| `sync/products` | `COALESCE(NULLIF(…), existant)` sur chaque champ | sûr |
+| `sync/client-addresses` | idem | sûr |
+| `sync/btoc/customers`, `btoc/orders` | idem | sûr |
+| `sync/btoc/refunds` | `ON CONFLICT DO NOTHING` | sûr |
+| `sync/stock` | `INSERT` seul (instantanés cumulatifs) | sûr |
+| `sync/shipment-pdfs` | n'écrit que `pdfFileName` | sûr |
+| `sync/shipments` | upsert complet par document | sûr |
+| **`sync/orders`** | **trois champs écrits sans condition** | **corrigé** |
+
+Les trois champs de `sync/orders`, tous de la même classe :
+1. `amount` — écrasé par 0 (cf. ci-dessus, 3 725 403 € perdus) ;
+2. `deliveryWindow` — écrit à `null` quand il n'est pas envoyé. *Aucun dégât constaté :
+   100 % des commandes en portent une, les deux backfills les envoyaient.* Protégé.
+3. `status` — `statusMap[x] || "EN_COURS"` **rétrogradait** toute valeur inconnue, y compris
+   une commande VALIDEE ou SOLDEE. Désormais dans [`lib/order-status.ts`](../src/lib/order-status.ts),
+   testé, qui distingue « traduit » de « inconnu » : un libellé non reconnu **n'écrit rien**
+   et remonte un avertissement au lieu de disparaître.
+
+⚠️ **Observation restée ouverte** : les **4 170 commandes TIO sont toutes en `EN_COURS`**,
+avec ou sans BL. Le profil étant identique des deux côtés, ce n'est pas un dégât des
+backfills — soit TIO ne renseigne pas ce statut, soit il emploie des libellés que le
+`statusMap` ignorait. Avec l'avertissement ajouté, la prochaine synchro le dira.
+
+Workflows hors GestLog, non concernés : `RDV & Pré-commandes → Google Sheets`,
+`Assistant CW ok`, `Cache Warmup — MCS Apparel`.
+⚠️ `GestLog — Explorer tables MySQL` est **actif avec un webhook public** et exécute une
+requête figée en lecture ; sans danger aujourd'hui, mais c'est un exécuteur de requêtes
+laissé ouvert.
+
 ## Fiabilité du CA B2B (`src/lib/amount-coverage.ts`)
 
 ⚠️ **Le bandeau d'avertissement reste utile** même après cette réparation : il a été ce qui

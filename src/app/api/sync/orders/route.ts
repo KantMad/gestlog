@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { handleApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { parseSeasonFromCatalog } from "@/lib/utils";
+import { mapOrderStatus, STATUT_DEFAUT } from "@/lib/order-status";
 
 // Allow up to 60s for sync operations
 export const maxDuration = 60;
@@ -172,24 +173,23 @@ export async function POST(request: NextRequest) {
           ? `${deliveryWindowStart} - ${deliveryWindowEnd}`
           : deliveryWindowStart || deliveryWindowEnd || null;
 
-        // Map status
-        const statusMap: Record<string, string> = {
-          "Confirmer": "VALIDEE",
-          "Confirmed": "VALIDEE",
-          "En cours": "EN_COURS",
-          "Pending": "EN_COURS",
-          "Solder": "SOLDEE",
-          "Annuler": "ANNULEE",
-          "Cancelled": "ANNULEE",
-        };
-        const mappedStatus = statusMap[status] || "EN_COURS";
+        // Statut : traduit, ou explicitement NON RECONNU (cf. lib/order-status.ts).
+        const statut = mapOrderStatus(status);
+        if (!statut.known && statut.raw) {
+          // On le dit au lieu de retomber en silence sur EN_COURS.
+          errors.push(`Commande ${orderNumber}: statut « ${statut.raw} » non reconnu — statut inchangé.`);
+        }
 
         // Upsert order with catalog
         const clientOrder = await prisma.clientOrder.upsert({
           where: { orderNumber_seasonId: { orderNumber: String(orderNumber), seasonId: season.id } },
           update: {
-            status: mappedStatus,
-            deliveryWindow,
+            // 🔴 MÊME RÈGLE QUE POUR LES MONTANTS : on n'écrase pas un état connu par un
+            // défaut. Un statut non reconnu laissait la commande retomber en EN_COURS,
+            // rétrogradant une commande validée ou soldée ; une fenêtre de livraison
+            // absente l'effaçait. Un appelant partiel ne doit rien pouvoir détruire.
+            ...(statut.known && statut.status ? { status: statut.status } : {}),
+            ...(deliveryWindow ? { deliveryWindow } : {}),
             orderType: orderType === "VSS" ? "VSS" : "COMMANDE",
             catalogId: catalog?.id || undefined,
             tioOrderNumber: String(orderNumber),
@@ -201,7 +201,7 @@ export async function POST(request: NextRequest) {
             seasonId: season.id,
             clientId: client.id,
             catalogId: catalog?.id || undefined,
-            status: mappedStatus,
+            status: statut.status ?? STATUT_DEFAUT,
             deliveryWindow,
             orderType: orderType === "VSS" ? "VSS" : "COMMANDE",
             tioOrderNumber: String(orderNumber),
