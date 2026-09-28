@@ -55,9 +55,45 @@ Nettoie les fichiers `/tmp` après usage (local **et** VPS).
 | n8n | Sync produits + EAN (`NvAbzIgKKw5OvTk1`) | toutes les **6 h** |
 | n8n | Sync commandes / BL-FAC / BtoC | selon planning des workflows |
 
+## 🔴 Un backfill n8n vidait le CA des commandes (28/09/2026)
+
+**Symptôme** : sur la comparaison de catalogues, « MCS Homme W25 » affichait 524 668 €
+contre 1 633 676 € pour « MCS Homme W26 » — un CA apparemment triplé.
+
+**Cause** : le workflow n8n **« GestLog — Backfill commandes liées BL »**, resté **actif et
+programmé tous les jours à 5 h 30**, demandait à GestLog la liste des commandes ayant un BL,
+les relisait dans TIO **sans `o.total_price`**, et les repoussait sur `/api/sync/orders`
+**sans champ `amount` ni `totalAmount`**. La route écrivait alors `amount: 0` par-dessus des
+montants corrects. *996 commandes vidées, 3 725 403 € — et le compteur avançait chaque nuit,
+ciblant les commandes livrées, donc les saisons 2025 et Réassort.* Le même défaut existait
+dans « Backfill commandes S26 (ponctuel) », lui aussi laissé actif.
+
+**Ce qui a induit en erreur** : l'arithmétique de la synchro (`brut × total ÷ Σ brut`) rend
+0 dès que `Σ brut` vaut 0, ce qui laissait croire que TIO ne portait plus les prix de ligne.
+*Vérification faite dans TIO : les prix sont bien là, `{"price":"33","qty":"1"}`, sur les
+commandes cassées comme sur les saines.* **Le calcul était juste ; c'est un AUTRE workflow
+qui écrasait le résultat.** Déduire au lieu de vérifier a coûté un faux diagnostic.
+
+**Corrections** :
+1. 🔴 **`api/sync/orders` n'écrase plus jamais un montant connu par un zéro.** C'est le
+   garde-fou de fond : il neutralise n'importe quel appelant mal formé, pas seulement ces
+   deux workflows.
+2. Les deux backfills rapportent désormais `total_price` et calculent `amount` /
+   `totalAmount` comme la synchro principale, et n'envoient **pas** `amount` quand le brut
+   est nul — laissant la route conserver la valeur connue.
+3. Réparation : le backfill corrigé a été rejoué. **AH25 1 373 057 € → 2 507 182 €**
+   (contre 2 507 183 € de totaux TIO, **1 € d'écart**), **PE25 88 015 € → 2 230 139 €**,
+   Réassort 1 041 849 € → 1 451 027 €. Aucune commande ne reste vide. Ce sont les **vrais
+   montants de TIO**, pas une reconstruction.
+- ⚠️ **« ponctuel » ne veut pas dire inactif** : deux workflows nommés « (ponctuel) » étaient
+  actifs, dont un sur un cron quotidien. À vérifier périodiquement (`n8n_list_workflows`).
+
 ## Fiabilité du CA B2B (`src/lib/amount-coverage.ts`)
 
-🔴 **`ClientOrderLine.amount` est loin d'être toujours renseigné, et rien ne le disait.**
+⚠️ **Le bandeau d'avertissement reste utile** même après cette réparation : il a été ce qui
+a rendu le problème visible, et il protège de toute rechute.
+
+🔴 **`ClientOrderLine.amount` n'est pas toujours renseigné, et rien ne le disait.**
 *Signalé le 28/09/2026 sur la comparaison de catalogues : « MCS Homme W25 » affichait
 524 668 € contre 1 633 676 € pour « MCS Homme W26 » — un CA apparemment triplé. En réalité
 **68 % des pièces de W25 n'ont aucun montant**, et le prix unitaire là où il existe est
@@ -80,19 +116,9 @@ quatre affichent désormais le bandeau `CouvertureAlerte`.
 **Non touchés** : `/statistics` et ses graphiques lisent `WarehouseDocumentLine.amount`
 (montants de FACTURE), qui est renseigné.
 
-**État au 28/09/2026** — seule la **saison 2025** est trouée, le reste est sain :
-
-| Saison | Couverture | €/pièce | Verdict |
-|---|---|---|---|
-| PE2025 | **3,8 %** | 26,20 | inexploitable |
-| AH2025 | **60,4 %** | 28,53 | inexploitable |
-| Divers | 65,7 % | 39,16 | inexploitable |
-| Réassort | 71,3 % | 18,95 | partiel |
-| PE2023 → PE2027 | **97,2 à 100 %** | 24 à 35 | fiable |
-
-Le prix unitaire est cohérent partout : **les prix sont bons, c'est l'import 2025 qui n'a
-pas apporté les montants.** La correction de fond est à faire À LA SOURCE (réimport de ces
-saisons avec la colonne de montant rapprochée).
+**État après réparation du 28/09/2026** : toutes les saisons sont à **97 % ou plus** de
+couverture. Les quelques lignes restantes à 0 € sont des produits sans prix au catalogue
+TIO, pas un défaut de synchro.
 
 **Diagnostic** : `node ops/check-coherence.cjs` sur le VPS — couverture par saison et par
 catalogue. À lancer quand un chiffre en euros paraît faux.
