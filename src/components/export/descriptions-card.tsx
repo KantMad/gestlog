@@ -93,12 +93,10 @@ export function DescriptionsCard() {
         e: { r: apercu.rows.length, c: apercu.header.length - 1 },
       }),
     };
-    // Le descriptif fait jusqu'à 1 260 caractères sur plusieurs lignes : sans retour à la
-    // ligne automatique, la cellule déborde sur toute la feuille.
-    for (let r = 1; r <= apercu.rows.length; r++) {
-      const adr = XLSX.utils.encode_cell({ r, c: apercu.insertAt });
-      if (ws[adr]) ws[adr].s = { alignment: { wrapText: true, vertical: "top" } };
-    }
+    // ⚠️ Pas de retour à la ligne automatique : `xlsx` (build communautaire) n'ÉCRIT PAS
+    // les styles de cellule — un `ws[adr].s = { alignment: … }` serait du code mort. Le
+    // descriptif (jusqu'à 1 095 caractères, sur plusieurs lignes) est donc simplement posé
+    // dans une colonne large ; Excel l'affiche entier dès qu'on coche « Renvoyer à la ligne ».
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Commandes");
     XLSX.utils.book_append_sheet(

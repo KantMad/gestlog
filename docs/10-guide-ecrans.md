@@ -942,8 +942,10 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
   - **Le fichier ne quitte pas le navigateur** : seules les **références distinctes** partent
     au serveur. Ce fichier-là porte le nom, l'e-mail et l'adresse des clients — le faire
     voyager pour n'en tirer qu'une colonne de descriptifs n'aurait aucune raison d'être.
-  - Dans le classeur : filtre automatique, volet figé, colonne du descriptif large avec
-    **retour à la ligne** (1 260 caractères déborderaient sur toute la feuille).
+  - Dans le classeur : filtre automatique, volet figé, colonne du descriptif **large**.
+    ⚠️ Pas de retour à la ligne automatique : `xlsx` (build communautaire) **n'écrit pas les
+    styles de cellule** — le poser serait du code mort. Excel affiche le descriptif entier
+    dès qu'on coche « Renvoyer à la ligne ».
 - **Recoupement modèle × couleurs** (`/api` : aucun — `src/lib/recoupement.ts`, testé ;
   `components/export/recoupement-card.tsx`) : produit un **tableau croisé** — une ligne par
   modèle, une colonne par couleur, un total par modèle (`Total Modèle`) et par couleur
