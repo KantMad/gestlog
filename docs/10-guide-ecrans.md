@@ -915,12 +915,12 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
   - Les lignes **sans référence** ou à **quantité ≤ 0** sont écartées à la lecture.
   - *Validé sur l'export réel : 6 763 lignes / 31 855 pièces / 12 commandes / 2 004 EANs,
     total du classeur éclaté = total du fichier.*
-- **Commandes clients + descriptif produit** (`/api/export/description-by-reference` — ne
-  rend QUE référence → descriptif ; logique pure dans `lib/export-tio-descriptions.ts`,
+- **Commandes clients + descriptif et montant** (`/api/export/description-by-reference` —
+  ne rend QUE référence → descriptif ; logique pure dans `lib/export-tio-descriptions.ts`,
   testée ; `components/export/descriptions-card.tsx`) : on dépose **n'importe quel export
   TIO** (commandes EAN, commandes à la couleur…) et on le récupère **à l'identique** —
-  toutes ses colonnes, dans leur ordre — avec **une colonne de plus**,
-  `Description produit`.
+  toutes ses colonnes, dans leur ordre — avec **deux colonnes de plus** :
+  `Description produit` (après « Nom produit ») et `Montant` (après « Quantité »).
   - **Source** : `Product.description`, alimentée par la synchro produits depuis TIO
     (`lng_product.description_fr`). *Mesuré le 28/09/2026 : 3 235 des 3 262 produits
     publiés ont un descriptif (99 %), 349 caractères en moyenne, 1 260 au maximum.*
@@ -942,6 +942,25 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
   - **Le fichier ne quitte pas le navigateur** : seules les **références distinctes** partent
     au serveur. Ce fichier-là porte le nom, l'e-mail et l'adresse des clients — le faire
     voyager pour n'en tirer qu'une colonne de descriptifs n'aurait aucune raison d'être.
+  - **`Montant` = `Prix à la variation` × `Quantité`**, une ligne = une taille. La cellule
+    est un **NOMBRE** (format `#,##0.00 €`), pas du texte : Excel doit pouvoir sommer la
+    colonne, filtrer dessus, faire un TCD. *Validé sur l'export du 28/09/2026 :
+    6 763 lignes, 31 855 pièces, **565 766,61 €**, et la somme de la colonne est égale au
+    total affiché.*
+  - 🔴 **Arrondi À LA LIGNE, pas seulement au total** : `0,1 × 3` vaut
+    `0.30000000000000004` en flottant. Chaque montant est arrondi au centime, et le total
+    est la somme des montants arrondis — sinon le total du classeur et celui de l'écran
+    finissent par différer d'un centime sans que personne ne sache lequel croire.
+  - 🔴 **Le montant est BRUT** : la colonne `Réduction à la variation` n'est **pas** déduite.
+    *Elle vaut 0 sur toutes les lignes de l'export du 28/09/2026*, mais l'écran compte et
+    **signale** les lignes qui en portent une — un montant faux et silencieux serait pire.
+  - ⚠️ Les lignes **avec quantité mais sans prix** sont comptées et signalées : leur montant
+    vaut 0, donc le total est **sous-estimé**.
+  - ⚠️ **Sans « Prix à la variation » ET « Quantité », la colonne n'est PAS créée** : une
+    colonne de zéros aurait l'air d'un chiffre d'affaires nul.
+  - Les nombres sont lus à la **française comme à l'anglaise** (`10,40` et `10.40`, espaces
+    insécables et `€` tolérés) : l'export du 28/09 est en point décimal, mais un `10,40` lu
+    `10` passerait inaperçu.
   - Dans le classeur : filtre automatique, volet figé, colonne du descriptif **large**.
     ⚠️ Pas de retour à la ligne automatique : `xlsx` (build communautaire) **n'écrit pas les
     styles de cellule** — le poser serait du code mort. Excel affiche le descriptif entier

@@ -6,12 +6,13 @@ import * as XLSX from "xlsx";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Loader2, FileSpreadsheet, Download, X, TriangleAlert, FileText } from "lucide-react";
-import { cn, formatNumber } from "@/lib/utils";
+import { cn, formatNumber, formatEuro } from "@/lib/utils";
 import { fileStamp } from "@/lib/file-stamp";
 import {
   parseTioCsv,
-  addDescriptions,
+  enrichTioCsv,
   COLONNE_DESCRIPTION,
+  COLONNE_MONTANT,
   type TioCsv,
 } from "@/lib/export-tio-descriptions";
 
@@ -78,13 +79,13 @@ export function DescriptionsCard() {
     }
   }, []);
 
-  const apercu = csv ? addDescriptions(csv, descriptions) : null;
+  const apercu = csv ? enrichTioCsv(csv, { descriptionByReference: descriptions }) : null;
 
   const exporter = () => {
     if (!apercu || !file) return;
     const ws = XLSX.utils.aoa_to_sheet([apercu.header, ...apercu.rows]);
-    ws["!cols"] = apercu.header.map((h, i) => ({
-      wch: i === apercu.insertAt ? 60 : Math.min(Math.max(h.length + 2, 12), 30),
+    ws["!cols"] = apercu.header.map((h: string, i: number) => ({
+      wch: i === apercu.descriptionAt ? 60 : Math.min(Math.max(h.length + 2, 12), 30),
     }));
     ws["!freeze"] = { xSplit: 0, ySplit: 1 };
     ws["!autofilter"] = {
@@ -93,6 +94,14 @@ export function DescriptionsCard() {
         e: { r: apercu.rows.length, c: apercu.header.length - 1 },
       }),
     };
+    // La colonne Montant est NUMÉRIQUE (cf. lib) : on lui pose un format monétaire pour
+    // qu'Excel l'additionne et l'affiche en euros plutôt qu'en « 20.8 ».
+    if (apercu.amountAt >= 0) {
+      for (let r = 1; r <= apercu.rows.length; r++) {
+        const adr = XLSX.utils.encode_cell({ r, c: apercu.amountAt });
+        if (ws[adr]) ws[adr].z = '#,##0.00\\ "€"';
+      }
+    }
     // ⚠️ Pas de retour à la ligne automatique : `xlsx` (build communautaire) n'ÉCRIT PAS
     // les styles de cellule — un `ws[adr].s = { alignment: … }` serait du code mort. Le
     // descriptif (jusqu'à 1 095 caractères, sur plusieurs lignes) est donc simplement posé
@@ -107,13 +116,20 @@ export function DescriptionsCard() {
         { Critère: "Références distinctes", Valeur: apercu.references.length },
         { Critère: "Lignes avec descriptif", Valeur: apercu.withDescription },
         { Critère: "Références sans descriptif", Valeur: apercu.unknownReferences.length },
-        { Critère: "Colonne ajoutée", Valeur: COLONNE_DESCRIPTION },
+        { Critère: "Pièces", Valeur: apercu.pieces },
+        { Critère: "Montant total", Valeur: apercu.total },
+        { Critère: "Calcul du montant", Valeur: "Prix à la variation × Quantité (brut, hors réduction)" },
+        { Critère: "Lignes sans prix", Valeur: apercu.linesWithoutPrice },
+        { Critère: "Lignes avec réduction", Valeur: apercu.linesWithDiscount },
+        { Critère: "Colonnes ajoutées", Valeur: [COLONNE_DESCRIPTION, COLONNE_MONTANT].join(" + ") },
         { Critère: "Source du descriptif", Valeur: "Référentiel GestLog (synchro TIO)" },
       ]),
       "Critères"
     );
     XLSX.writeFile(wb, `commandes-avec-descriptions_${fileStamp()}.xlsx`, { compression: true });
-    toast.success(`${formatNumber(apercu.withDescription)} lignes enrichies`);
+    toast.success(
+      `${formatNumber(apercu.withDescription)} lignes enrichies · ${formatEuro(apercu.total)}`
+    );
   };
 
   const manquantes = apercu?.unknownReferences ?? [];
@@ -126,10 +142,11 @@ export function DescriptionsCard() {
             <FileText className="h-5 w-5 text-indigo-600" />
           </div>
           <div>
-            <CardTitle className="text-base">Commandes clients + descriptif produit</CardTitle>
+            <CardTitle className="text-base">Commandes clients + descriptif et montant</CardTitle>
             <p className="text-sm text-muted-foreground">
-              Dépose un export TIO : tu le récupères <strong>à l&apos;identique</strong>, avec
-              une colonne <em>{COLONNE_DESCRIPTION}</em> en plus.
+              Dépose un export TIO : tu le récupères <strong>à l&apos;identique</strong>, avec le{" "}
+              <em>{COLONNE_DESCRIPTION}</em> et le <em>{COLONNE_MONTANT}</em> de chaque ligne
+              (prix à la variation × quantité) en plus.
             </p>
           </div>
         </div>
@@ -162,16 +179,34 @@ export function DescriptionsCard() {
           <>
             <div className="grid gap-3 sm:grid-cols-4">
               <Chiffre valeur={apercu.rows.length} legende="lignes" />
-              <Chiffre valeur={apercu.references.length} legende="références" />
+              <Chiffre valeur={apercu.pieces} legende="pièces" />
               <Chiffre valeur={apercu.withDescription} legende="lignes avec descriptif" />
               <Chiffre valeur={manquantes.length} legende="réfs sans descriptif" />
             </div>
 
+            {apercu.amountAt >= 0 && (
+              <div className="rounded-lg border bg-emerald-50 p-3">
+                <div className="text-2xl font-bold tabular-nums text-emerald-900">
+                  {formatEuro(apercu.total)}
+                </div>
+                <p className="text-xs text-emerald-800">
+                  montant total — somme de la colonne <strong>{COLONNE_MONTANT}</strong> (prix à
+                  la variation × quantité) sur {formatNumber(apercu.references.length)} références
+                </p>
+              </div>
+            )}
+
             <div className="rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground">
-              Le fichier est rendu <strong>tel quel</strong> — les {apercu.header.length - 1}{" "}
-              colonnes d&apos;origine, dans leur ordre. La colonne{" "}
-              <strong>{COLONNE_DESCRIPTION}</strong> s&apos;insère juste après{" "}
-              <em>{apercu.insertAt > 0 ? apercu.header[apercu.insertAt - 1] : "la dernière colonne"}</em>.
+              Le fichier est rendu <strong>tel quel</strong> — ses colonnes d&apos;origine, dans
+              leur ordre. <strong>{COLONNE_DESCRIPTION}</strong> s&apos;insère après{" "}
+              <em>{apercu.descriptionAt > 0 ? apercu.header[apercu.descriptionAt - 1] : "la dernière colonne"}</em>
+              {apercu.amountAt >= 0 && (
+                <>
+                  , et <strong>{COLONNE_MONTANT}</strong> après{" "}
+                  <em>{apercu.header[apercu.amountAt - 1]}</em>
+                </>
+              )}
+              .
             </div>
 
             {manquantes.length > 0 && (
@@ -187,11 +222,44 @@ export function DescriptionsCard() {
               </div>
             )}
 
+            {apercu.amountAt < 0 && (
+              <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>
+                  <strong>Pas de colonne {COLONNE_MONTANT}</strong> : ce fichier ne porte pas à la
+                  fois « Prix à la variation » et « Quantité ». Une colonne de zéros aurait l&apos;air
+                  d&apos;un chiffre d&apos;affaires nul — elle n&apos;est donc pas ajoutée.
+                </span>
+              </div>
+            )}
+
+            {apercu.linesWithoutPrice > 0 && (
+              <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>
+                  <strong>{formatNumber(apercu.linesWithoutPrice)} ligne(s) sans prix</strong> alors
+                  qu&apos;elles portent une quantité : leur montant vaut <strong>0</strong>, et le
+                  total ci-dessus est donc <strong>sous-estimé</strong>.
+                </span>
+              </div>
+            )}
+
+            {apercu.linesWithDiscount > 0 && (
+              <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>
+                  <strong>{formatNumber(apercu.linesWithDiscount)} ligne(s) avec une réduction</strong>{" "}
+                  à la variation. Le montant est le <strong>brut</strong> (prix × quantité) : il ne
+                  la déduit pas.
+                </span>
+              </div>
+            )}
+
             {apercu.withDescription > 0 && (
               <div className="rounded-lg border p-3">
                 <p className="mb-1 text-xs font-medium text-muted-foreground">Aperçu</p>
                 <p className="line-clamp-4 whitespace-pre-line text-sm">
-                  {apercu.rows.find((r) => r[apercu.insertAt])?.[apercu.insertAt]}
+                  {apercu.rows.find((r) => r[apercu.descriptionAt])?.[apercu.descriptionAt]}
                 </p>
               </div>
             )}

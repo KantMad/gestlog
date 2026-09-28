@@ -1049,16 +1049,25 @@ export const HELP_THEMES: HelpTheme[] = [
       {
         id: "export-descriptions",
         icon: "\ud83d\udcc4",
-        title: "Commandes clients + descriptif produit",
-        keywords: "description descriptif produit export tio commandes clients colonne excel csv",
+        title: "Commandes clients + descriptif et montant",
+        keywords: "description descriptif produit montant prix variation quantite total export tio commandes clients colonne excel csv",
         screen: "/export",
         sections: [
           {
             lines: [
-              "Dans **Exports**, d\u00e9pose **n'importe quel export TIO** (commandes EAN, commandes \u00e0 la couleur\u2026) : tu le r\u00e9cup\u00e8res **\u00e0 l'identique**, toutes ses colonnes dans leur ordre, avec **une colonne de plus** : *Description produit*.",
-              "La colonne s'ins\u00e8re **juste apr\u00e8s « Nom produit »**, pour que le descriptif se lise \u00e0 c\u00f4t\u00e9 du nom.",
+              "Dans **Exports**, d\u00e9pose **n'importe quel export TIO** (commandes EAN, commandes \u00e0 la couleur\u2026) : tu le r\u00e9cup\u00e8res **\u00e0 l'identique**, toutes ses colonnes dans leur ordre, avec **deux colonnes de plus** : *Description produit* et *Montant*.",
+              "*Description produit* se place **juste apr\u00e8s « Nom produit »**, *Montant* **juste apr\u00e8s « Quantit\u00e9 »**.",
+              "**Montant = prix \u00e0 la variation \u00d7 quantit\u00e9**, pour chaque ligne, donc pour chaque taille. C'est un vrai nombre : Excel le somme, le filtre et l'accepte dans un tableau crois\u00e9. Le total est affich\u00e9 \u00e0 l'\u00e9cran avant le t\u00e9l\u00e9chargement.",
             ],
             tip: "Le fichier reste dans ton navigateur : seules les **r\u00e9f\u00e9rences** partent au serveur chercher les descriptifs. Les noms et e-mails de tes clients ne bougent pas. \ud83d\udd12",
+          },
+          {
+            h: "Ce que le montant ne dit pas",
+            lines: [
+              "\ud83d\udd34 Le montant est **brut** : la colonne *R\u00e9duction \u00e0 la variation* n'est **pas** d\u00e9duite. Si ton fichier en porte une, l'\u00e9cran te le dit et compte les lignes concern\u00e9es.",
+              "\u26a0\ufe0f Une ligne **avec quantit\u00e9 mais sans prix** compte pour **0** : le total est alors sous-estim\u00e9, et l\u00e0 aussi l'\u00e9cran te le signale.",
+              "\u26a0\ufe0f Si le fichier ne porte pas \u00e0 la fois le prix et la quantit\u00e9, la colonne **n'est pas cr\u00e9\u00e9e** \u2014 une colonne de z\u00e9ros ressemblerait \u00e0 un chiffre d'affaires nul.",
+            ],
           },
           {
             h: "D'o\u00f9 vient le descriptif",
