@@ -39,6 +39,9 @@ colonne.
   `color`/`colorCode` (= **code** couleur, ex. "213"), **`colorLabel`** (= **nom**, ex.
   "Chocolat"), `label` (désignation), `description` (descriptif commercial TIO
   `description_fr`, **stocké brut avec son HTML léger** — les exports l'aplatissent),
+  `originCountry` (pays d'origine TIO `country`, **code ISO-2 brut** — ⚠️ TIO y écrit
+  « 000 » quand ce n'est pas renseigné, 280 produits : c'est la LECTURE qui le traite
+  comme une absence),
   `salePrice` (prix vente public), `costPrice` (coût),
   `sizeScale` ("XS,S,M,L,XL"), `category`/`subCategory`, `externalId` (id TIO `produit_couleur`).
 - **`ProductSizeEan`** — code-barres **EAN-13** par (reference, color, size). Clé d'unicité

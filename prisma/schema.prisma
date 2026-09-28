@@ -99,6 +99,11 @@ model Product {
   // HTML léger (<br />, <strong>, <li>) que les exports aplatissent à la lecture. Garder
   // la source telle quelle laisse la porte ouverte à un autre rendu (fiche, site, PDF).
   description String?  @db.Text
+  // Pays d'origine (TIO lng_product.country), code ISO-2 BRUT : « TR », « IN »…
+  // ⚠️ TIO y écrit aussi « 000 » quand ce n'est pas renseigné (280 produits au
+  // 28/09/2026). On stocke le code tel quel ; c'est la lecture qui sait que « 000 »
+  // n'est pas un pays — cf. lib/export-tio-descriptions.ts.
+  originCountry String?
   salePrice   Float?   // prix de vente public (TIO prices[catalogue 209].min_retail_price)
   costPrice   Float?   // prix de gros / coût (TIO prices[catalogue 209].min_price)
   createdAt   DateTime @default(now())

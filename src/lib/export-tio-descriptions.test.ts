@@ -4,13 +4,15 @@ import {
   enrichTioCsv,
   flattenDescription,
   parseNombre,
+  paysOrigine,
   COLONNE_DESCRIPTION,
   COLONNE_MONTANT,
+  COLONNE_PAYS,
 } from "./export-tio-descriptions";
 
 const EN_TETE = [
   "Numéro de commande", "Nom du client", "Mail client", "Référence produit",
-  "Nom produit", "Prix à la variation", "Réduction à la variation",
+  "Nom produit", "Composition", "Prix à la variation", "Réduction à la variation",
   "Taille", "SKU", "EAN", "Quantité",
 ];
 
@@ -19,8 +21,8 @@ function csv(lignes: string[][]) {
 }
 
 const FICHIER = csv([
-  ["C1", "Durand", "a@b.fr", "REF1", "Pantalon", "10.40", "0", "M", "SKU1", "111", "2"],
-  ["C1", "Durand", "a@b.fr", "REF2", "Chemise", "12.50", "0", "L", "SKU2", "222", "3"],
+  ["C1", "Durand", "a@b.fr", "REF1", "Pantalon", "100% coton", "10.40", "0", "M", "SKU1", "111", "2"],
+  ["C1", "Durand", "a@b.fr", "REF2", "Chemise", "100% lin", "12.50", "0", "L", "SKU2", "222", "3"],
 ]);
 
 describe("flattenDescription", () => {
@@ -84,13 +86,14 @@ describe("parseTioCsv", () => {
     expect(p.rows[0]).toHaveLength(EN_TETE.length);
   });
 
-  it("repère référence, nom, prix, réduction et quantité PAR NOM", () => {
+  it("repère référence, nom, composition, prix, réduction et quantité PAR NOM", () => {
     const p = parseTioCsv(FICHIER);
     expect(p.refIndex).toBe(3);
     expect(p.nameIndex).toBe(4);
-    expect(p.priceIndex).toBe(5);
-    expect(p.discountIndex).toBe(6);
-    expect(p.qtyIndex).toBe(10);
+    expect(p.compositionIndex).toBe(5);
+    expect(p.priceIndex).toBe(6);
+    expect(p.discountIndex).toBe(7);
+    expect(p.qtyIndex).toBe(11);
   });
 
   it("retient la PREMIÈRE colonne « Référence produit » quand elle apparaît deux fois", () => {
@@ -200,14 +203,14 @@ describe("enrichTioCsv — montant", () => {
 
   // 0.1 × 3 vaut 0.30000000000000004 en flottant : arrondi à la ligne, pas seulement au total.
   it("arrondit chaque ligne au centime", () => {
-    const p = parseTioCsv(csv([["C1", "D", "a@b.fr", "REF1", "P", "0.1", "0", "M", "S", "1", "3"]]));
+    const p = parseTioCsv(csv([["C1", "D", "a@b.fr", "REF1", "P", "coton", "0.1", "0", "M", "S", "1", "3"]]));
     const r = enrichTioCsv(p);
     expect(r.rows[0][r.amountAt]).toBe(0.3);
     expect(r.total).toBe(0.3);
   });
 
   it("compte les lignes sans prix au lieu de les taire", () => {
-    const p = parseTioCsv(csv([["C1", "D", "a@b.fr", "REF1", "P", "", "0", "M", "S", "1", "4"]]));
+    const p = parseTioCsv(csv([["C1", "D", "a@b.fr", "REF1", "P", "coton", "", "0", "M", "S", "1", "4"]]));
     const r = enrichTioCsv(p);
     expect(r.rows[0][r.amountAt]).toBe(0);
     expect(r.linesWithoutPrice).toBe(1);
@@ -215,7 +218,7 @@ describe("enrichTioCsv — montant", () => {
 
   // ⚠️ Le montant est BRUT : une réduction non nulle n'est pas déduite, il faut le dire.
   it("signale les lignes portant une réduction", () => {
-    const p = parseTioCsv(csv([["C1", "D", "a@b.fr", "REF1", "P", "10", "5", "M", "S", "1", "2"]]));
+    const p = parseTioCsv(csv([["C1", "D", "a@b.fr", "REF1", "P", "coton", "10", "5", "M", "S", "1", "2"]]));
     const r = enrichTioCsv(p);
     expect(r.rows[0][r.amountAt]).toBe(20);
     expect(r.linesWithDiscount).toBe(1);
@@ -247,5 +250,92 @@ describe("enrichTioCsv — montant", () => {
     expect(r.rows).toEqual([]);
     expect(r.header).toEqual([]);
     expect(r.total).toBe(0);
+  });
+});
+
+describe("paysOrigine", () => {
+  it("traduit le code ISO-2 en français", () => {
+    expect(paysOrigine("TR")).toBe("Turquie");
+    expect(paysOrigine("IN")).toBe("Inde");
+  });
+
+  // 🔴 280 produits publiés portent « 000 » : c'est une absence, pas un pays.
+  it("refuse « 000 », le code TIO du non-renseigné", () => {
+    expect(paysOrigine("000")).toBeNull();
+  });
+
+  it("rend null sur du vide", () => {
+    expect(paysOrigine("")).toBeNull();
+    expect(paysOrigine(null)).toBeNull();
+    expect(paysOrigine(undefined)).toBeNull();
+  });
+
+  it("tolère la casse et les espaces", () => {
+    expect(paysOrigine(" tr ")).toBe("Turquie");
+  });
+
+  // Mieux vaut un code brut qu'une information perdue.
+  it("rend le code tel quel quand il n'est pas reconnu", () => {
+    expect(paysOrigine("ZZZ")).toBe("ZZZ");
+  });
+});
+
+describe("enrichTioCsv — pays d'origine", () => {
+  it("insère le pays JUSTE APRÈS la composition", () => {
+    const r = enrichTioCsv(parseTioCsv(FICHIER), { countryByReference: { REF1: "TR", REF2: "IN" } });
+    expect(r.header[r.countryAt - 1]).toBe("Composition");
+    expect(r.header[r.countryAt]).toBe(COLONNE_PAYS);
+    expect(r.rows[0][r.countryAt]).toBe("Turquie");
+    expect(r.rows[1][r.countryAt]).toBe("Inde");
+    expect(r.withCountry).toBe(2);
+  });
+
+  it("laisse la cellule VIDE et compte la référence quand le pays vaut « 000 »", () => {
+    const r = enrichTioCsv(parseTioCsv(FICHIER), { countryByReference: { REF1: "000", REF2: "IT" } });
+    expect(r.rows[0][r.countryAt]).toBe("");
+    expect(r.referencesWithoutCountry).toEqual(["REF1"]);
+    expect(r.withCountry).toBe(1);
+  });
+
+  it("n'ajoute PAS la colonne si on ne demande pas le pays", () => {
+    const r = enrichTioCsv(parseTioCsv(FICHIER));
+    expect(r.countryAt).toBe(-1);
+    expect(r.header).not.toContain(COLONNE_PAYS);
+  });
+
+  it("suit le nom produit quand le fichier n'a pas de colonne Composition", () => {
+    const entete = ["Référence produit", "Nom produit", "Quantité"];
+    const p = parseTioCsv([entete, ["REF1", "Pantalon", "2"]].map((l) => l.join(";")).join("\n"));
+    const r = enrichTioCsv(p, { countryByReference: { REF1: "PT" } });
+    expect(r.header[r.countryAt - 1]).toBe("Nom produit");
+    expect(r.rows[0][r.countryAt]).toBe("Portugal");
+  });
+
+  it("va en fin de ligne quand il n'y a ni composition ni nom produit", () => {
+    const entete = ["Référence produit", "Quantité"];
+    const p = parseTioCsv([entete, ["REF1", "2"]].map((l) => l.join(";")).join("\n"));
+    const r = enrichTioCsv(p, { countryByReference: { REF1: "FR" } });
+    expect(r.header[r.header.length - 1]).toBe(COLONNE_PAYS);
+    expect(r.rows[0][r.countryAt]).toBe("France");
+  });
+
+  it("place les TROIS colonnes ajoutées sans rien déplacer du fichier", () => {
+    const avant = parseTioCsv(FICHIER);
+    const r = enrichTioCsv(avant, {
+      descriptionByReference: { REF1: "Pantalon en gaze" },
+      countryByReference: { REF1: "TR" },
+    });
+    expect(r.header[r.descriptionAt - 1]).toBe("Nom produit");
+    expect(r.header[r.countryAt - 1]).toBe("Composition");
+    expect(r.header[r.amountAt - 1]).toBe("Quantité");
+    const ajoutees = [r.descriptionAt, r.countryAt, r.amountAt].sort((a, b) => b - a);
+    for (let i = 0; i < avant.rows.length; i++) {
+      const sansAjouts = [...r.rows[i]];
+      for (const c of ajoutees) sansAjouts.splice(c, 1);
+      expect(sansAjouts).toEqual(avant.rows[i]);
+    }
+    const enTete = [...r.header];
+    for (const c of ajoutees) enTete.splice(c, 1);
+    expect(enTete).toEqual(avant.header);
   });
 });

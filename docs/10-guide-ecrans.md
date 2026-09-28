@@ -915,12 +915,13 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
   - Les lignes **sans référence** ou à **quantité ≤ 0** sont écartées à la lecture.
   - *Validé sur l'export réel : 6 763 lignes / 31 855 pièces / 12 commandes / 2 004 EANs,
     total du classeur éclaté = total du fichier.*
-- **Commandes clients + descriptif et montant** (`/api/export/description-by-reference` —
-  ne rend QUE référence → descriptif ; logique pure dans `lib/export-tio-descriptions.ts`,
-  testée ; `components/export/descriptions-card.tsx`) : on dépose **n'importe quel export
-  TIO** (commandes EAN, commandes à la couleur…) et on le récupère **à l'identique** —
-  toutes ses colonnes, dans leur ordre — avec **deux colonnes de plus** :
-  `Description produit` (après « Nom produit ») et `Montant` (après « Quantité »).
+- **Commandes clients + descriptif, pays et montant** (`/api/export/product-info-by-reference`
+  — ne rend QUE référence → descriptif + pays ; logique pure dans
+  `lib/export-tio-descriptions.ts`, testée ; `components/export/descriptions-card.tsx`) : on
+  dépose **n'importe quel export TIO** (commandes EAN, commandes à la couleur…) et on le
+  récupère **à l'identique** — toutes ses colonnes, dans leur ordre — avec **trois colonnes
+  de plus** : `Description produit` (après « Nom produit »), `Pays d'origine` (après
+  « Composition ») et `Montant` (après « Quantité »).
   - **Source** : `Product.description`, alimentée par la synchro produits depuis TIO
     (`lng_product.description_fr`). *Mesuré le 28/09/2026 : 3 235 des 3 262 produits
     publiés ont un descriptif (99 %), 349 caractères en moyenne, 1 260 au maximum.*
@@ -942,6 +943,18 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
   - **Le fichier ne quitte pas le navigateur** : seules les **références distinctes** partent
     au serveur. Ce fichier-là porte le nom, l'e-mail et l'adresse des clients — le faire
     voyager pour n'en tirer qu'une colonne de descriptifs n'aurait aucune raison d'être.
+  - **`Pays d'origine`** vient de `Product.originCountry` (TIO `lng_product.country`),
+    **code ISO-2 traduit en français** à la lecture (`TR` → *Turquie*) via
+    `Intl.DisplayNames` — pas de table de 250 pays à maintenir, et un repli sur le code brut
+    si l'ICU de l'environnement est réduit. *Renseigné sur les 3 262 produits publiés :
+    TR 1 836, IN 320, CN 261, IT 186, TN 177, FR 65, MA 61, PT 43…*
+  - 🔴 **TIO écrit « 000 » quand le pays n'est PAS renseigné** — **280 produits publiés** au
+    28/09/2026. Recopié tel quel, il ressemblerait à un code pays sur un document qui sert à
+    l'**étiquetage et au dédouanement**. Il est donc traité comme une **absence** : cellule
+    vide, référence comptée et listée à l'écran. Un code **inconnu** du système, lui, est
+    rendu **tel quel** (perdre l'information serait pire que l'afficher brute).
+  - ⚠️ Le référentiel porte aussi un `AQ` (**Antarctique**) sur une référence : la donnée est
+    rendue telle qu'elle est en base, c'est à TIO d'être corrigé.
   - **`Montant` = `Prix à la variation` × `Quantité`**, une ligne = une taille. La cellule
     est un **NOMBRE** (format `#,##0.00 €`), pas du texte : Excel doit pouvoir sommer la
     colonne, filtrer dessus, faire un TCD. *Validé sur l'export du 28/09/2026 :

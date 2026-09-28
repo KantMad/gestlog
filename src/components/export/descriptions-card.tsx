@@ -13,6 +13,7 @@ import {
   enrichTioCsv,
   COLONNE_DESCRIPTION,
   COLONNE_MONTANT,
+  COLONNE_PAYS,
   type TioCsv,
 } from "@/lib/export-tio-descriptions";
 
@@ -27,12 +28,14 @@ export function DescriptionsCard() {
   const [file, setFile] = useState<File | null>(null);
   const [csv, setCsv] = useState<TioCsv | null>(null);
   const [descriptions, setDescriptions] = useState<Record<string, string>>({});
+  const [countries, setCountries] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
 
   const reset = () => {
     setFile(null);
     setCsv(null);
     setDescriptions({});
+    setCountries({});
   };
 
   const choisir = useCallback(async (f: File) => {
@@ -56,7 +59,7 @@ export function DescriptionsCard() {
       const references = [
         ...new Set(lu.rows.map((r) => String(r[lu.refIndex] ?? "").trim()).filter(Boolean)),
       ];
-      const res = await fetch("/api/export/description-by-reference", {
+      const res = await fetch("/api/export/product-info-by-reference", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ references }),
@@ -70,6 +73,7 @@ export function DescriptionsCard() {
       setFile(f);
       setCsv(lu);
       setDescriptions(json.data.descriptions || {});
+      setCountries(json.data.countries || {});
       toast.success(`${formatNumber(lu.rows.length)} lignes lues · ${references.length} références`);
     } catch (e) {
       toast.error("Impossible de lire le fichier", { description: String(e) });
@@ -79,7 +83,9 @@ export function DescriptionsCard() {
     }
   }, []);
 
-  const apercu = csv ? enrichTioCsv(csv, { descriptionByReference: descriptions }) : null;
+  const apercu = csv
+    ? enrichTioCsv(csv, { descriptionByReference: descriptions, countryByReference: countries })
+    : null;
 
   const exporter = () => {
     if (!apercu || !file) return;
@@ -116,12 +122,18 @@ export function DescriptionsCard() {
         { Critère: "Références distinctes", Valeur: apercu.references.length },
         { Critère: "Lignes avec descriptif", Valeur: apercu.withDescription },
         { Critère: "Références sans descriptif", Valeur: apercu.unknownReferences.length },
+        { Critère: "Lignes avec pays d'origine", Valeur: apercu.withCountry },
+        { Critère: "Références sans pays d'origine", Valeur: apercu.referencesWithoutCountry.length },
         { Critère: "Pièces", Valeur: apercu.pieces },
         { Critère: "Montant total", Valeur: apercu.total },
         { Critère: "Calcul du montant", Valeur: "Prix à la variation × Quantité (brut, hors réduction)" },
         { Critère: "Lignes sans prix", Valeur: apercu.linesWithoutPrice },
         { Critère: "Lignes avec réduction", Valeur: apercu.linesWithDiscount },
-        { Critère: "Colonnes ajoutées", Valeur: [COLONNE_DESCRIPTION, COLONNE_MONTANT].join(" + ") },
+        {
+          Critère: "Colonnes ajoutées",
+          Valeur: [COLONNE_DESCRIPTION, COLONNE_PAYS, COLONNE_MONTANT].join(" + "),
+        },
+        { Critère: "Source du pays", Valeur: "Référentiel GestLog (TIO), code ISO traduit" },
         { Critère: "Source du descriptif", Valeur: "Référentiel GestLog (synchro TIO)" },
       ]),
       "Critères"
@@ -145,8 +157,8 @@ export function DescriptionsCard() {
             <CardTitle className="text-base">Commandes clients + descriptif et montant</CardTitle>
             <p className="text-sm text-muted-foreground">
               Dépose un export TIO : tu le récupères <strong>à l&apos;identique</strong>, avec le{" "}
-              <em>{COLONNE_DESCRIPTION}</em> et le <em>{COLONNE_MONTANT}</em> de chaque ligne
-              (prix à la variation × quantité) en plus.
+              <em>{COLONNE_DESCRIPTION}</em>, le <em>{COLONNE_PAYS}</em> et le{" "}
+              <em>{COLONNE_MONTANT}</em> de chaque ligne (prix à la variation × quantité) en plus.
             </p>
           </div>
         </div>
@@ -181,7 +193,7 @@ export function DescriptionsCard() {
               <Chiffre valeur={apercu.rows.length} legende="lignes" />
               <Chiffre valeur={apercu.pieces} legende="pièces" />
               <Chiffre valeur={apercu.withDescription} legende="lignes avec descriptif" />
-              <Chiffre valeur={manquantes.length} legende="réfs sans descriptif" />
+              <Chiffre valeur={apercu.withCountry} legende="lignes avec pays" />
             </div>
 
             {apercu.amountAt >= 0 && (
@@ -218,6 +230,21 @@ export function DescriptionsCard() {
                   {manquantes.length > 8 && "…"}. Leur cellule reste <strong>vide</strong> — la
                   ligne n&apos;est jamais retirée. Le descriptif vient de TIO : s&apos;il y est
                   renseigné, il arrivera à la prochaine synchro produits (5 h 05).
+                </span>
+              </div>
+            )}
+
+            {apercu.referencesWithoutCountry.length > 0 && (
+              <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>
+                  <strong>
+                    {apercu.referencesWithoutCountry.length} référence(s) sans pays d&apos;origine
+                  </strong>{" "}
+                  : {apercu.referencesWithoutCountry.slice(0, 8).join(", ")}
+                  {apercu.referencesWithoutCountry.length > 8 && "…"}. Cellule <strong>vide</strong> —
+                  TIO n&apos;a pas de pays pour elles (ou y a laissé le code « 000 »), et écrire un
+                  pays faux sur un document d&apos;étiquetage serait pire que de le laisser vide.
                 </span>
               </div>
             )}

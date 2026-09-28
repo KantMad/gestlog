@@ -5,7 +5,9 @@
 // deux colonnes en plus :
 //   • « Description produit » — référentiel GestLog (`Product.description`, TIO
 //     `lng_product.description_fr`), insérée après « Nom produit » ;
-//   • « Montant » — `Prix à la variation` × `Quantité`, insérée après « Quantité ».
+//   • « Montant » — `Prix à la variation` × `Quantité`, insérée après « Quantité » ;
+//   • « Pays d'origine » — référentiel GestLog (`Product.originCountry`, TIO
+//     `lng_product.country`), insérée après « Composition ».
 //
 // 🔴 POURQUOI NE PAS SE FIER À L'ORDRE DES COLONNES. Le même export TIO porte la colonne
 // « Référence produit » DEUX FOIS (positions 19 et 25 sur l'export du 28/09/2026), et
@@ -21,6 +23,39 @@ import { splitCsvLine } from "@/lib/export-ean-suppliers";
 
 export const COLONNE_DESCRIPTION = "Description produit";
 export const COLONNE_MONTANT = "Montant";
+export const COLONNE_PAYS = "Pays d'origine";
+
+/**
+ * 🔴 TIO écrit « 000 » dans `country` quand le pays N'EST PAS renseigné — 280 produits
+ * publiés au 28/09/2026. Recopié tel quel, il ressemblerait à un code pays sur un document
+ * qui sert à l'étiquetage et au dédouanement. On le traite donc comme une absence.
+ */
+export const PAYS_NON_RENSEIGNE = "000";
+
+let displayNames: { of(code: string): string | undefined } | null | undefined;
+
+/**
+ * Nom français d'un code ISO-2 (« TR » → « Turquie »). Le code inconnu du système est
+ * RENDU TEL QUEL plutôt qu'effacé : perdre l'information serait pire que l'afficher brute.
+ * Rend `null` quand il n'y a rien à afficher (vide, « 000 »).
+ */
+export function paysOrigine(code: string | null | undefined): string | null {
+  const brut = String(code ?? "").trim().toUpperCase();
+  if (!brut || brut === PAYS_NON_RENSEIGNE) return null;
+  if (displayNames === undefined) {
+    try {
+      displayNames = new Intl.DisplayNames(["fr"], { type: "region" });
+    } catch {
+      displayNames = null; // ICU réduit : on se rabat sur le code.
+    }
+  }
+  if (!/^[A-Z]{2}$/.test(brut)) return brut;
+  try {
+    return displayNames?.of(brut) || brut;
+  } catch {
+    return brut;
+  }
+}
 
 /** Une cellule : le texte d'origine, ou un NOMBRE pour les colonnes calculées. */
 export type Cell = string | number;
@@ -91,12 +126,15 @@ export interface TioCsv {
   qtyIndex: number;
   /** Index de « Réduction à la variation », -1 si absente. */
   discountIndex: number;
+  /** Index de « Composition », -1 si absente. */
+  compositionIndex: number;
 }
 
 /** Lit un export TIO en CONSERVANT toutes ses colonnes. */
 export function parseTioCsv(text: string): TioCsv {
   const vide: TioCsv = {
-    header: [], rows: [], refIndex: -1, nameIndex: -1, priceIndex: -1, qtyIndex: -1, discountIndex: -1,
+    header: [], rows: [], refIndex: -1, nameIndex: -1, priceIndex: -1, qtyIndex: -1,
+    discountIndex: -1, compositionIndex: -1,
   };
   const lines = String(text ?? "").split(/\r?\n/).filter((l) => l.trim() !== "");
   if (lines.length < 2) return vide;
@@ -124,6 +162,7 @@ export function parseTioCsv(text: string): TioCsv {
     priceIndex: cherche("Prix à la variation", "Prix a la variation", "Prix unitaire", "Prix"),
     qtyIndex: cherche("Quantité", "Quantite", "Qté", "Qte"),
     discountIndex: cherche("Réduction à la variation", "Reduction a la variation", "Remise"),
+    compositionIndex: cherche("Composition", "Matière", "Matiere"),
   };
 }
 
@@ -132,6 +171,8 @@ export interface EnrichOptions {
   descriptionByReference?: Record<string, string>;
   /** Ajouter la colonne « Montant » = prix × quantité. Défaut : true. */
   withAmount?: boolean;
+  /** Pays d'origine par référence (code ISO-2 brut de TIO, « 000 » toléré). */
+  countryByReference?: Record<string, string>;
 }
 
 export interface EnrichedExport {
@@ -141,6 +182,12 @@ export interface EnrichedExport {
   descriptionAt: number;
   /** Position de la colonne montant, -1 si non ajoutée. */
   amountAt: number;
+  /** Position de la colonne pays d'origine, -1 si non ajoutée. */
+  countryAt: number;
+  /** Lignes ayant reçu un pays d'origine. */
+  withCountry: number;
+  /** Références sans pays d'origine exploitable (absent ou « 000 »), triées. */
+  referencesWithoutCountry: string[];
   withDescription: number;
   unknownReferences: string[];
   references: string[];
@@ -159,18 +206,20 @@ export interface EnrichedExport {
  * colonne ajoutée va en fin de ligne.
  */
 export function enrichTioCsv(csv: TioCsv, options: EnrichOptions = {}): EnrichedExport {
-  const { header, rows, refIndex, nameIndex, priceIndex, qtyIndex, discountIndex } = csv;
+  const { header, rows, refIndex, nameIndex, priceIndex, qtyIndex, discountIndex, compositionIndex } = csv;
   const descriptions = options.descriptionByReference;
+  const pays = options.countryByReference;
   const veutDesc = !!descriptions;
+  const veutPays = !!pays;
   // Sans prix NI quantité, un montant n'aurait aucun sens : on ne fabrique pas une colonne
   // de zéros qui aurait l'air d'un chiffre d'affaires nul.
   const veutMontant = options.withAmount !== false && priceIndex >= 0 && qtyIndex >= 0;
 
   if (header.length === 0) {
     return {
-      header: [], rows: [], descriptionAt: -1, amountAt: -1, withDescription: 0,
-      unknownReferences: [], references: [], total: 0, pieces: 0,
-      linesWithoutPrice: 0, linesWithDiscount: 0,
+      header: [], rows: [], descriptionAt: -1, amountAt: -1, countryAt: -1,
+      withDescription: 0, withCountry: 0, unknownReferences: [], referencesWithoutCountry: [],
+      references: [], total: 0, pieces: 0, linesWithoutPrice: 0, linesWithDiscount: 0,
     };
   }
 
@@ -178,16 +227,30 @@ export function enrichTioCsv(csv: TioCsv, options: EnrichOptions = {}): Enriched
   for (const [ref, desc] of Object.entries(descriptions || {})) {
     clefs.set(norm(ref), flattenDescription(desc));
   }
+  const clefsPays = new Map<string, string>();
+  for (const [ref, code] of Object.entries(pays || {})) {
+    const nom = paysOrigine(code);
+    if (nom) clefsPays.set(norm(ref), nom);
+  }
+
+  // Le pays d'origine se lit avec la composition : ce sont les deux mentions d'étiquette.
+  // À défaut de colonne « Composition », il suit le descriptif / le nom produit.
+  const ancrePays = compositionIndex >= 0 ? compositionIndex : nameIndex;
 
   // En-tête de sortie : chaque colonne ajoutée suit son ancre, sinon elle va à la fin.
   const outHeader: string[] = [];
   let descriptionAt = -1;
   let amountAt = -1;
+  let countryAt = -1;
   for (let i = 0; i < header.length; i++) {
     outHeader.push(header[i]);
     if (veutDesc && i === nameIndex) {
       descriptionAt = outHeader.length;
       outHeader.push(COLONNE_DESCRIPTION);
+    }
+    if (veutPays && i === ancrePays) {
+      countryAt = outHeader.length;
+      outHeader.push(COLONNE_PAYS);
     }
     if (veutMontant && i === qtyIndex) {
       amountAt = outHeader.length;
@@ -202,10 +265,16 @@ export function enrichTioCsv(csv: TioCsv, options: EnrichOptions = {}): Enriched
     amountAt = outHeader.length;
     outHeader.push(COLONNE_MONTANT);
   }
+  if (veutPays && countryAt < 0) {
+    countryAt = outHeader.length;
+    outHeader.push(COLONNE_PAYS);
+  }
 
   const refs = new Set<string>();
   const inconnues = new Set<string>();
   let withDescription = 0;
+  let withCountry = 0;
+  const sansPays = new Set<string>();
   let total = 0;
   let pieces = 0;
   let linesWithoutPrice = 0;
@@ -219,6 +288,13 @@ export function enrichTioCsv(csv: TioCsv, options: EnrichOptions = {}): Enriched
       desc = ref ? clefs.get(norm(ref)) || "" : "";
       if (desc) withDescription++;
       else if (ref) inconnues.add(ref);
+    }
+
+    let nomPays = "";
+    if (veutPays) {
+      nomPays = ref ? clefsPays.get(norm(ref)) || "" : "";
+      if (nomPays) withCountry++;
+      else if (ref) sansPays.add(ref);
     }
 
     let montant = 0;
@@ -236,10 +312,12 @@ export function enrichTioCsv(csv: TioCsv, options: EnrichOptions = {}): Enriched
     for (let i = 0; i < header.length; i++) {
       out.push(cells[i] ?? "");
       if (veutDesc && i === nameIndex) out.push(desc);
+      if (veutPays && i === ancrePays) out.push(nomPays);
       if (veutMontant && i === qtyIndex) out.push(montant);
     }
     if (veutDesc && nameIndex < 0) out.push(desc);
     if (veutMontant && qtyIndex < 0) out.push(montant);
+    if (veutPays && ancrePays < 0) out.push(nomPays);
     return out;
   });
 
@@ -248,8 +326,11 @@ export function enrichTioCsv(csv: TioCsv, options: EnrichOptions = {}): Enriched
     rows: outRows,
     descriptionAt,
     amountAt,
+    countryAt,
     withDescription,
+    withCountry,
     unknownReferences: [...inconnues].sort(),
+    referencesWithoutCountry: [...sansPays].sort(),
     references: [...refs].sort(),
     total,
     pieces,
