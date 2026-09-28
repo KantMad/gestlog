@@ -1047,6 +1047,30 @@ export const HELP_THEMES: HelpTheme[] = [
         ],
       },
       {
+        id: "export-descriptions",
+        icon: "\ud83d\udcc4",
+        title: "Commandes clients + descriptif produit",
+        keywords: "description descriptif produit export tio commandes clients colonne excel csv",
+        screen: "/export",
+        sections: [
+          {
+            lines: [
+              "Dans **Exports**, d\u00e9pose **n'importe quel export TIO** (commandes EAN, commandes \u00e0 la couleur\u2026) : tu le r\u00e9cup\u00e8res **\u00e0 l'identique**, toutes ses colonnes dans leur ordre, avec **une colonne de plus** : *Description produit*.",
+              "La colonne s'ins\u00e8re **juste apr\u00e8s « Nom produit »**, pour que le descriptif se lise \u00e0 c\u00f4t\u00e9 du nom.",
+            ],
+            tip: "Le fichier reste dans ton navigateur : seules les **r\u00e9f\u00e9rences** partent au serveur chercher les descriptifs. Les noms et e-mails de tes clients ne bougent pas. \ud83d\udd12",
+          },
+          {
+            h: "D'o\u00f9 vient le descriptif",
+            lines: [
+              "Du **r\u00e9f\u00e9rentiel produits**, aliment\u00e9 chaque nuit depuis TIO (\u00e0 5 h 05). C'est le descriptif que tu saisis dans TIO sur la fiche produit.",
+              "Il arrive avec sa **mise en forme** (retours \u00e0 la ligne, listes) : GestLog la convertit en texte lisible dans une cellule Excel.",
+              "\u26a0\ufe0f Une r\u00e9f\u00e9rence **sans descriptif** laisse la cellule **vide** \u2014 sa ligne n'est jamais retir\u00e9e. L'\u00e9cran te dit lesquelles. Renseigne-les dans TIO, elles arriveront \u00e0 la synchro suivante.",
+            ],
+          },
+        ],
+      },
+      {
         id: "export-recoupement",
         icon: "\ud83d\udd33",
         title: "Recoupement modèle × couleurs",

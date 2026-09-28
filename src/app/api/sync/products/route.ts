@@ -59,7 +59,8 @@ export async function POST(request: NextRequest) {
           sizeTypeCode,
           category,
           subCategory,
-          label,      // désignation (label_fr)
+          label,       // désignation (label_fr)
+          description, // descriptif commercial (description_fr), HTML léger conservé brut
           salePrice,  // prix de vente public (retail, catalogue 209)
           costPrice,  // prix de gros / coût
           variations,
@@ -90,8 +91,8 @@ export async function POST(request: NextRequest) {
 
         // 1) Upsert Product (RETURNING id → évite un SELECT plus loin)
         const prodUpsert = await prisma.$queryRawUnsafe<{ id: string }[]>(
-          `INSERT INTO "Product" (id, reference, color, "colorCode", "sizeScale", "externalId", category, "subCategory", label, "salePrice", "costPrice", "colorLabel", "createdAt", "updatedAt")
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW(), NOW())
+          `INSERT INTO "Product" (id, reference, color, "colorCode", "sizeScale", "externalId", category, "subCategory", label, "salePrice", "costPrice", "colorLabel", description, "createdAt", "updatedAt")
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW())
            ON CONFLICT (reference, color)
            DO UPDATE SET
              "colorCode" = COALESCE(NULLIF($4, ''), "Product"."colorCode"),
@@ -101,6 +102,9 @@ export async function POST(request: NextRequest) {
              category = COALESCE(NULLIF($7, ''), "Product".category),
              "subCategory" = COALESCE(NULLIF($8, ''), "Product"."subCategory"),
              label = COALESCE(NULLIF($9, ''), "Product".label),
+             -- 🔴 Une synchro qui ne porte PAS la description ne doit pas l'effacer :
+             -- c'est exactement ce qui a vidé 996 montants de commandes le 28/09/2026.
+             description = COALESCE(NULLIF($13, ''), "Product".description),
              "salePrice" = COALESCE($10, "Product"."salePrice"),
              "costPrice" = COALESCE($11, "Product"."costPrice"),
              "updatedAt" = NOW()
@@ -116,7 +120,8 @@ export async function POST(request: NextRequest) {
           label || null,
           saleP,
           costP,
-          colorLabel || null
+          colorLabel || null,
+          description ? String(description) : null
         );
         const pid = prodUpsert[0]?.id;
 

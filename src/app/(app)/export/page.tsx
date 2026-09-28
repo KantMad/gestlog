@@ -26,6 +26,7 @@ import * as XLSX from "xlsx";
 import { QuantitesCard } from "@/components/export/quantites-card";
 import { RecoupementCard } from "@/components/export/recoupement-card";
 import { EanSuppliersCard } from "@/components/export/ean-suppliers-card";
+import { DescriptionsCard } from "@/components/export/descriptions-card";
 
 interface ReceptionRow {
   id: string;
@@ -411,6 +412,11 @@ export default function ExportPage() {
             {/* Le fichier donne les lignes, la BASE donne le fournisseur. */}
             <div className="sm:col-span-2">
               <EanSuppliersCard />
+            </div>
+
+            {/* Le fichier ressort à l'identique, avec le descriptif en plus. */}
+            <div className="sm:col-span-2">
+              <DescriptionsCard />
             </div>
           </div>
         </div>

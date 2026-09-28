@@ -95,6 +95,10 @@ model Product {
   category    String?  // catégorie BtoB (ex: "Pantalon")
   subCategory String?  // sous-catégorie BtoB (ex: "Pantalon 5 poches")
   label       String?  // désignation produit (TIO label_fr) — pour la création caisse
+  // Descriptif commercial (TIO lng_product.description_fr). Stocké BRUT : il contient du
+  // HTML léger (<br />, <strong>, <li>) que les exports aplatissent à la lecture. Garder
+  // la source telle quelle laisse la porte ouverte à un autre rendu (fiche, site, PDF).
+  description String?  @db.Text
   salePrice   Float?   // prix de vente public (TIO prices[catalogue 209].min_retail_price)
   costPrice   Float?   // prix de gros / coût (TIO prices[catalogue 209].min_price)
   createdAt   DateTime @default(now())

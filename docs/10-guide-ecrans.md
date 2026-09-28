@@ -915,6 +915,35 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
   - Les lignes **sans référence** ou à **quantité ≤ 0** sont écartées à la lecture.
   - *Validé sur l'export réel : 6 763 lignes / 31 855 pièces / 12 commandes / 2 004 EANs,
     total du classeur éclaté = total du fichier.*
+- **Commandes clients + descriptif produit** (`/api/export/description-by-reference` — ne
+  rend QUE référence → descriptif ; logique pure dans `lib/export-tio-descriptions.ts`,
+  testée ; `components/export/descriptions-card.tsx`) : on dépose **n'importe quel export
+  TIO** (commandes EAN, commandes à la couleur…) et on le récupère **à l'identique** —
+  toutes ses colonnes, dans leur ordre — avec **une colonne de plus**,
+  `Description produit`.
+  - **Source** : `Product.description`, alimentée par la synchro produits depuis TIO
+    (`lng_product.description_fr`). *Mesuré le 28/09/2026 : 3 235 des 3 262 produits
+    publiés ont un descriptif (99 %), 349 caractères en moyenne, 1 260 au maximum.*
+  - 🔴 **Le descriptif TIO contient du HTML** (`<br />`, `<strong>`, listes) : **2 650 des
+    3 235** en portent. Il est stocké **brut** (la base garde la source, un autre rendu
+    reste possible) et **aplati à l'export** par `flattenDescription`, testée.
+  - 🔴 **TIO écrit `<br />` SUIVI d'un vrai saut de ligne.** Traiter les deux séparément
+    donnait une **ligne vide après chaque ligne** du descriptif. On absorbe donc le saut
+    qui suit la balise — et deux `<br />` d'affilée gardent leur ligne vide voulue
+    (cas réel `THSPULL_906`).
+  - La colonne s'insère **juste après « Nom produit »** (à défaut, en fin de ligne) : le
+    descriptif se lit à côté du nom. Les colonnes sont repérées **par nom** partout, l'ordre
+    ne casse donc aucune relecture. Un test vérifie qu'en retirant la colonne ajoutée on
+    retrouve **exactement** le fichier d'origine, ligne par ligne.
+  - ⚠️ **La colonne « Référence produit » apparaît DEUX FOIS** dans l'export EAN : on retient
+    la **première** occurrence.
+  - ⚠️ Une référence **sans descriptif** laisse la cellule **vide** ; la ligne n'est jamais
+    retirée. L'écran liste ces références.
+  - **Le fichier ne quitte pas le navigateur** : seules les **références distinctes** partent
+    au serveur. Ce fichier-là porte le nom, l'e-mail et l'adresse des clients — le faire
+    voyager pour n'en tirer qu'une colonne de descriptifs n'aurait aucune raison d'être.
+  - Dans le classeur : filtre automatique, volet figé, colonne du descriptif large avec
+    **retour à la ligne** (1 260 caractères déborderaient sur toute la feuille).
 - **Recoupement modèle × couleurs** (`/api` : aucun — `src/lib/recoupement.ts`, testé ;
   `components/export/recoupement-card.tsx`) : produit un **tableau croisé** — une ligne par
   modèle, une colonne par couleur, un total par modèle (`Total Modèle`) et par couleur

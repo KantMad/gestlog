@@ -37,7 +37,9 @@ colonne.
 ### Référentiel produit
 - **`Product`** — produit = couple **(reference, color)** unique. Champs clés : `reference`,
   `color`/`colorCode` (= **code** couleur, ex. "213"), **`colorLabel`** (= **nom**, ex.
-  "Chocolat"), `label` (désignation), `salePrice` (prix vente public), `costPrice` (coût),
+  "Chocolat"), `label` (désignation), `description` (descriptif commercial TIO
+  `description_fr`, **stocké brut avec son HTML léger** — les exports l'aplatissent),
+  `salePrice` (prix vente public), `costPrice` (coût),
   `sizeScale` ("XS,S,M,L,XL"), `category`/`subCategory`, `externalId` (id TIO `produit_couleur`).
 - **`ProductSizeEan`** — code-barres **EAN-13** par (reference, color, size). Clé d'unicité
   `reference_color_size`. C'est la table de résolution EAN (essentielle pour la caisse).
