@@ -215,6 +215,10 @@ export interface CatalogSyncSummary {
   sansNom: number;
   sansPrix: number;
   exemplesSansPrix: string[];
+  /** Nombre TOTAL d'écarts de prix / de rejets remontés par la caisse. */
+  ecartsPrixTotal: number;
+  rejetsTotal: number;
+  /** Échantillons (50 au plus) : les listes complètes seraient illisibles dans un log. */
   ecartsPrix: unknown[];
   rejets: unknown[];
   erreurs: string[];
@@ -251,7 +255,8 @@ export async function syncCatalogToCaisse(options: {
   const s: CatalogSyncSummary = {
     dryRun, lots: 0, lignesLues: 0, articlesEnvoyes: 0, produitsCrees: 0, produitsMisAJour: 0,
     variantesCreees: 0, variantesMisesAJour: 0, prixMisAJour: 0, ignorees: 0, eanInvalide: 0,
-    sansNom: 0, sansPrix: 0, exemplesSansPrix: [], ecartsPrix: [], rejets: [], erreurs: [],
+    sansNom: 0, sansPrix: 0, exemplesSansPrix: [], ecartsPrixTotal: 0, rejetsTotal: 0,
+    ecartsPrix: [], rejets: [], erreurs: [],
     nextOffset: null,
   };
 
@@ -306,6 +311,10 @@ export async function syncCatalogToCaisse(options: {
       s.variantesMisesAJour += r.variantesMisesAJour;
       s.prixMisAJour += r.prixMisAJour;
       s.ignorees += r.ignorees;
+      // ⚠️ On compte TOUT mais on n'échantillonne que 50 : un « 50 » affiché sans son
+      // total ferait passer un plafond pour une mesure.
+      s.ecartsPrixTotal += r.ecartsPrix.length;
+      s.rejetsTotal += r.rejets.length;
       for (const x of r.ecartsPrix) if (s.ecartsPrix.length < 50) s.ecartsPrix.push(x);
       for (const x of r.rejets) if (s.rejets.length < 50) s.rejets.push(x);
     }

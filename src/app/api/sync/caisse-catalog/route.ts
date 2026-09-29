@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
       ...(body?.budgetMs != null ? { budgetMs: Number(body.budgetMs) } : {}),
     });
     // Journalisé côté serveur : c'est la trace qu'on relit après le cron de nuit.
-    console.log("[caisse-catalog]", JSON.stringify({ ...summary, ecartsPrix: summary.ecartsPrix.length, rejets: summary.rejets.length }));
+    console.log("[caisse-catalog]", JSON.stringify({ ...summary, ecartsPrix: undefined, rejets: undefined }));
     return NextResponse.json({ data: summary }, { status: summary.erreurs.length ? 502 : 200 });
   } catch (e) {
     return handleApiError(e, "api/sync/caisse-catalog");

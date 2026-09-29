@@ -63,7 +63,7 @@ while : ; do
     console.log([err ? "ERR" : "OK", err || "-", s.articlesEnvoyes || 0,
                  s.nextOffset == null ? "" : s.nextOffset,
                  s.produitsCrees || 0, s.variantesCreees || 0, s.sansPrix || 0,
-                 (s.rejets || []).length, (s.ecartsPrix || []).length].join("|"));
+                 s.rejetsTotal || 0, s.ecartsPrixTotal || 0].join("|"));
   ')
   IFS="|" read -r ETAT MSG ENVOYES NEXT CREES VARIANTES SANSPRIX REJETS ECARTS <<< "$LECTURE"
 
