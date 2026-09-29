@@ -86,3 +86,68 @@ unique** : GestLog est client, la caisse est serveur. **On ne touche jamais à l
 - ⚠️ Les tests de connectivité écrivent dans la table caisse `gestlog_deliveries` et un
   EAN **réel** peut réellement ajouter du stock en caisse. Tester avec un **EAN bidon** pour
   zéro impact.
+
+## Catalogue (fiches produits) — `POST /api/integrations/gestlog/catalog`
+
+Deuxième flux sortant, **indépendant des livraisons** : il aligne les **fiches produits** de
+la caisse (libellé, référence, couleur, code coloris, taille, EAN, prix conseillé) sur le
+référentiel GestLog. Comme pour les livraisons, **on ne touche à rien côté caisse**.
+
+- **Code GestLog** : `src/lib/caisse/catalog-sync.ts` (`buildCatalogItems` pur et testé,
+  `sendCatalogBatch`, `syncCatalogToCaisse`), route `POST /api/sync/caisse-catalog`
+  (auth `x-api-key = SYNC_API_KEY`), script `ops/caisse-catalog.sh`.
+- **Même secret partagé** que les livraisons (`GESTLOG_CAISSE_SECRET` côté GestLog,
+  `GESTLOG_WEBHOOK_SECRET` côté caisse), même en-tête `X-Gestlog-Secret`.
+- **Source** : `ProductSizeEan` **jointe** à `Product` — une ligne par code-barres, donc par
+  (référence, coloris, **taille**). *55 971 EAN-13 valides au 29/09/2026, 3 267 références.*
+
+### Ce qui n'est PAS envoyé
+
+- 🔴 **Aucune quantité, aucun stock.** La caisse ignore le stock sur cet endpoint ; seul le
+  **webhook livraisons** fait entrer des pièces. Un test interdit toute clé `quantity`/`stock`.
+- 🔴 **`updatePrices` reste à `false`.** Le prix envoyé est **conseillé** : la boutique fixe
+  ses prix, la caisse ne les écrase jamais et renvoie les différences dans `ecartsPrix`.
+  **Ne pas passer à `true` sans accord explicite du métier.**
+
+### Règles de construction
+
+- 🔴 **`color` = le NOM de la couleur, `colorCode` = le CODE.** Historiquement GestLog
+  envoyait le code dans les deux et la caisse affichait « 213 » comme nom de couleur.
+  Repli sur le code quand le nom manque (mieux qu'une couleur vide), et c'est testé.
+- 🔴 **Un prix absent est OMIS, jamais envoyé à 0** : un article à 0 € serait vendu
+  gratuitement. La caisse refusera alors de **créer** le produit — comportement voulu — et
+  GestLog compte ces lignes (`sansPrix`) pour qu'on corrige le prix dans TIO.
+  *⚠️ 7 986 des 55 971 lignes (14 %) n'ont pas de prix de vente au 29/09/2026.*
+- **EAN-13 obligatoire** (13 chiffres) : les autres sont comptés (`eanInvalide`) et écartés
+  — *12 lignes seulement*. Un produit **sans désignation** est écarté aussi (`sansNom`,
+  *9 lignes*) : il n'a aucune identité à envoyer.
+- **`collection`** est déduite de la **lettre de la référence** (table vérifiée de
+  `a-vendre-season.ts`, K→S) et **omise** quand la lettre n'est pas fiable : les préfixes
+  `CC`, `TH`, `CM`… désignent des LIGNES de produits, pas des saisons.
+
+### Pagination et reprise
+
+🔴 **Le catalogue complet fait ~56 000 codes-barres** : un seul appel pèserait des dizaines
+de Mo et serait coupé par le proxy. `syncCatalogToCaisse` envoie donc par **lots de 500**,
+rend la main au bout de **40 s** en renvoyant `nextOffset`, et `caisse-catalog.sh` rappelle
+jusqu'à ce qu'il vaille `null` (garde-fou à 200 passes). La pagination est ordonnée
+`(reference, color, size)` — sans `ORDER BY` complet, deux pages pourraient se recouvrir.
+**L'import étant rejouable à l'identique, une reprise ne crée aucun doublon.**
+
+Sur une erreur de lot, on **s'arrête** en renvoyant l'offset courant : continuer sur une
+caisse en panne ne ferait qu'empiler les échecs.
+
+### Exécution
+
+```bash
+# simulation (la caisse n'écrit rien)
+/var/www/gestlog/caisse-catalog.sh --dry-run
+# envoi réel
+/var/www/gestlog/caisse-catalog.sh
+```
+
+- **Cron nocturne** : `30 2 * * * /var/www/gestlog/caisse-catalog.sh >> /var/backups/gestlog/caisse-catalog.log 2>&1`
+- 🔴 **La route est en `dryRun` par DÉFAUT** : un appel déclenché par erreur n'écrit rien
+  chez le commerçant. Le cron passe explicitement `dryRun:false`.
+- ⚠️ **`CAISSE_STORE_ID` n'est pas renseigné** dans le `.env` du VPS : le `storeId` est donc
+  omis, comme pour les livraisons. À ajouter si la caisse en a besoin pour ce flux.

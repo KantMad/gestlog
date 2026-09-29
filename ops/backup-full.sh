@@ -124,7 +124,7 @@ mkdir -p "$STAGE/c/gestlog/scripts" "$STAGE/c/systeme"
 # eux qu'on retrouvera à l'extraction, où qu'elle ait lieu.
 chmod -R go-rwx "$STAGE/c"
 cp "$APP_DIR/.env" "$STAGE/c/gestlog/.env"
-for f in deploy.sh backup-db.sh caisse-retry.sh backup-full.sh restore-gestlog.sh backup-offsite.sh; do
+for f in deploy.sh backup-db.sh caisse-retry.sh caisse-catalog.sh backup-full.sh restore-gestlog.sh backup-offsite.sh; do
   [ -f "$APP_DIR/$f" ] && cp "$APP_DIR/$f" "$STAGE/c/gestlog/scripts/$f"
 done
 # La configuration rclone porte la clé du hors-site : elle doit voyager avec.
@@ -163,7 +163,7 @@ chmod 600 "$SNAP/MANIFESTE.txt"
 # ─── 4. Dérive des scripts ───────────────────────────────────────────────────
 # Les scripts d'exploitation ont une copie de référence dans le dépôt (ops/).
 # Si celle du serveur s'en écarte, c'est la sauvegarde qui fait foi — on le dit.
-for f in deploy.sh backup-db.sh caisse-retry.sh backup-full.sh restore-gestlog.sh backup-offsite.sh; do
+for f in deploy.sh backup-db.sh caisse-retry.sh caisse-catalog.sh backup-full.sh restore-gestlog.sh backup-offsite.sh; do
   if [ -f "$APP_DIR/$f" ] && [ -f "$APP_DIR/ops/$f" ] && ! cmp -s "$APP_DIR/$f" "$APP_DIR/ops/$f"; then
     log "  ⚠ $f diffère de ops/$f (la version du serveur est bien sauvegardée)"
   fi
