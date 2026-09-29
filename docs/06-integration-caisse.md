@@ -137,6 +137,32 @@ jusqu'à ce qu'il vaille `null` (garde-fou à 200 passes). La pagination est ord
 Sur une erreur de lot, on **s'arrête** en renvoyant l'offset courant : continuer sur une
 caisse en panne ne ferait qu'empiler les échecs.
 
+### Ce qu'a donné la simulation (29/09/2026)
+
+`caisse-catalog.sh --dry-run` sur le catalogue complet, en **25 secondes** :
+
+| Mesure | Valeur |
+| --- | --- |
+| Articles envoyés | **55 962** (sur 55 971 EAN-13 ; 9 écartés faute de désignation) |
+| Produits à créer | 831 |
+| Produits mis à jour | 2 167 |
+| Déclinaisons à créer | 15 048 |
+| Déclinaisons mises à jour | 33 654 |
+| Rejets | **289**, tous « nom ou prix manquant pour créer » |
+| Écarts de prix | **18** |
+| Lignes sans prix | 7 977 (= ces 289 produits) |
+
+- Les **289 rejets** sont exactement les produits **sans prix de vente** dans TIO : la caisse
+  ne peut pas les créer. Rien à corriger dans le code — c'est le prix qui manque en amont.
+- Les **18 écarts de prix** sont à arbitrer par le métier. Plusieurs sont des **prix à 0 en
+  caisse** (`DDOU_C001` 0 € contre 148,50 €, `KMPTCH_C003` 0 € contre 129 €), d'autres de
+  vraies décisions commerciales (`CCAH24_SW06` 99 € en caisse contre 45,90 € conseillé).
+- ⚠️ **Les compteurs sont des SOMMES PAR LOT** : un produit à cheval sur deux lots est
+  compté « créé » des deux côtés. *Mesuré : 851 créations en lots de 500 contre 831 en lots
+  de 2 000, pour le même catalogue.* Les ordres de grandeur sont justes, pas le chiffre
+  exact. Les lots suivent l'ordre `(reference, color, size)`, donc l'écart est borné par le
+  nombre de lots.
+
 ### Exécution
 
 ```bash
