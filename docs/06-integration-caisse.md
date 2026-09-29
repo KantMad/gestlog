@@ -172,8 +172,23 @@ caisse en panne ne ferait qu'empiler les échecs.
 /var/www/gestlog/caisse-catalog.sh
 ```
 
-- **Cron nocturne** : `30 2 * * * /var/www/gestlog/caisse-catalog.sh >> /var/backups/gestlog/caisse-catalog.log 2>&1`
+- **Cron nocturne installé le 29/09/2026** :
+  `30 2 * * * /var/www/gestlog/caisse-catalog.sh >> /var/backups/gestlog/caisse-catalog.log 2>&1`
 - 🔴 **La route est en `dryRun` par DÉFAUT** : un appel déclenché par erreur n'écrit rien
   chez le commerçant. Le cron passe explicitement `dryRun:false`.
-- ⚠️ **`CAISSE_STORE_ID` n'est pas renseigné** dans le `.env` du VPS : le `storeId` est donc
-  omis, comme pour les livraisons. À ajouter si la caisse en a besoin pour ce flux.
+- **`CAISSE_STORE_ID`** renseigné dans le `.env` du VPS le 29/09/2026 (UUID du magasin).
+  ⚠️ **Il sert AUSSI aux livraisons** (`delivery-sync.ts` le lit déjà) : depuis cette date,
+  le flux livraisons envoie lui aussi un `storeId`, ce qu'il ne faisait pas avant.
+- ⚠️ Le script **n'est pas déployé par `deploy.sh`** : après modification de
+  `ops/caisse-catalog.sh`, le recopier —
+  `cp /var/www/gestlog/ops/caisse-catalog.sh /var/www/gestlog/caisse-catalog.sh`.
+
+### Premier envoi réel (29/09/2026)
+
+55 962 articles en **2 passes, 50 secondes**. La caisse a **créé 827 produits et 15 048
+déclinaisons**. Contrôle immédiat par une nouvelle simulation : **0 produit et 0
+déclinaison à créer**, 48 702 déclinaisons reconnues — le catalogue est bien en place et
+l'appel suivant ne fait plus que mettre à jour.
+
+Restent, inchangés et attendus : **289 rejets** (produits sans prix de vente dans TIO) et
+**18 écarts de prix** à arbitrer par le métier.
