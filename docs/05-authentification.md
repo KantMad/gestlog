@@ -114,8 +114,9 @@ Ordre de priorité, dans `pickSeasonId` (extrait du composant, donc **testé**) 
 ## Middleware (Edge) — `src/middleware.ts`
 
 Défense en profondeur, exécutée avant les pages/API :
-- **`PUBLIC_PATHS`** = `["/login", "/api/auth/", "/api/sync/"]` (passent sans session ;
-  `/api/sync/*` s'authentifie par `x-api-key`).
+- **`PUBLIC_PATHS`** = `["/login", "/api/auth/", "/api/sync/", "/api/assistant/"]` (passent sans
+  session ; `/api/sync/*` s'authentifie par `x-api-key` = `SYNC_API_KEY`, `/api/assistant/*` par
+  `x-api-key` = `ASSISTANT_READ_KEY` — cf. [`11-assistant-ia.md`](11-assistant-ia.md)).
 - Jeton vérifié (signé + non expiré) sinon → redirection `/login` (page) ou **401** (API).
 - **Chemins ADMIN** (`/users`, `/api/users`) → **403/redirection** si non-admin.
 - **Autorisation par écran** : `screensForPath(pathname)` mappe pages **et** API spécifiques

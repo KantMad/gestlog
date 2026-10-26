@@ -72,6 +72,7 @@ Dans **`/var/www/gestlog/.env`** (chargées au runtime ; **absentes** de `/proc/
 | `DATABASE_URL` | Connexion Postgres (Supabase) — voir [`03`](03-base-de-donnees.md) |
 | `SESSION_SECRET` | Clé HMAC de signature des jetons de session |
 | `SYNC_API_KEY` | Clé `x-api-key` attendue par les endpoints `/api/sync/*` (utilisée par n8n) |
+| `ASSISTANT_READ_KEY` | Clé `x-api-key` de **lecture seule** attendue par `/api/assistant/*` (assistant IA du Mac mini). Absente = route fermée. Cf. [`11-assistant-ia.md`](11-assistant-ia.md) |
 | `GESTLOG_CAISSE_SECRET` | Secret partagé envoyé à la caisse (`X-Gestlog-Secret`) |
 | `CAISSE_TRIGGER_STATUS` | Statut de livraison qui déclenche l'envoi caisse (défaut `EXPEDIEE`) |
 | `CAISSE_STORE_ID` | (optionnel) id magasin envoyé à la caisse |

@@ -30,6 +30,7 @@ fichier spécifique concerné. Ce `README.md` est l'index et le mode d'emploi.
 | [`08-fonctionnalites.md`](08-fonctionnalites.md) | Notes fonctionnelles par feature (décisions, formats, gotchas) | tu cherches « où se passe quoi » |
 | [`09-operations-et-gotchas.md`](09-operations-et-gotchas.md) | Crons, tâches courantes, dépannage, **pièges durement appris** | un truc casse / tu fais une opération sensible |
 | [`10-guide-ecrans.md`](10-guide-ecrans.md) | **Guide complet écran par écran** : rôle, source de données, fonctionnalités, impacts, pièges (base du centre d'aide `/aide`) | tu veux comprendre un écran de bout en bout |
+| [`11-assistant-ia.md`](11-assistant-ia.md) | Route de lecture `/api/assistant/recap` pour l'assistant IA (récap quotidien CentralWay) | tu touches à ce que l'assistant lit dans GestLog |
 
 **Ordre de lecture conseillé pour une nouvelle conversation :** ce README →
 `01-architecture` → `02-deploiement` → puis le(s) fichier(s) du domaine concerné.

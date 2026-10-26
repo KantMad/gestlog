@@ -3,7 +3,8 @@ import type { NextRequest } from "next/server";
 import { verifySession } from "@/lib/session";
 import { screensForPath, canAccessScreen, APP_SCREENS } from "@/lib/screens";
 
-const PUBLIC_PATHS = ["/login", "/api/auth/", "/api/sync/"];
+// `/api/assistant/` s'authentifie par sa propre clé de lecture (ASSISTANT_READ_KEY).
+const PUBLIC_PATHS = ["/login", "/api/auth/", "/api/sync/", "/api/assistant/"];
 
 // Chemins réservés aux ADMIN (pages + API). Vérifié dès l'Edge via le rôle
 // porté par le jeton signé (défense en profondeur ; les handlers re-vérifient).
