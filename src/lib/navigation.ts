@@ -2,7 +2,7 @@ import {
   LayoutDashboard, Upload, GitCompareArrows, Calculator, Truck, Settings, BarChart3,
   Users, Tag, ClipboardList, Warehouse, Receipt, RefreshCw, ShoppingBag, Store,
   ArrowLeftRight, Building2, UserCog, Download, LifeBuoy, ScanSearch, PackageCheck,
-  FlaskConical, FileSpreadsheet, Rocket, Tags, Handshake, Boxes, ClipboardCheck,
+  FlaskConical, FileSpreadsheet, Rocket, Tags, Handshake, Boxes, ClipboardCheck, Barcode,
   Send, SlidersHorizontal, type LucideIcon,
 } from "lucide-react";
 import { canAccessScreen } from "./screens";
@@ -55,6 +55,7 @@ export const NAV_TREE: NavEntry[] = [
       { href: "/comparison", label: "Comparaison", icon: GitCompareArrows },
       { href: "/samples", label: "Échantillons", icon: FlaskConical },
       { href: "/product-info", label: "Infos produits", icon: Tag },
+      { href: "/recherche-ean", label: "Recherche EAN", icon: Barcode },
     ],
   },
   {

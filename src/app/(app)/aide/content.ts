@@ -1015,6 +1015,32 @@ export const HELP_THEMES: HelpTheme[] = [
         ],
       },
       {
+        id: "recherche-ean",
+        icon: "\ud83d\udd0d",
+        title: "Recherche EAN",
+        keywords: "ean code barre barres scanner douchette recherche produit reference taille marchandise",
+        screen: "/recherche-ean",
+        sections: [
+          {
+            lines: [
+              "**Marchandise \u2192 Recherche EAN** : un seul champ, dans les deux sens.",
+              "**Tu scannes un code-barres** \u2192 tu obtiens le produit, son coloris, sa taille \u2014 et les **autres tailles** du m\u00eame coloris avec leurs EAN.",
+              "**Tu tapes une r\u00e9f\u00e9rence** (`SMACCE_C001`), un mot de la d\u00e9signation (\u00ab casquette gabardine \u00bb) ou un **code couleur** \u2192 tu obtiens tous les EAN, taille par taille.",
+            ],
+            tip: "Le champ est actif d\u00e8s l'ouverture : une douchette tape le code et valide toute seule. \u00c9chap efface. \ud83d\udd0e",
+          },
+          {
+            h: "Ce que l'\u00e9cran te dit en plus",
+            lines: [
+              "La ligne **scann\u00e9e** est surlign\u00e9e en vert, et le bouton \u00e0 droite copie l'EAN.",
+              "\u26a0\ufe0f **Cl\u00e9 de contr\u00f4le invalide** : le code a bien 13 chiffres mais le dernier ne colle pas aux douze autres \u2014 il a \u00e9t\u00e9 mal recopi\u00e9. La recherche est quand m\u00eame lanc\u00e9e.",
+              "\u26a0\ufe0f **Aucun code-barres** pour un coloris : l'EAN n'a jamais \u00e9t\u00e9 import\u00e9. Il se charge dans **Infos produits \u2192 EAN**.",
+              "Une recherche trop large (un code couleur seul, par exemple) est **plafonn\u00e9e** et l'\u00e9cran te le dit : ajoute la r\u00e9f\u00e9rence.",
+            ],
+          },
+        ],
+      },
+      {
         id: "export-ean-fournisseurs",
         icon: "\ud83c\udfed",
         title: "Commandes par fournisseur (EAN)",

@@ -848,6 +848,37 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
   détail liste des **clients** : les totaux diffèrent légitimement.
 - **Note** : hors périmètre du **menu Exports** (`/export`) qui regroupe les exports **B2B**.
 
+## Recherche EAN (`/recherche-ean`)
+- **Rôle** : retrouver un produit à partir d'un code-barres, **et l'inverse** — les EAN
+  d'une référence, taille par taille. Pensé pour le comptoir et l'entrepôt (champ focalisé
+  au chargement, une douchette tape le code puis valide).
+- **Source** : `ProductSizeEan` jointe à `Product` (+ `StockEntry` pour le stock indicatif).
+  Logique pure et testée dans `lib/ean-search.ts` ; API `GET /api/recherche-ean?q=`.
+- **Trois saisies, une seule réponse** (`classifyQuery`) : EAN-13 complet, **fragment** de
+  code-barres (≥ 4 chiffres), ou **texte** (référence, désignation, nom ou code couleur).
+  Quel que soit le point d'entrée, la réponse a la même forme : des groupes
+  (référence × coloris) avec **toutes** leurs tailles. Scanner un code montre donc aussi
+  les tailles voisines — c'est ce qu'on veut en entrepôt.
+- 🔴 **TROIS CHIFFRES NE SONT PAS UN DÉBUT D'EAN.** Les codes couleur MCS font exactement
+  trois chiffres (`752`, `213`, `999`) : les traiter comme un fragment de code-barres
+  renverrait des milliers de lignes. En dessous de quatre chiffres, on cherche du texte,
+  et le code couleur est comparé **à l'identique** (un `LIKE %752%` ressortirait sur tout
+  EAN contenant ces chiffres).
+- 🔴 **La clé de contrôle EAN-13 est vérifiée** : un code à 13 chiffres dont le dernier ne
+  correspond pas aux douze autres est signalé comme **mal recopié**, au lieu de n'afficher
+  qu'un « aucun résultat » incompréhensible. La recherche est quand même lancée.
+- **Un coloris SANS aucun EAN reste affiché**, avec un bandeau : c'est précisément le trou
+  qu'on cherche quand un scan ne donne rien. *1 262 coloris sont dans ce cas au
+  03/11/2026.*
+- **Tailles ordonnées par `Product.sizeScale`** (`sortSizesByScale`, testé) : sans cela TIO
+  les rend dans un ordre arbitraire (« M, L, XL, S »). Une taille absente de la grille
+  passe à la fin plutôt que de disparaître.
+- ⚠️ **Plafond de 500 coloris** sur la recherche texte, 60 affichés. *Le code couleur
+  « 752 » à lui seul dépasse 500 coloris* : l'écran annonce « plus de 500 » plutôt que de
+  faire passer le plafond pour un compte exact.
+- ⚠️ À ne pas confondre avec l'onglet **EAN** d'`Infos produits`, qui sert à **importer et
+  maintenir** la table ; celui-ci ne fait que **chercher**.
+
 ## Exports (`/export`)
 - **Rôle** : hub des exports **hors BtoC**. Direct : **Réceptions CSV EAN/quantité**
   (`[saison 3c][n° commande 11c][EAN 13c][quantité]`, agrégé par commande/EAN, quantités 0
