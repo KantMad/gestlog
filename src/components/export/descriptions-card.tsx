@@ -126,7 +126,11 @@ export function DescriptionsCard() {
         { Critère: "Références sans pays d'origine", Valeur: apercu.referencesWithoutCountry.length },
         { Critère: "Pièces", Valeur: apercu.pieces },
         { Critère: "Montant total", Valeur: apercu.total },
-        { Critère: "Calcul du montant", Valeur: "Prix à la variation × Quantité (brut, hors réduction)" },
+        {
+          Critère: "Calcul du montant",
+          Valeur:
+            "Prix à la variation × Quantité — la « Réduction à la variation » n'est pas déduite : le prix la contient déjà",
+        },
         { Critère: "Lignes sans prix", Valeur: apercu.linesWithoutPrice },
         { Critère: "Lignes avec réduction", Valeur: apercu.linesWithDiscount },
         {
@@ -276,8 +280,10 @@ export function DescriptionsCard() {
                 <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
                 <span>
                   <strong>{formatNumber(apercu.linesWithDiscount)} ligne(s) avec une réduction</strong>{" "}
-                  à la variation. Le montant est le <strong>brut</strong> (prix × quantité) : il ne
-                  la déduit pas.
+                  à la variation. Elle n&apos;est <strong>pas déduite</strong> du montant — et
+                  c&apos;est juste : le prix du fichier la contient <strong>déjà</strong>
+                  {" "}(vérifié : 79,80 € facturés pour un tarif catalogue de 133 € et 40 % de
+                  remise). La déduire ici amputerait le montant une seconde fois.
                 </span>
               </div>
             )}

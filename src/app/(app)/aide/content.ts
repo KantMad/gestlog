@@ -1090,7 +1090,7 @@ export const HELP_THEMES: HelpTheme[] = [
           {
             h: "Ce que le montant ne dit pas",
             lines: [
-              "\ud83d\udd34 Le montant est **brut** : la colonne *R\u00e9duction \u00e0 la variation* n'est **pas** d\u00e9duite. Si ton fichier en porte une, l'\u00e9cran te le dit et compte les lignes concern\u00e9es.",
+              "\ud83d\udd34 La colonne *R\u00e9duction \u00e0 la variation* n'est **pas** d\u00e9duite \u2014 et c'est juste : le prix du fichier la contient **d\u00e9j\u00e0** (79,80 \u20ac factur\u00e9s pour un tarif catalogue de 133 \u20ac et 40 % de remise). L'\u00e9cran compte quand m\u00eame ces lignes pour te le rappeler.",
               "\u26a0\ufe0f Une ligne **avec quantit\u00e9 mais sans prix** compte pour **0** : le total est alors sous-estim\u00e9, et l\u00e0 aussi l'\u00e9cran te le signale.",
               "\u26a0\ufe0f Si le fichier ne porte pas \u00e0 la fois le prix et la quantit\u00e9, la colonne **n'est pas cr\u00e9\u00e9e** \u2014 une colonne de z\u00e9ros ressemblerait \u00e0 un chiffre d'affaires nul.",
             ],
@@ -1101,6 +1101,49 @@ export const HELP_THEMES: HelpTheme[] = [
               "Du **r\u00e9f\u00e9rentiel produits**, aliment\u00e9 chaque nuit depuis TIO (\u00e0 5 h 05). C'est le descriptif que tu saisis dans TIO sur la fiche produit.",
               "Il arrive avec sa **mise en forme** (retours \u00e0 la ligne, listes) : GestLog la convertit en texte lisible dans une cellule Excel.",
               "\u26a0\ufe0f Une r\u00e9f\u00e9rence **sans descriptif** laisse la cellule **vide** \u2014 sa ligne n'est jamais retir\u00e9e. L'\u00e9cran te dit lesquelles. Renseigne-les dans TIO, elles arriveront \u00e0 la synchro suivante.",
+            ],
+          },
+        ],
+      },
+      {
+        id: "export-commandes-ean",
+        icon: "\ud83d\udcca",
+        title: "Commandes clients + infos produits et EAN",
+        keywords:
+            "ean code barres commande client code client enseigne prix wholesale prix de vente conseill\u00e9 cat\u00e9gorie taille export excel",
+        screen: "/export",
+        sections: [
+          {
+            lines: [
+              "**Tout en bas de la page Exports.** D\u00e9pose l'export TIO **\u00ab commandes EAN \u00bb** (une ligne par taille) : tu re\u00e7ois un fichier Excel de **14 colonnes**, pr\u00eat \u00e0 filtrer.",
+              "Dans l'ordre : **EAN**, r\u00e9f\u00e9rence, nom produit, libell\u00e9 couleur, code couleur, taille, quantit\u00e9 command\u00e9e, cat\u00e9gorie, sous-cat\u00e9gorie, **prix wholesale**, **prix de vente conseill\u00e9**, num\u00e9ro de commande, **code client**, enseigne.",
+              "L'**EAN** et la **quantit\u00e9** sortent tels quels du fichier ; le **prix conseill\u00e9** et le **code client**, que TIO ne met pas dans cet export, viennent du r\u00e9f\u00e9rentiel GestLog.",
+            ],
+            tip: "Le fichier reste dans ton navigateur. Seules les **r\u00e9f\u00e9rences** et les **num\u00e9ros de commande** partent au serveur \u2014 les noms, e-mails et adresses de tes clients ne bougent pas, et ne sont **pas** dans le fichier de sortie. \ud83d\udd12",
+          },
+          {
+            h: "Quel prix wholesale ?",
+            lines: [
+              "Deux boutons, parce que la question a deux r\u00e9ponses. **Prix factur\u00e9 sur la commande** (par d\u00e9faut) : le prix de la ligne, tel que la boutique le paie. **Tarif de gros du catalogue** : le prix avant remise.",
+              "\ud83d\udd34 Le prix du fichier **contient d\u00e9j\u00e0 la remise**. V\u00e9rifi\u00e9 : 79,80 \u20ac factur\u00e9s pour un tarif catalogue de 133 \u20ac et 40 % de remise. Ne la retire pas une deuxi\u00e8me fois \u00e0 la main.",
+              "Le fichier Excel \u00e9crit dans son onglet **Crit\u00e8res** lequel des deux a servi.",
+            ],
+          },
+          {
+            h: "Ce qui peut rester vide",
+            lines: [
+              "\u26a0\ufe0f **Prix de vente conseill\u00e9** : il n'existe pas sur tous les catalogues. Sur les exports de septembre 2026, **68 r\u00e9f\u00e9rences sur 112** n'en avaient pas (toutes les `CCPE27_`). L'\u00e9cran te liste lesquelles.",
+              "\u26a0\ufe0f **Code client** : vide si la commande n'est pas encore import\u00e9e dans GestLog. L'**enseigne** reste renseign\u00e9e, elle vient du fichier.",
+              "\u26a0\ufe0f **EAN** : si le fichier n'en a pas, GestLog va le chercher au r\u00e9f\u00e9rentiel. Introuvable, la cellule reste **vide** \u2014 un code-barres invent\u00e9 serait scann\u00e9 en caisse sur le mauvais article.",
+              "Une cellule vide ne fait **jamais** dispara\u00eetre la ligne.",
+            ],
+          },
+          {
+            h: "Le bon fichier",
+            lines: [
+              "C'est l'export **\u00ab commandes EAN \u00bb** qu'il faut : une ligne par taille, avec son code-barres.",
+              "L'export **\u00ab \u00e0 la couleur \u00bb** est refus\u00e9, et l'\u00e9cran te dit pourquoi : il met les tailles en colonnes `T0\u2026T11` et ne porte aucun EAN.",
+              "Les lignes **sans r\u00e9f\u00e9rence** ou \u00e0 **quantit\u00e9 z\u00e9ro** sont \u00e9cart\u00e9es \u2014 et compt\u00e9es, l'\u00e9cran te dit combien.",
             ],
           },
         ],

@@ -995,9 +995,11 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
     `0.30000000000000004` en flottant. Chaque montant est arrondi au centime, et le total
     est la somme des montants arrondis — sinon le total du classeur et celui de l'écran
     finissent par différer d'un centime sans que personne ne sache lequel croire.
-  - 🔴 **Le montant est BRUT** : la colonne `Réduction à la variation` n'est **pas** déduite.
-    *Elle vaut 0 sur toutes les lignes de l'export du 28/09/2026*, mais l'écran compte et
-    **signale** les lignes qui en portent une — un montant faux et silencieux serait pire.
+  - 🔴 **La `Réduction à la variation` n'est PAS déduite — et c'est juste.** *Elle vaut 0 sur
+    l'export du 28/09/2026, mais 40 sur celui du 29/09 ; vérifié sur ses 16 références : le
+    prix du fichier vaut `Product.costPrice × 0,6`, donc **la remise y est déjà appliquée**.*
+    La déduire une seconde fois amputerait le montant de 40 %. L'écran compte et signale
+    quand même ces lignes, en disant que le prix la contient déjà.
   - ⚠️ Les lignes **avec quantité mais sans prix** sont comptées et signalées : leur montant
     vaut 0, donc le total est **sous-estimé**.
   - ⚠️ **Sans « Prix à la variation » ET « Quantité », la colonne n'est PAS créée** : une
@@ -1123,6 +1125,56 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
   - Contrôles sur données réelles : *inclusion + exclusion = total* (465 + 69 460 = 69 925
     sur AH26) ; Réassort = 14 064 lignes, 1 740 couples réf×coloris, 175 boutiques,
     76 108 pièces, somme par coloris égale au total général.
+- **Commandes clients + infos produits et EAN** — *tout en bas de la page*
+  (`/api/export/commandes-ean-info` ; logique pure dans `lib/export-commandes-ean.ts`,
+  30 tests ; `components/export/commandes-ean-card.tsx`) : on dépose l'export TIO
+  **« commandes EAN »** et on obtient **un onglet de 14 colonnes**, dans l'ordre demandé —
+  `EAN`, `Référence produit`, `Nom produit`, `Libellé couleur`, `Code couleur`, `Taille`,
+  `Quantité commandée`, `Catégorie`, `Sous-catégorie`, `Prix wholesale`,
+  `Prix de vente conseillé`, `Numéro de commande client`, `Code client`, `Enseigne client`.
+  - 🔴 **Les 14 colonnes sont une LISTE BLANCHE, pas un filtrage.** Le fichier source en
+    porte 35, dont le nom, le prénom, le genre et l'e-mail du client **et** du responsable
+    commercial, plus les adresses de facturation. Rien d'autre que ces 14 colonnes ne peut
+    sortir, même si TIO ajoute des colonnes à son export. Un test échoue si une valeur
+    nominative réapparaît dans la sortie.
+  - 🔴 **« Prix à la variation » PORTE DÉJÀ LA REMISE — ne pas la redéduire.** *Mesuré sur
+    les 16 références des exports des 28 et 29/09/2026 : le prix du fichier vaut exactement
+    `Product.costPrice × 0,6`, et `Réduction à la variation` vaut 40 sur toutes les lignes
+    (79,80 € facturés pour un tarif catalogue de 133 €).* Le prix du fichier est donc le
+    **prix facturé**, remise comprise.
+  - Le **choix du prix wholesale est explicite** (bouton à deux positions, défaut *prix
+    facturé sur la commande*) : *tarif de gros du catalogue* (`Product.costPrice`, avant
+    remise) est l'autre réponse légitime à « le prix wholesale ». L'onglet `Critères` écrit
+    lequel a servi — un chiffre à 40 % près sans mention de l'origine serait indéfendable.
+  - **`Prix de vente conseillé`** = `Product.salePrice` (TIO `min_retail_price`,
+    catalogue 209), le seul des 14 champs que le fichier ne porte pas du tout. ⚠️ **Il
+    manque sur les catalogues hors 209** : *sur les trois exports de septembre 2026,
+    68 des 112 références n'en ont pas — toutes les `CCPE27_*`, qui ont pourtant un
+    `costPrice`.* Cellule vide, référence listée à l'écran.
+  - **`Code client`** = `Client.code` (ex. `BAZAR09201`), retrouvé par le **numéro de
+    commande** (`ClientOrder.orderNumber` **ou** `tioOrderNumber` : l'export écrit
+    `IS-455405299095`, que GestLog range dans l'un ou l'autre selon la source TIO/Texas).
+    *13 des 14 commandes des exports de septembre 2026 sont ainsi rattachées ;* la
+    quatorzième n'est pas importée → code vide, **enseigne conservée**.
+  - ⚠️ **Une commande rattachée à DEUX fiches boutique** (doublon de saison) retient le
+    premier code par ordre alphabétique **et l'écran affiche le conflit** : en inventer un
+    serait pire.
+  - 🔴 **L'EAN reste du TEXTE.** Converti en nombre, un code à 13 chiffres s'affiche
+    `3,66525E+12` dans Excel et perd ses zéros de tête. Quantité et prix, eux, sont des
+    **NOMBRES** (formats `#,##0` et `#,##0.00 €`) : Excel doit pouvoir sommer et filtrer.
+  - **EAN complété depuis le référentiel** (`ProductSizeEan` sur référence × code couleur ×
+    taille) quand le fichier n'en porte pas, et **seulement** pour ces lignes-là : sur un
+    export EAN complet, zéro clé part au serveur. Une taille introuvable laisse la cellule
+    **vide** — un code-barres inventé serait scanné en caisse sur le mauvais article.
+  - `Libellé couleur`, `Catégorie` et `Sous-catégorie` viennent du **fichier** d'abord, du
+    référentiel en repli : le fichier porte la vérité de la commande.
+  - **Le fichier ne quitte pas le navigateur.** Seules partent au serveur : les références
+    distinctes, les numéros de commande, et les triplets taille des lignes **sans** EAN.
+  - Lignes **sans référence** ou à **quantité ≤ 0** écartées **et comptées** (affichées au
+    dépôt). L'export **« à la couleur »** est refusé avec la raison : il met les tailles en
+    colonnes `T0…T11` et ne porte **aucun** EAN.
+  - *Validé sur les exports des 28 et 29/09/2026 : 112 références, 14 commandes,
+    400/400 EAN retrouvés au référentiel, 13/14 codes clients.*
 
 ## Utilisateurs (`/users`, ADMIN) & Mon compte (`/account`)
 - **Utilisateurs** : `User` (nom, code ≥4 chiffres, rôle, `isActive`, `screenAccess` JSON).

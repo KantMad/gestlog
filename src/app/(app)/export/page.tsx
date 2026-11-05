@@ -27,6 +27,7 @@ import { QuantitesCard } from "@/components/export/quantites-card";
 import { RecoupementCard } from "@/components/export/recoupement-card";
 import { EanSuppliersCard } from "@/components/export/ean-suppliers-card";
 import { DescriptionsCard } from "@/components/export/descriptions-card";
+import { CommandesEanCard } from "@/components/export/commandes-ean-card";
 
 interface ReceptionRow {
   id: string;
@@ -447,6 +448,15 @@ export default function ExportPage() {
               </Card>
             ))}
           </div>
+        </div>
+
+        {/* Demandé explicitement tout en bas de la page : c'est l'export le plus détaillé
+            (une ligne par code-barres), on le cherche là plutôt qu'en tête de liste. */}
+        <div>
+          <h2 className="mb-3 text-sm font-semibold text-muted-foreground">
+            Commandes clients — détail par code-barres
+          </h2>
+          <CommandesEanCard />
         </div>
       </div>
     </div>
