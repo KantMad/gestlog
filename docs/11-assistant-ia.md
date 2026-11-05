@@ -66,3 +66,19 @@ dire quels produits pousser sur le site : ceux qui se vendent ET dont il reste b
   "produits": [ { "reference": "…", "nom": "…", "categorie": "Pantalon",
                   "vendusSite": 7, "caSite": 419.3, "stock": 12 } ] }
 ```
+
+## `GET /api/assistant/produit?reference=RÉF&jours=30`
+
+Même clé. Fiche d'**une** référence (casse ignorée), pour répondre à « la répartition de taille
+du RMPULL_W001 en bleu marine » :
+
+- `fiche.couleurs[]` : par `Product` (couleur) de la référence, `libelle` (`colorLabel`), stock
+  par taille (somme des `StockEntry.quantitiesBySize`, dans l'ordre de `sizeScale`, tailles hors
+  grille à la fin) et total ; triées par stock décroissant.
+- `fiche.prixPublic`, `fiche.prixGros` (`salePrice`, `costPrice`), catégorie, sous-catégorie.
+- `fiche.ventesSite[]` : pièces vendues sur le site les `jours` derniers jours (1 à 92), par
+  couleur et taille telles que WooCommerce les nomme (`BtocOrderLine.color`, `.size`), mêmes
+  statuts exclus que les best sellers.
+- Référence inconnue : `{ "trouve": false, "candidats": [{ "reference", "nom" }] }` (10 au plus,
+  recherche dans la référence et la désignation).
+- Code : `src/app/api/assistant/produit/route.ts`, `src/lib/assistant-fiche.ts` (testé).
