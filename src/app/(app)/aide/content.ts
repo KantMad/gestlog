@@ -1134,8 +1134,17 @@ export const HELP_THEMES: HelpTheme[] = [
             lines: [
               "Deux fa\u00e7ons, et elles se **cumulent**. Soit tu **coches** dans la liste \u2014 si tu as d'abord s\u00e9lectionn\u00e9 une boutique, la liste ne montre que ses commandes. Soit tu **tapes** le num\u00e9ro dans le champ du dessous.",
               "**Le pr\u00e9fixe est facultatif** : `754287027085` retrouve `PO-754287027085`. Plusieurs num\u00e9ros se s\u00e9parent par une virgule ou un espace.",
-              "\u26a0\ufe0f Si un num\u00e9ro ne correspond \u00e0 rien, l'\u00e9cran te le dit **avant** le t\u00e9l\u00e9chargement \u2014 une faute de frappe ne te donnera pas un fichier vide sans explication. V\u00e9rifie alors la saison et la boutique.",
+              "\u26a0\ufe0f Si un num\u00e9ro ne correspond \u00e0 rien, l'\u00e9cran te le dit **avant** le t\u00e9l\u00e9chargement \u2014 et s'il existe dans une autre saison, il te dit **laquelle**. Une faute de frappe ne te donnera pas un fichier vide sans explication.",
               "Rien de coch\u00e9 ni de tap\u00e9 = toutes les commandes du p\u00e9rim\u00e8tre.",
+            ],
+          },
+          {
+            h: "Je ne vois qu'une commande pour ma boutique",
+            lines: [
+              "L'export porte sur **UNE saison** \u2014 celle choisie tout en haut de la page, rappel\u00e9e dans la carte. Les autres commandes de la boutique sont tr\u00e8s probablement dans une autre saison.",
+              "D\u00e8s que tu s\u00e9lectionnes une ou plusieurs boutiques, un **bandeau bleu** te dit combien de commandes elles ont ailleurs, et dans quelles saisons. Exemple r\u00e9el : *LE KORNER - Cap Sacr\u00e9 C\u0153ur* a 1 commande en PE27, 1 en PE26 et **3 en R\u00e9assort**.",
+              "\u26a0\ufe0f Si la saison porte des commandes **TEXAS** et **TIO**, seules les TEXAS sortent : ce sont les m\u00eames commandes, vues deux fois. Le bandeau le pr\u00e9cise \u00e0 part.",
+              "\u26a0\ufe0f Deux boutiques d'une m\u00eame enseigne sont **deux fiches distinctes** (*LE KORNER* existe en Cap Sacr\u00e9 C\u0153ur, Saint-Leu et Saint-Paul). Cocher l'une ne prend pas les autres.",
             ],
           },
           {

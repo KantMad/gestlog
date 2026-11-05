@@ -129,6 +129,36 @@ export async function GET(request: NextRequest) {
           LIMIT 3000`,
         ...paramsPerimetre
       );
+      // 🔴 « J'ai plusieurs commandes pour cette boutique et je n'en vois qu'une. »
+      // L'export est PAR SAISON : les autres commandes de la boutique sont dans d'autres
+      // saisons, ou écartées par la source (une saison qui porte TEXAS *et* TIO ne sort
+      // qu'en TEXAS, sinon tout compterait deux fois). Le dire est le seul moyen que
+      // l'écran ne mente pas par omission. Calculé uniquement quand des boutiques sont
+      // explicitement INCLUSES : sans sélection, « 2 287 commandes en Réassort » serait
+      // du bruit.
+      let autres: { saison: string; source: string; memeSaison: boolean; commandes: number }[] = [];
+      if (clientIds.length > 0 && clientMode === "include") {
+        autres = await prisma.$queryRawUnsafe<
+          { saison: string; source: string; memeSaison: boolean; commandes: number }[]
+        >(
+          `SELECT s."name" AS saison,
+                  co."source" AS source,
+                  (co."seasonId" = $1) AS "memeSaison",
+                  count(*)::int AS commandes
+             FROM "ClientOrder" co
+             JOIN "Season" s ON s.id = co."seasonId"
+            WHERE co."orderType" = 'COMMANDE'
+              AND co."clientId" = ANY($3::text[])
+              AND NOT (co."seasonId" = $1 AND co."source" = $2)
+              AND EXISTS (SELECT 1 FROM "ClientOrderLine" l WHERE l."clientOrderId" = co.id)
+            GROUP BY s."name", co."source", (co."seasonId" = $1)
+            ORDER BY count(*) DESC`,
+          seasonId,
+          source,
+          clientIds
+        );
+      }
+
       return NextResponse.json({
         data: {
           orders: rows.map((r) => ({
@@ -137,6 +167,7 @@ export async function GET(request: NextRequest) {
           })),
           source,
           seasonName: season.name,
+          autres,
         },
       });
     }
@@ -195,6 +226,26 @@ export async function GET(request: NextRequest) {
           ).map((r) => r.v)
         : [];
 
+    // Un numéro introuvable DANS le périmètre peut très bien exister ailleurs : autre
+    // saison, ou source écartée. « Introuvable » tout court enverrait chercher une faute
+    // de frappe qui n'existe pas.
+    const ailleurs =
+      inconnus.length > 0
+        ? await prisma.$queryRawUnsafe<{ numero: string; saison: string; source: string }[]>(
+            `SELECT DISTINCT o.v AS numero, s."name" AS saison, co."source" AS source
+               FROM unnest($1::text[]) AS o(v)
+               JOIN "ClientOrder" co
+                 ON upper(co."orderNumber") = upper(o.v)
+                 OR upper(COALESCE(co."tioOrderNumber", '')) = upper(o.v)
+                 OR upper(co."orderNumber") LIKE '%' || upper(o.v) || '%'
+                 OR upper(COALESCE(co."tioOrderNumber", '')) LIKE '%' || upper(o.v) || '%'
+               JOIN "Season" s ON s.id = co."seasonId"
+              WHERE co."orderType" = 'COMMANDE'
+              ORDER BY o.v, s."name"`,
+            inconnus
+          )
+        : [];
+
     // 🔴 `quantitiesBySize` est un JSON stocké en texte : `{"S":1,"M":2}`. Une ligne de
     // base vaut donc plusieurs lignes d'export, éclatées ici par `jsonb_each`.
     // `#>> '{}'` extrait la valeur en texte qu'elle soit un nombre JSON ou une chaîne.
@@ -236,6 +287,7 @@ export async function GET(request: NextRequest) {
           prixCommandeExploitable: prixCommandeExploitable(source),
           raisonPrix: prixCommandeExploitable(source) ? null : RAISON_PRIX_TEXAS,
           numerosInconnus: inconnus,
+          numerosAilleurs: ailleurs,
         },
       });
     }
@@ -285,10 +337,19 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(
         {
           error:
-            inconnus.length > 0
-              ? `Aucune commande ne correspond à : ${inconnus.join(", ")}`
-              : "Aucune ligne pour cette sélection",
-          data: { source, seasonName: season.name, numerosInconnus: inconnus },
+            inconnus.length === 0
+              ? "Aucune ligne pour cette sélection"
+              : ailleurs.length > 0
+                ? `Hors de cette sélection : ${ailleurs
+                    .map((a) => `${a.numero} est en ${a.saison} (${a.source})`)
+                    .join(", ")}`
+                : `Aucune commande ne correspond à : ${inconnus.join(", ")}`,
+          data: {
+            source,
+            seasonName: season.name,
+            numerosInconnus: inconnus,
+            numerosAilleurs: ailleurs,
+          },
         },
         { status: 404 }
       );
@@ -342,6 +403,14 @@ export async function GET(request: NextRequest) {
         },
         ...(inconnus.length > 0
           ? [{ Critère: "Numéros saisis sans correspondance", Valeur: inconnus.join(", ") }]
+          : []),
+        ...(ailleurs.length > 0
+          ? [
+              {
+                Critère: "Ces numéros existent ailleurs",
+                Valeur: ailleurs.map((a) => `${a.numero} → ${a.saison} / ${a.source}`).join(" ; "),
+              },
+            ]
           : []),
         { Critère: "Références filtrées", Valeur: skus.length === 0 ? "toutes" : skus.join(", ") },
         { Critère: "Lignes", Valeur: out.rows.length },

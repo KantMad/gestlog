@@ -1201,6 +1201,27 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
       donnerait sinon un fichier vide sans explication.
     - Une commande cochée qui **sort** du périmètre (changement de boutique) est décochée :
       filtrer sur une commande absente de la liste n'aurait aucun sens.
+  - 🔴 **« J'ai plusieurs commandes pour cette boutique et je n'en vois qu'une. »** L'export
+    est **par saison**, et une saison mixte ne sort qu'en TEXAS. Le cas réel : *`LE KO09701`
+    (LE KORNER - Cap Sacré Cœur) a 7 commandes, réparties sur 4 saisons — 1 en PE27, 1 en
+    PE26, **3 en Réassort**, et 2 en AH26 qui sont la MÊME commande vue par les deux sources
+    (`110810` côté TEXAS, `PO-144421162013` côté TIO, même `tioOrderNumber`).* Un export PE27
+    n'en contient donc qu'une, à juste titre. Pour que l'écran ne mente pas par omission :
+    - la **saison exportée est rappelée dans la carte** (elle se choisit en haut de la page,
+      hors du champ de vision une fois en bas) ;
+    - dès que des boutiques sont **explicitement incluses**, un bandeau bleu compte les
+      commandes **hors périmètre**, saison par saison, en distinguant celles de la **même
+      saison écartées par la source**. *Vérifié : export PE27 → « 3 en Réassort, 1 en AH26 /
+      TEXAS, 1 en AH26 / TIO, 1 en PE26 » ; export AH26 → « 1 en AH26 / TIO (même saison,
+      source écartée) ».* Il n'est **pas** calculé sans sélection de boutique : « 2 287
+      commandes en Réassort » ne renseignerait sur rien.
+    - un **numéro saisi introuvable est cherché ailleurs** : l'écran dit où il se trouve
+      plutôt que d'envoyer chercher une faute de frappe inexistante. *Vérifié :
+      `IS-056516282101` → « existe en Réassort (TIO) ».* Écrit aussi dans `Critères` et dans
+      le message d'erreur quand il ne reste aucune ligne.
+  - ⚠️ **Deux boutiques d'une même enseigne sont deux `Client` distincts** : *`LE KORNER`
+    existe en « Cap Sacré Cœur », « Saint-Leu » et « Saint-Paul ».* Cocher l'une ne prend pas
+    les autres — rien n'est fusionné automatiquement.
   - *Validé sur la base de production : PE27 → 39 102 lignes / 80 727 pièces / 322 réfs /
     211 commandes / 165 boutiques / 1 985 185,87 € ; AH26 → 34 689 lignes / **69 925
     pièces** (le total AH26 documenté plus haut) / 343 réfs / 282 commandes / 191 boutiques.*

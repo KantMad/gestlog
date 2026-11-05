@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Barcode, Download, Loader2, Search, TriangleAlert } from "lucide-react";
+import { Barcode, Download, Info, Loader2, Search, TriangleAlert } from "lucide-react";
 import { cn, formatNumber, formatEuro } from "@/lib/utils";
 import { fileStamp } from "@/lib/file-stamp";
 import { COLONNES } from "@/lib/export-commandes-produits";
@@ -23,6 +23,12 @@ interface Boutique {
   id: string;
   code: string;
   name: string;
+}
+interface AutreSaison {
+  saison: string;
+  source: string;
+  memeSaison: boolean;
+  commandes: number;
 }
 interface Commande {
   orderNumber: string;
@@ -43,6 +49,7 @@ interface Compte {
   prixCommandeExploitable: boolean;
   raisonPrix: string | null;
   numerosInconnus: string[];
+  numerosAilleurs: { numero: string; saison: string; source: string }[];
 }
 
 export function CommandesProduitsCard({
@@ -64,6 +71,7 @@ export function CommandesProduitsCard({
   const [cmdSaisies, setCmdSaisies] = useState("");
   const [cmdRecherche, setCmdRecherche] = useState("");
   const [cmdChargement, setCmdChargement] = useState(false);
+  const [autres, setAutres] = useState<AutreSaison[]>([]);
   const [wholesale, setWholesale] = useState<"commande" | "catalogue">("commande");
   const [compte, setCompte] = useState<Compte | null>(null);
   const [comptage, setComptage] = useState(false);
@@ -129,6 +137,7 @@ export function CommandesProduitsCard({
         if (annule) return;
         const liste: Commande[] = d.data?.orders || [];
         setCommandes(liste);
+        setAutres(d.data?.autres || []);
         // Une commande cochée qui sort du périmètre (changement de boutique) est
         // décochée : la garder filtrerait sur une commande absente de la liste.
         const connus = new Set(liste.map((o) => o.orderNumber));
@@ -138,7 +147,10 @@ export function CommandesProduitsCard({
         });
       })
       .catch(() => {
-        if (!annule) setCommandes([]);
+        if (!annule) {
+          setCommandes([]);
+          setAutres([]);
+        }
       })
       .finally(() => {
         if (!annule) setCmdChargement(false);
@@ -292,6 +304,19 @@ export function CommandesProduitsCard({
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* La saison est choisie EN HAUT de la page : à 2 000 px de cette carte, on ne la
+            voit plus. L'export étant par saison, elle est rappelée ici. */}
+        <div className="rounded-lg border-2 border-primary/30 bg-primary/5 px-3 py-2 text-sm">
+          Saison exportée : <strong>{seasonName || "—"}</strong>
+          {compte?.source ? (
+            <span className="text-muted-foreground"> · source {compte.source}</span>
+          ) : null}
+          <span className="text-muted-foreground">
+            {" "}
+            — elle se change tout en haut de la page.
+          </span>
+        </div>
+
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
             <label htmlFor="cp-catalogue" className="text-xs font-medium text-muted-foreground">
@@ -490,6 +515,35 @@ export function CommandesProduitsCard({
               : `${numeros.length} commande(s) demandée(s)${cmdCochees.size > 0 && cmdSaisies.trim() ? " (cochées + saisies)" : ""}.`}
           </p>
         </div>
+
+        {autres.length > 0 && (
+          <div className="flex items-start gap-2 rounded-lg border border-sky-300 bg-sky-50 p-3 text-sm text-sky-900">
+            <Info className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>
+              Cette sélection de boutiques a{" "}
+              <strong>
+                {formatNumber(autres.reduce((n, a) => n + a.commandes, 0))} autre(s) commande(s)
+              </strong>{" "}
+              hors de ce que l&apos;export contiendra :{" "}
+              {autres
+                .map((a) =>
+                  a.memeSaison
+                    ? `${a.commandes} en ${a.saison} côté ${a.source} (source écartée)`
+                    : `${a.commandes} en ${a.saison}`
+                )
+                .join(", ")}
+              .{" "}
+              {autres.some((a) => a.memeSaison) ? (
+                <>
+                  Une saison qui porte des commandes <strong>TEXAS</strong> et{" "}
+                  <strong>TIO</strong> ne sort qu&apos;en TEXAS — les mêmes commandes y
+                  figurent deux fois.{" "}
+                </>
+              ) : null}
+              Pour les autres saisons, change la saison en haut de la page.
+            </span>
+          </div>
+        )}
 
         {compte && compte.numerosInconnus?.length > 0 && (
           <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
