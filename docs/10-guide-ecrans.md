@@ -1222,6 +1222,37 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
   - ⚠️ **Deux boutiques d'une même enseigne sont deux `Client` distincts** : *`LE KORNER`
     existe en « Cap Sacré Cœur », « Saint-Leu » et « Saint-Paul ».* Cocher l'une ne prend pas
     les autres — rien n'est fusionné automatiquement.
+  - **Export MULTI-SAISONS** (`?seasonIds=a,b,c` ; `seasonId` reste accepté) : un sélecteur
+    *La saison de la page / Plusieurs saisons* dans la carte, avec une pastille par saison,
+    *Toutes* et *Réinitialiser*. C'est la réponse au cas ci-dessus : *vérifié sur
+    `LE KO09701` et les 11 saisons → **670 lignes, 1 013 pièces, 6 commandes, 4 saisons**
+    (AH26 245 pièces, PE26 187, PE27 297, Réassort 284), somme par saison égale au total.*
+    - 🔴 **La source est résolue SAISON PAR SAISON.** Appliquer une source unique à
+      plusieurs saisons écarterait, sur chaque saison sans Texas, **toutes** ses commandes.
+      Le filtre SQL porte donc sur le **couple** `(saison, source)`, monté par
+      `unnest($ids, $sources)`. *Vérifié sur les 11 saisons : AH26 ne sort qu'en TEXAS
+      (282 commandes), les dix autres en TIO ; total **341 875 lignes** contre 383 891 sans
+      dédoublonnage — les 41 996 de différence sont les commandes TIO d'AH26.*
+    - 🔴 **Une 15ᵉ colonne `Saison` apparaît — seulement en multi-saisons.** Sur une seule
+      saison elle serait constante ; sur plusieurs, son absence rendrait le fichier ambigu
+      (le même produit, coloris, taille et EAN se recommande d'une saison à l'autre, à des
+      prix différents). Elle est **ajoutée en fin de ligne** pour que les 14 colonnes
+      gardent exactement leur position. Deux tests verrouillent les deux formes.
+    - 🔴 **La saison entre dans la clé de groupe des tailles.** Sans elle, deux saisons
+      portant le même numéro de commande verraient leurs tailles réordonnées ensemble et
+      leurs lignes entrelacées.
+    - 🔴 **Le prix de la commande exige que TOUTES les saisons soient TIO**
+      (`prixCommandeExploitableSur`, testée) : une seule saison TEXAS dans le lot rend la
+      colonne incomparable d'une ligne à l'autre. Repli sur le tarif catalogue, annoncé.
+    - ⚠️ **Le filtre catalogue disparaît en multi-saisons** : un `Catalog` appartient à une
+      saison, proposer ceux d'une seule d'entre elles induirait en erreur.
+  - 🔴 **Plafond de 150 000 lignes, et ce n'est pas arbitraire.** *Mesuré sur un classeur de
+    15 colonnes : 50 000 lignes → 1,1 s / 6,5 Mo / **476 Mo de RSS** ; 150 000 → 4,3 s /
+    19,4 Mo / **1,0 Go** ; 400 000 → 11,6 s / 51,8 Mo / **2,5 Go**.* Le VPS a 7,7 Go et
+    héberge **aussi l'API caisse** : un pic de 2,5 Go la mettrait en danger. Toutes les
+    saisons sans filtre (341 875 lignes) sont donc **tronquées**, et l'écran le dit **avant**
+    le clic grâce au comptage `?count=1`. Filtrer par boutique ramène le cas réel à
+    670 lignes.
   - *Validé sur la base de production : PE27 → 39 102 lignes / 80 727 pièces / 322 réfs /
     211 commandes / 165 boutiques / 1 985 185,87 € ; AH26 → 34 689 lignes / **69 925
     pièces** (le total AH26 documenté plus haut) / 343 réfs / 282 commandes / 191 boutiques.*

@@ -6,6 +6,7 @@ import { resolveOrderSource } from "@/lib/order-source";
 import {
   buildCommandesProduits,
   prixCommandeExploitable,
+  prixCommandeExploitableSur,
   COLONNE_PRIX_CONSEILLE,
   COLONNE_PRIX_WHOLESALE,
   COLONNE_QUANTITE,
@@ -17,7 +18,8 @@ export const maxDuration = 120;
 
 // GET — Commandes clients + infos produits et EAN, généré depuis la BASE GestLog.
 //
-// ?seasonId (requis)  ?catalogId  ?clients=id,id  ?clientMode=include|exclude
+// ?seasonId  OU  ?seasonIds=a,b,c  (au moins l'un des deux)
+// ?catalogId  ?clients=id,id  ?clientMode=include|exclude
 // ?orders=IS-123,PO-456  (numéros de commande ; exact sur orderNumber OU tioOrderNumber,
 //                         sinon « contient » — pour qu'un numéro recopié sans son préfixe
 //                         « IS- » trouve quand même sa commande)
@@ -32,9 +34,17 @@ export const maxDuration = 120;
 // sortie : les renvoyer en JSON pour que le navigateur fabrique le classeur ferait passer
 // une dizaine de Mo sur le réseau pour rien.
 //
-// ⚠️ Source des commandes : `resolveOrderSource` (TEXAS dès qu'il existe des commandes
-// Texas sur la saison, sinon TIO). Sans ce filtre, AH26 — qui porte 282 commandes TEXAS ET
-// 337 commandes TIO — sortirait en DOUBLE.
+// ⚠️ Source des commandes : `resolveOrderSource`, résolue **SAISON PAR SAISON** (TEXAS dès
+// qu'il existe des commandes Texas sur la saison, sinon TIO). Sans ce filtre, AH26 — qui
+// porte 282 commandes TEXAS ET 337 commandes TIO — sortirait en DOUBLE. En multi-saisons,
+// le filtre porte donc sur le COUPLE (saison, source) : appliquer une source globale
+// écarterait toutes les commandes TIO des saisons qui n'ont pas de Texas.
+//
+// ⚠️ Plafond de 150 000 lignes, et ce n'est pas arbitraire : *mesuré, un classeur de
+// 150 000 lignes coûte 4,3 s et ~1 Go de RSS ; à 400 000 lignes on monte à 11,6 s et
+// **2,5 Go**.* Le VPS héberge aussi l'API caisse — un pic de 2,5 Go le mettrait en danger.
+// Toutes les saisons sans filtre (383 891 lignes) sont donc tronquées, et l'écran le dit
+// AVANT le clic.
 //
 // ⚠️ Quantités COMMANDÉES : les pièces soldées (`cancelledBySize`) ne sont pas déduites, et
 // le périmètre est `orderType = COMMANDE` (hors VSS), comme sur les autres écrans B2B.
@@ -48,8 +58,18 @@ const MAX_LIGNES = 150000;
 export async function GET(request: NextRequest) {
   try {
     const p = request.nextUrl.searchParams;
-    const seasonId = p.get("seasonId");
-    if (!seasonId) return NextResponse.json({ error: "Saison requise" }, { status: 400 });
+    // Une saison, ou plusieurs : `seasonIds` l'emporte, `seasonId` reste accepté pour que
+    // les appels existants continuent de marcher.
+    const seasonIds = [
+      ...new Set(
+        [...(p.get("seasonIds") || "").split(","), p.get("seasonId") || ""]
+          .map((x) => x.trim())
+          .filter(Boolean)
+      ),
+    ];
+    if (seasonIds.length === 0) {
+      return NextResponse.json({ error: "Saison requise" }, { status: 400 });
+    }
 
     const catalogId = p.get("catalogId") || null;
     const clientIds = (p.get("clients") || "").split(",").map((s) => s.trim()).filter(Boolean);
@@ -68,22 +88,44 @@ export async function GET(request: NextRequest) {
       ),
     ];
 
-    const [season, source] = await Promise.all([
-      prisma.season.findUnique({ where: { id: seasonId }, select: { name: true } }),
-      resolveOrderSource(seasonId),
-    ]);
-    if (!season) return NextResponse.json({ error: "Saison introuvable" }, { status: 404 });
+    const saisons = await prisma.season.findMany({
+      where: { id: { in: seasonIds } },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    });
+    if (saisons.length === 0) {
+      return NextResponse.json({ error: "Saison introuvable" }, { status: 404 });
+    }
+
+    // 🔴 La source se résout SAISON PAR SAISON. Appliquer une source unique à plusieurs
+    // saisons écarterait, sur chaque saison sans Texas, la totalité de ses commandes.
+    const sources = await Promise.all(saisons.map((sa) => resolveOrderSource(sa.id)));
+    const couples = saisons.map((sa, i) => ({ id: sa.id, name: sa.name, source: sources[i] }));
+    const multi = couples.length > 1;
+    const seasonLabel = multi
+      ? `${couples.length} saisons`
+      : couples[0].name;
+    // Conservé pour les en-têtes et l'onglet Critères : sur une seule saison, la source
+    // est une information simple ; sur plusieurs, on liste les couples.
+    const source = multi ? couples.map((c) => `${c.name}/${c.source}`).join(" ") : couples[0].source;
 
     // 🔴 Le prix unitaire reconstruit n'a aucun sens sur une saison servie par TEXAS
-    // (cf. lib/export-commandes-produits.ts). Il est refusé, pas corrigé en silence :
-    // l'en-tête `X-Wholesale-Forced` et l'onglet Critères le disent.
-    const wholesaleForce = wholesaleDemande === "commande" && !prixCommandeExploitable(source);
+    // (cf. lib/export-commandes-produits.ts), et sur plusieurs saisons il suffit d'UNE
+    // saison TEXAS pour que la colonne devienne incomparable d'une ligne à l'autre. Il est
+    // refusé, pas corrigé en silence : `X-Wholesale-Forced` et Critères le disent.
+    const prixOk = prixCommandeExploitableSur(sources);
+    const wholesaleForce = wholesaleDemande === "commande" && !prixOk;
     const wholesaleSource = wholesaleForce ? "catalogue" : wholesaleDemande;
 
     // Filtres montés en paramètres numérotés : aucune valeur d'utilisateur n'entre dans le
     // texte SQL.
-    const params: unknown[] = [seasonId, source];
-    const conds: string[] = [`co."seasonId" = $1`, `co."source" = $2`, `co."orderType" = 'COMMANDE'`];
+    // Le filtre porte sur le COUPLE (saison, source) : une paire par saison demandée.
+    const params: unknown[] = [couples.map((c) => c.id), couples.map((c) => c.source)];
+    const conds: string[] = [
+      `EXISTS (SELECT 1 FROM unnest($1::text[], $2::text[]) AS sp(sid, src)
+                WHERE sp.sid = co."seasonId" AND sp.src = co."source")`,
+      `co."orderType" = 'COMMANDE'`,
+    ];
     if (catalogId) {
       params.push(catalogId);
       conds.push(`co."catalogId" = $${params.length}`);
@@ -108,6 +150,7 @@ export async function GET(request: NextRequest) {
           orderNumber: string;
           clientName: string | null;
           clientCode: string | null;
+          seasonName: string;
           orderDate: Date | null;
           lignes: number;
           pieces: number;
@@ -116,16 +159,18 @@ export async function GET(request: NextRequest) {
         `SELECT co."orderNumber"                       AS "orderNumber",
                 cl."name"                              AS "clientName",
                 cl."code"                              AS "clientCode",
+                s."name"                               AS "seasonName",
                 co."orderDate"                         AS "orderDate",
                 count(col.id)::int                     AS lignes,
                 COALESCE(sum(col."totalQuantity"), 0)::int AS pieces
            FROM "ClientOrder" co
            JOIN "Client" cl ON cl.id = co."clientId"
+           JOIN "Season" s ON s.id = co."seasonId"
            LEFT JOIN "ClientOrderLine" col ON col."clientOrderId" = co.id
           WHERE ${condsPerimetre.join(" AND ")}
-          GROUP BY co."orderNumber", cl."name", cl."code", co."orderDate"
+          GROUP BY co."orderNumber", cl."name", cl."code", s."name", co."orderDate"
           HAVING count(col.id) > 0
-          ORDER BY cl."name", co."orderNumber"
+          ORDER BY cl."name", s."name", co."orderNumber"
           LIMIT 3000`,
         ...paramsPerimetre
       );
@@ -141,20 +186,23 @@ export async function GET(request: NextRequest) {
         autres = await prisma.$queryRawUnsafe<
           { saison: string; source: string; memeSaison: boolean; commandes: number }[]
         >(
+          // « memeSaison » = la saison EST demandée, mais cette source-là en est écartée.
           `SELECT s."name" AS saison,
                   co."source" AS source,
-                  (co."seasonId" = $1) AS "memeSaison",
+                  EXISTS (SELECT 1 FROM unnest($1::text[]) AS d(sid)
+                           WHERE d.sid = co."seasonId") AS "memeSaison",
                   count(*)::int AS commandes
              FROM "ClientOrder" co
              JOIN "Season" s ON s.id = co."seasonId"
             WHERE co."orderType" = 'COMMANDE'
               AND co."clientId" = ANY($3::text[])
-              AND NOT (co."seasonId" = $1 AND co."source" = $2)
+              AND NOT EXISTS (SELECT 1 FROM unnest($1::text[], $2::text[]) AS sp(sid, src)
+                               WHERE sp.sid = co."seasonId" AND sp.src = co."source")
               AND EXISTS (SELECT 1 FROM "ClientOrderLine" l WHERE l."clientOrderId" = co.id)
-            GROUP BY s."name", co."source", (co."seasonId" = $1)
+            GROUP BY 1, 2, 3
             ORDER BY count(*) DESC`,
-          seasonId,
-          source,
+          couples.map((c) => c.id),
+          couples.map((c) => c.source),
           clientIds
         );
       }
@@ -166,7 +214,8 @@ export async function GET(request: NextRequest) {
             orderDate: r.orderDate ? r.orderDate.toISOString().slice(0, 10) : null,
           })),
           source,
-          seasonName: season.name,
+          seasonName: seasonLabel,
+          seasons: couples.map((c) => ({ name: c.name, source: c.source })),
           autres,
         },
       });
@@ -254,6 +303,7 @@ export async function GET(request: NextRequest) {
       JOIN "ClientOrder" co ON co.id = col."clientOrderId"
       JOIN "Client" cl ON cl.id = co."clientId"
       JOIN "Product" p ON p.id = col."productId"
+      JOIN "Season" s ON s.id = co."seasonId"
       CROSS JOIN LATERAL jsonb_each(col."quantitiesBySize"::jsonb) AS kv(key, value)`;
     // L'EAN est joint seulement pour le fichier : le comptage n'en a pas besoin, et la
     // jointure est ce qui coûte.
@@ -282,10 +332,11 @@ export async function GET(request: NextRequest) {
         data: {
           ...c,
           source,
-          seasonName: season.name,
+          seasonName: seasonLabel,
+          seasons: couples.map((cp) => ({ name: cp.name, source: cp.source })),
           plafond: MAX_LIGNES,
-          prixCommandeExploitable: prixCommandeExploitable(source),
-          raisonPrix: prixCommandeExploitable(source) ? null : RAISON_PRIX_TEXAS,
+          prixCommandeExploitable: prixOk,
+          raisonPrix: prixOk ? null : RAISON_PRIX_TEXAS,
           numerosInconnus: inconnus,
           numerosAilleurs: ailleurs,
         },
@@ -316,9 +367,10 @@ export async function GET(request: NextRequest) {
                    THEN round((col."amount" / col."totalQuantity")::numeric, 2) END AS "unitNet",
               p."costPrice"                         AS "costPrice",
               p."salePrice"                         AS "salePrice",
+              s."name"                              AS "seasonName",
               e."ean"                               AS ean
        ${from} ${joinEan} ${filtre}
-       ORDER BY co."orderNumber", p."reference", COALESCE(p."colorCode", p."color")
+       ORDER BY s."name", co."orderNumber", p."reference", COALESCE(p."colorCode", p."color")
        LIMIT ${MAX_LIGNES + 1}`,
       ...params
     );
@@ -331,7 +383,7 @@ export async function GET(request: NextRequest) {
       unitNet: r.unitNet === null ? null : Number(r.unitNet),
     }));
 
-    const out = buildCommandesProduits(lignes, { wholesaleSource });
+    const out = buildCommandesProduits(lignes, { wholesaleSource, withSeason: multi });
 
     if (out.rows.length === 0) {
       return NextResponse.json(
@@ -346,7 +398,7 @@ export async function GET(request: NextRequest) {
                 : `Aucune commande ne correspond à : ${inconnus.join(", ")}`,
           data: {
             source,
-            seasonName: season.name,
+            seasonName: seasonLabel,
             numerosInconnus: inconnus,
             numerosAilleurs: ailleurs,
           },
@@ -356,7 +408,9 @@ export async function GET(request: NextRequest) {
     }
 
     const ws = XLSX.utils.aoa_to_sheet([out.header, ...out.rows]);
-    ws["!cols"] = [15, 14, 32, 18, 11, 8, 11, 20, 20, 14, 16, 20, 13, 26].map((wch) => ({ wch }));
+    ws["!cols"] = [15, 14, 32, 18, 11, 8, 11, 20, 20, 14, 16, 20, 13, 26, ...(multi ? [12] : [])].map(
+      (wch) => ({ wch })
+    );
     ws["!freeze"] = { xSplit: 0, ySplit: 1 };
     ws["!autofilter"] = {
       ref: XLSX.utils.encode_range({
@@ -380,14 +434,26 @@ export async function GET(request: NextRequest) {
     XLSX.utils.book_append_sheet(
       wb,
       XLSX.utils.json_to_sheet([
-        { Critère: "Saison", Valeur: season.name },
+        { Critère: "Saison(s)", Valeur: couples.map((c) => c.name).join(", ") },
         {
           Critère: "Source des commandes",
-          Valeur:
-            source === "TEXAS"
-              ? "TEXAS (ERP) — les commandes TIO de la saison sont exclues pour ne pas doubler"
-              : "TIO (prise de commande)",
+          Valeur: couples
+            .map((c) =>
+              c.source === "TEXAS"
+                ? `${c.name} : TEXAS (ERP) — les commandes TIO de cette saison sont exclues pour ne pas doubler`
+                : `${c.name} : TIO (prise de commande)`
+            )
+            .join(" ; "),
         },
+        ...(multi
+          ? [
+              {
+                Critère: "Colonne Saison",
+                Valeur:
+                  "Ajoutée en 15ᵉ colonne parce que l'export porte sur plusieurs saisons : un même produit, coloris, taille et EAN se recommande d'une saison à l'autre",
+              },
+            ]
+          : []),
         { Critère: "Périmètre", Valeur: "orderType = COMMANDE (hors VSS)" },
         { Critère: "Catalogue", Valeur: catalogId ? catalogId : "tous" },
         {
@@ -449,7 +515,9 @@ export async function GET(request: NextRequest) {
       status: 200,
       headers: {
         "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "Content-Disposition": `attachment; filename="commandes-produits-ean_${season.name}.xlsx"`,
+        "Content-Disposition": `attachment; filename="commandes-produits-ean_${
+          multi ? `${couples.length}-saisons` : couples[0].name
+        }.xlsx"`,
         "Cache-Control": "no-store",
         // Diagnostics lus par l'écran : un fichier correct peut quand même mériter un avertissement.
         "X-Rows": String(out.rows.length),
@@ -457,6 +525,7 @@ export async function GET(request: NextRequest) {
         "X-Orders": String(out.commandes.length),
         "X-Refs": String(out.references.length),
         "X-Shops": String(out.enseignes.length),
+        "X-Seasons": String(out.saisons.length || couples.length),
         "X-Total-Wholesale": String(out.totalWholesale),
         "X-No-Ean": String(out.sansEan),
         "X-No-Wholesale": String(out.sansPrixWholesale),

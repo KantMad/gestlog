@@ -8,7 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Barcode, Download, Info, Loader2, Search, TriangleAlert } from "lucide-react";
 import { cn, formatNumber, formatEuro } from "@/lib/utils";
 import { fileStamp } from "@/lib/file-stamp";
-import { COLONNES } from "@/lib/export-commandes-produits";
+import { COLONNES, COLONNE_SAISON } from "@/lib/export-commandes-produits";
+import { useSeason, formatSeasonLabel } from "@/lib/season-context";
 
 // Commandes clients × produits × EAN, GÉNÉRÉ par GestLog depuis la base — rien à déposer.
 // Le classeur est construit côté serveur : une saison fait 35 000 à 40 000 lignes, les
@@ -34,6 +35,7 @@ interface Commande {
   orderNumber: string;
   clientName: string | null;
   clientCode: string | null;
+  seasonName: string;
   orderDate: string | null;
   lignes: number;
   pieces: number;
@@ -50,6 +52,7 @@ interface Compte {
   raisonPrix: string | null;
   numerosInconnus: string[];
   numerosAilleurs: { numero: string; saison: string; source: string }[];
+  seasons: { name: string; source: string }[];
 }
 
 export function CommandesProduitsCard({
@@ -59,6 +62,12 @@ export function CommandesProduitsCard({
   seasonId: string;
   seasonName: string;
 }) {
+  const { seasons } = useSeason();
+  // Une saison (celle de la page) ou plusieurs : l'export multi-saisons sert à sortir
+  // toutes les commandes d'une boutique d'un coup, ses commandes étant réparties sur
+  // plusieurs saisons.
+  const [portee, setPortee] = useState<"une" | "plusieurs">("une");
+  const [saisonsCochees, setSaisonsCochees] = useState<Set<string>>(new Set());
   const [catalogs, setCatalogs] = useState<Catalog[]>([]);
   const [boutiques, setBoutiques] = useState<Boutique[]>([]);
   const [catalogId, setCatalogId] = useState("");
@@ -76,6 +85,12 @@ export function CommandesProduitsCard({
   const [compte, setCompte] = useState<Compte | null>(null);
   const [comptage, setComptage] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  // ⚠️ Un catalogue appartient à UNE saison : en multi-saisons le filtre catalogue
+  // n'aurait pas de sens, il est donc vidé et masqué.
+  useEffect(() => {
+    if (portee === "plusieurs") setCatalogId("");
+  }, [portee]);
 
   useEffect(() => {
     if (!seasonId) return;
@@ -102,15 +117,31 @@ export function CommandesProduitsCard({
 
   // Périmètre BOUTIQUE : ce qui restreint la liste des commandes. Les numéros n'en font
   // pas partie — sinon cocher la première commande ferait disparaître les autres.
+  // Saisons effectivement demandées. En mode « plusieurs », une sélection vide retombe
+  // sur la saison de la page plutôt que de ne rien exporter.
+  const saisonsDemandees = useMemo(
+    () =>
+      portee === "une"
+        ? seasonId
+          ? [seasonId]
+          : []
+        : saisonsCochees.size > 0
+          ? [...saisonsCochees]
+          : seasonId
+            ? [seasonId]
+            : [],
+    [portee, seasonId, saisonsCochees]
+  );
+
   const filtresBoutique = useCallback(() => {
-    const q = new URLSearchParams({ seasonId });
+    const q = new URLSearchParams({ seasonIds: saisonsDemandees.join(",") });
     if (catalogId) q.set("catalogId", catalogId);
     if (selected.size > 0) {
       q.set("clients", [...selected].join(","));
       q.set("clientMode", clientMode);
     }
     return q;
-  }, [seasonId, catalogId, selected, clientMode]);
+  }, [saisonsDemandees, catalogId, selected, clientMode]);
 
   // Filtres complets, SANS le prix : changer l'origine du prix ne change pas le nombre de
   // lignes, et relancerait un comptage pour rien.
@@ -123,7 +154,7 @@ export function CommandesProduitsCard({
 
   // Liste des commandes du périmètre boutique, pour le sélecteur.
   useEffect(() => {
-    if (!seasonId) {
+    if (saisonsDemandees.length === 0) {
       setCommandes([]);
       return;
     }
@@ -158,12 +189,12 @@ export function CommandesProduitsCard({
     return () => {
       annule = true;
     };
-  }, [seasonId, filtresBoutique]);
+  }, [saisonsDemandees, filtresBoutique]);
 
   // Comptage avant téléchargement : on annonce le volume plutôt que de lancer un fichier
   // de 40 000 lignes à l'aveugle.
   useEffect(() => {
-    if (!seasonId) {
+    if (saisonsDemandees.length === 0) {
       setCompte(null);
       return;
     }
@@ -188,7 +219,7 @@ export function CommandesProduitsCard({
       annule = true;
       clearTimeout(t);
     };
-  }, [seasonId, filtres]);
+  }, [saisonsDemandees, filtres]);
 
   // Le prix de la commande est refusé sur TEXAS : on bascule l'écran pour que le bouton
   // affiché corresponde à ce que le fichier contiendra.
@@ -226,7 +257,7 @@ export function CommandesProduitsCard({
     });
 
   const exporter = async () => {
-    if (!seasonId) return;
+    if (saisonsDemandees.length === 0) return;
     setBusy(true);
     try {
       const q = filtres();
@@ -242,7 +273,9 @@ export function CommandesProduitsCard({
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `commandes-produits-ean_${seasonName || seasonId}_${fileStamp()}.xlsx`;
+      a.download = `commandes-produits-ean_${
+        saisonsDemandees.length > 1 ? `${saisonsDemandees.length}-saisons` : seasonName || seasonId
+      }_${fileStamp()}.xlsx`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -305,37 +338,130 @@ export function CommandesProduitsCard({
       </CardHeader>
       <CardContent className="space-y-4">
         {/* La saison est choisie EN HAUT de la page : à 2 000 px de cette carte, on ne la
-            voit plus. L'export étant par saison, elle est rappelée ici. */}
-        <div className="rounded-lg border-2 border-primary/30 bg-primary/5 px-3 py-2 text-sm">
-          Saison exportée : <strong>{seasonName || "—"}</strong>
-          {compte?.source ? (
-            <span className="text-muted-foreground"> · source {compte.source}</span>
-          ) : null}
-          <span className="text-muted-foreground">
-            {" "}
-            — elle se change tout en haut de la page.
-          </span>
+            voit plus. L'export étant par saison, la portée est rappelée — et réglable —
+            ici. */}
+        <div className="rounded-lg border-2 border-primary/30 bg-primary/5 p-3 space-y-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm font-semibold">Saisons exportées</p>
+            <div className="inline-flex rounded-md border bg-background p-0.5">
+              {(
+                [
+                  { v: "une", label: "La saison de la page" },
+                  { v: "plusieurs", label: "Plusieurs saisons" },
+                ] as const
+              ).map((o) => (
+                <button
+                  key={o.v}
+                  type="button"
+                  onClick={() => {
+                    setPortee(o.v);
+                    // On part de la saison en cours : elle est presque toujours dans le lot.
+                    if (o.v === "plusieurs" && saisonsCochees.size === 0 && seasonId)
+                      setSaisonsCochees(new Set([seasonId]));
+                  }}
+                  className={cn(
+                    "rounded px-2.5 py-1 text-xs transition-colors",
+                    portee === o.v
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:bg-accent"
+                  )}
+                >
+                  {o.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {portee === "une" ? (
+            <p className="text-sm">
+              <strong>{seasonName || "—"}</strong>
+              {compte?.source ? (
+                <span className="text-muted-foreground"> · source {compte.source}</span>
+              ) : null}
+              <span className="text-muted-foreground">
+                {" "}
+                — elle se change tout en haut de la page.
+              </span>
+            </p>
+          ) : (
+            <>
+              <div className="flex flex-wrap gap-1.5">
+                {seasons.map((sa) => (
+                  <button
+                    key={sa.id}
+                    type="button"
+                    onClick={() =>
+                      setSaisonsCochees((prev) => {
+                        const n = new Set(prev);
+                        if (n.has(sa.id)) n.delete(sa.id);
+                        else n.add(sa.id);
+                        return n;
+                      })
+                    }
+                    className={cn(
+                      "rounded-full border px-2.5 py-1 text-xs transition-colors",
+                      saisonsCochees.has(sa.id)
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "bg-background text-muted-foreground hover:bg-accent"
+                    )}
+                  >
+                    {formatSeasonLabel(sa)}
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-center gap-3 text-xs">
+                <button
+                  type="button"
+                  className="text-primary hover:underline"
+                  onClick={() => setSaisonsCochees(new Set(seasons.map((sa) => sa.id)))}
+                >
+                  Toutes ({seasons.length})
+                </button>
+                <button
+                  type="button"
+                  className="text-muted-foreground hover:underline"
+                  onClick={() => setSaisonsCochees(new Set(seasonId ? [seasonId] : []))}
+                >
+                  Réinitialiser
+                </button>
+                <span className="text-muted-foreground">
+                  {saisonsDemandees.length} saison(s) · une colonne{" "}
+                  <strong>{COLONNE_SAISON}</strong> est ajoutée en {COLONNES.length + 1}
+                  <sup>e</sup> position
+                </span>
+              </div>
+              {compte?.seasons && compte.seasons.length > 1 && (
+                <p className="text-xs text-muted-foreground">
+                  Sources lues : {compte.seasons.map((x) => `${x.name} → ${x.source}`).join(" · ")}.
+                </p>
+              )}
+            </>
+          )}
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2">
-          <div className="space-y-1.5">
-            <label htmlFor="cp-catalogue" className="text-xs font-medium text-muted-foreground">
-              Catalogue
-            </label>
-            <select
-              id="cp-catalogue"
-              value={catalogId}
-              onChange={(e) => setCatalogId(e.target.value)}
-              className="w-full rounded-lg border-2 border-input bg-background px-3 py-2 text-sm outline-none focus:border-primary"
-            >
-              <option value="">Tous les catalogues</option>
-              {catalogs.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name} ({c.orderCount})
-                </option>
-              ))}
-            </select>
-          </div>
+          {/* Un catalogue appartient à UNE saison : le filtre disparaît en multi-saisons
+              plutôt que de proposer les catalogues d'une seule d'entre elles. */}
+          {portee === "une" && (
+            <div className="space-y-1.5">
+              <label htmlFor="cp-catalogue" className="text-xs font-medium text-muted-foreground">
+                Catalogue
+              </label>
+              <select
+                id="cp-catalogue"
+                value={catalogId}
+                onChange={(e) => setCatalogId(e.target.value)}
+                className="w-full rounded-lg border-2 border-input bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+              >
+                <option value="">Tous les catalogues</option>
+                {catalogs.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name} ({c.orderCount})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <div className="space-y-1.5">
             <label htmlFor="cp-sku" className="text-xs font-medium text-muted-foreground">
               Références (séparées par des virgules)
@@ -480,6 +606,11 @@ export function CommandesProduitsCard({
                     />
                     <span className="min-w-0 flex-1 truncate">
                       <span className="font-mono text-xs">{o.orderNumber}</span>{" "}
+                      {saisonsDemandees.length > 1 && (
+                        <span className="rounded bg-muted px-1 py-0.5 text-[10px] font-medium">
+                          {o.seasonName}
+                        </span>
+                      )}{" "}
                       <span className="text-xs text-muted-foreground">
                         · {o.clientName || o.clientCode || "—"} · {formatNumber(o.pieces)} pcs
                         {o.orderDate ? ` · ${o.orderDate}` : ""}
@@ -540,7 +671,14 @@ export function CommandesProduitsCard({
                   figurent deux fois.{" "}
                 </>
               ) : null}
-              Pour les autres saisons, change la saison en haut de la page.
+              {portee === "une" ? (
+                <>
+                  Pour les récupérer d&apos;un coup, passe en{" "}
+                  <strong>Plusieurs saisons</strong> ci-dessus.
+                </>
+              ) : (
+                <>Coche les saisons manquantes ci-dessus, ou <strong>Toutes</strong>.</>
+              )}
             </span>
           </div>
         )}
@@ -616,14 +754,19 @@ export function CommandesProduitsCard({
           <Chiffre valeur={compte?.lignes ?? 0} legende="lignes à produire" occupe={comptage} />
           <Chiffre valeur={compte?.pieces ?? 0} legende="pièces commandées" occupe={comptage} />
           <Chiffre valeur={compte?.commandes ?? 0} legende="commandes" occupe={comptage} />
-          <Chiffre valeur={compte?.references ?? 0} legende="références" occupe={comptage} />
+          <Chiffre
+            valeur={saisonsDemandees.length > 1 ? saisonsDemandees.length : (compte?.references ?? 0)}
+            legende={saisonsDemandees.length > 1 ? "saisons" : "références"}
+            occupe={comptage}
+          />
         </div>
 
         <div className="rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground">
           Colonnes : {COLONNES.join(" · ")}. Quantités <strong>commandées</strong> — les pièces
-          soldées ne sont pas déduites, et les commandes VSS sont hors périmètre. Source lue :{" "}
-          <strong>{compte?.source ?? "—"}</strong> ; sur une saison qui porte des commandes
-          TEXAS <em>et</em> TIO, seules les TEXAS sortent, pour ne pas compter deux fois.
+          soldées ne sont pas déduites, et les commandes VSS sont hors périmètre. La source
+          est résolue <strong>saison par saison</strong> : sur une saison qui porte des
+          commandes TEXAS <em>et</em> TIO, seules les TEXAS sortent, pour ne pas compter deux
+          fois{compte?.seasons?.length ? ` (${compte.seasons.map((x) => `${x.name} → ${x.source}`).join(", ")})` : ""}.
         </div>
 
         {compte && compte.lignes > compte.plafond && (
@@ -639,7 +782,7 @@ export function CommandesProduitsCard({
 
         <Button
           onClick={exporter}
-          disabled={!seasonId || busy || (compte?.lignes ?? 0) === 0}
+          disabled={saisonsDemandees.length === 0 || busy || (compte?.lignes ?? 0) === 0}
           className="gap-2"
         >
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}

@@ -3,6 +3,7 @@ import {
   buildCommandesProduits,
   ordonnerParGrille,
   prixCommandeExploitable,
+  prixCommandeExploitableSur,
   RAISON_PRIX_TEXAS,
   COLONNES,
   type LigneBase,
@@ -220,5 +221,87 @@ describe("buildCommandesProduits", () => {
     expect(out.header).toHaveLength(COLONNES.length);
     expect(out.pieces).toBe(0);
     expect(out.totalWholesale).toBe(0);
+  });
+});
+
+describe("export multi-saisons", () => {
+  const base: LigneBase = {
+    orderNumber: "PO-053165171076",
+    clientCode: "LE KO09701",
+    clientName: "LE KORNER - Cap Sacré Cœur",
+    reference: "SMPTCH_C001",
+    label: "Pantalon chino tapered gabardine unie",
+    colorCode: "005",
+    colorLabel: "Sable",
+    sizeScale: "29,30,31,32,33,34,36,38,40,42,44",
+    size: "34",
+    quantity: 1,
+    category: "Pantalons",
+    subCategory: "Pantalons chinos",
+    unitNet: 36.32,
+    costPrice: 36.33,
+    salePrice: 109,
+    ean: "3665249689330",
+    seasonName: "PE27",
+  };
+
+  it("n'ajoute PAS la colonne Saison sur une seule saison", () => {
+    const out = buildCommandesProduits([base]);
+    expect(out.header).toHaveLength(14);
+    expect(out.header).not.toContain("Saison");
+    expect(out.rows[0]).toHaveLength(14);
+  });
+
+  it("ajoute Saison en 15ᵉ position, les 14 colonnes gardant leur place", () => {
+    const out = buildCommandesProduits([base], { withSeason: true });
+    expect(out.header).toHaveLength(15);
+    expect(out.header[14]).toBe("Saison");
+    expect(out.header.slice(0, 14)).toEqual([...COLONNES]);
+    expect(out.rows[0][14]).toBe("PE27");
+    expect(out.rows[0][0]).toBe("3665249689330"); // l'EAN reste en tête
+  });
+
+  it("recense les saisons présentes, triées", () => {
+    const out = buildCommandesProduits(
+      [
+        { ...base, seasonName: "Réassort" },
+        { ...base, seasonName: "AH26" },
+        { ...base, seasonName: "AH26" },
+      ],
+      { withSeason: true }
+    );
+    expect(out.saisons).toEqual(["AH26", "Réassort"]);
+  });
+
+  it("une saison sans nom laisse la cellule vide, sans retirer la ligne", () => {
+    const out = buildCommandesProduits([{ ...base, seasonName: null }], { withSeason: true });
+    expect(out.rows[0][14]).toBe("");
+    expect(out.saisons).toEqual([]);
+  });
+
+  it("🔴 ne mélange pas deux saisons portant le même numéro de commande", () => {
+    // Les numéros Réassort (IS-…) et les numéros de saison peuvent se croiser : si la
+    // saison ne faisait pas partie de la clé de groupe, les tailles de deux saisons
+    // seraient réordonnées ensemble et les lignes entrelacées.
+    const out = buildCommandesProduits(
+      [
+        { ...base, seasonName: "PE27", size: "34" },
+        { ...base, seasonName: "AH26", size: "30" },
+        { ...base, seasonName: "PE27", size: "30" },
+        { ...base, seasonName: "AH26", size: "34" },
+      ],
+      { withSeason: true }
+    );
+    expect(out.rows.map((r) => `${r[14]}-${r[5]}`)).toEqual([
+      "PE27-30", "PE27-34", "AH26-30", "AH26-34",
+    ]);
+  });
+
+  it("prixCommandeExploitableSur : toutes TIO oui, une seule TEXAS non", () => {
+    expect(prixCommandeExploitableSur(["TIO", "TIO", "TIO"])).toBe(true);
+    expect(prixCommandeExploitableSur(["TIO", "TEXAS", "TIO"])).toBe(false);
+    expect(prixCommandeExploitableSur(["TEXAS"])).toBe(false);
+    // Aucune saison : rien à exploiter, on ne dit pas « oui » par défaut.
+    expect(prixCommandeExploitableSur([])).toBe(false);
   });
 });

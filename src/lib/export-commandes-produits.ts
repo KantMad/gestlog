@@ -45,6 +45,15 @@ export const COLONNES = [
   "Enseigne client",
 ] as const;
 
+/**
+ * 15ᵉ colonne, ajoutée UNIQUEMENT quand l'export porte sur plusieurs saisons. Sur une
+ * seule saison elle serait une colonne constante ; sur plusieurs, son absence rendrait le
+ * fichier ambigu — le même produit, le même coloris et le même EAN se commandent d'une
+ * saison à l'autre, à des prix différents. Elle est ajoutée EN FIN de ligne pour que les
+ * 14 colonnes gardent exactement leur position.
+ */
+export const COLONNE_SAISON = "Saison";
+
 /** Index des colonnes à formater dans Excel. */
 export const COLONNE_QUANTITE = 6;
 export const COLONNE_PRIX_WHOLESALE = 9;
@@ -75,6 +84,8 @@ export interface LigneBase {
   /** Prix de vente conseillé (`Product.salePrice`). */
   salePrice: number | null;
   ean: string | null;
+  /** Nom de la saison. Ne sort en colonne qu'en multi-saisons (`withSeason`). */
+  seasonName?: string | null;
 }
 
 export interface OptionsExport {
@@ -84,6 +95,8 @@ export interface OptionsExport {
    *  • "catalogue" — `Product.costPrice`, le tarif de gros, hors remise de commande.
    */
   wholesaleSource?: "commande" | "catalogue";
+  /** Ajouter la colonne `Saison` en fin de ligne (export multi-saisons). */
+  withSeason?: boolean;
 }
 
 export interface ExportProduits {
@@ -107,6 +120,8 @@ export interface ExportProduits {
   commandes: string[];
   /** Boutiques distinctes (enseignes), triées. */
   enseignes: string[];
+  /** Saisons distinctes présentes dans l'export, triées. */
+  saisons: string[];
   /** Montant wholesale total (prix × quantité), arrondi au centime. */
   totalWholesale: number;
 }
@@ -124,6 +139,15 @@ export type SourceCommandes = "TIO" | "TEXAS";
  */
 export function prixCommandeExploitable(source: SourceCommandes): boolean {
   return source === "TIO";
+}
+
+/**
+ * Sur plusieurs saisons, le prix de la commande n'est exploitable que si **toutes** sont
+ * servies par TIO. Une seule saison TEXAS dans le lot suffit à rendre la colonne
+ * incomparable d'une ligne à l'autre : mieux vaut le tarif catalogue partout.
+ */
+export function prixCommandeExploitableSur(sources: SourceCommandes[]): boolean {
+  return sources.length > 0 && sources.every(prixCommandeExploitable);
 }
 
 /** Pourquoi le prix de la commande est refusé sur TEXAS. Un seul texte, partout. */
@@ -158,7 +182,9 @@ export function ordonnerParGrille<T extends { size: string }>(lignes: T[], sizeS
 
 /** Clé d'un groupe « une commande × un coloris » : c'est là que l'ordre des tailles vaut. */
 const cleGroupe = (l: LigneBase) =>
-  `${l.orderNumber}\u0000${norm(l.reference)}\u0000${norm(l.colorCode ?? "")}`;
+  `${norm(l.seasonName ?? "")}\u0000${l.orderNumber}\u0000${norm(l.reference)}\u0000${norm(
+    l.colorCode ?? ""
+  )}`;
 
 /**
  * Construit les 14 colonnes. Une valeur absente laisse la cellule VIDE : la ligne n'est
@@ -169,6 +195,7 @@ export function buildCommandesProduits(
   options: OptionsExport = {}
 ): ExportProduits {
   const catalogue = options.wholesaleSource === "catalogue";
+  const avecSaison = options.withSeason === true;
 
   // Tailles remises dans l'ordre de la grille, groupe par groupe. L'ordre des groupes
   // (celui du SQL : commande, référence, coloris) est conservé.
@@ -186,6 +213,7 @@ export function buildCommandesProduits(
   const enseignes = new Set<string>();
   const sansConseille = new Set<string>();
   const sansEanRefs = new Set<string>();
+  const saisons = new Set<string>();
   let pieces = 0;
   let sansEan = 0;
   let sansPrixWholesale = 0;
@@ -196,6 +224,7 @@ export function buildCommandesProduits(
     refs.add(l.reference);
     if (l.orderNumber) commandes.add(l.orderNumber);
     if (l.clientName) enseignes.add(l.clientName);
+    if (l.seasonName) saisons.add(l.seasonName);
     pieces += l.quantity;
 
     if (!l.ean) {
@@ -212,7 +241,7 @@ export function buildCommandesProduits(
       sansConseille.add(l.reference);
     }
 
-    return [
+    const ligne: Cell[] = [
       l.ean ?? "", // texte : jamais converti en nombre
       l.reference,
       l.label ?? "",
@@ -228,11 +257,13 @@ export function buildCommandesProduits(
       l.clientCode ?? "",
       l.clientName ?? "",
     ];
+    if (avecSaison) ligne.push(l.seasonName ?? "");
+    return ligne;
   });
 
   const tri = (s: Set<string>) => [...s].sort((a, b) => a.localeCompare(b, "fr"));
   return {
-    header: [...COLONNES],
+    header: avecSaison ? [...COLONNES, COLONNE_SAISON] : [...COLONNES],
     rows,
     pieces,
     sansEan,
@@ -243,6 +274,7 @@ export function buildCommandesProduits(
     referencesSansEan: tri(sansEanRefs),
     commandes: tri(commandes),
     enseignes: tri(enseignes),
+    saisons: tri(saisons),
     totalWholesale,
   };
 }

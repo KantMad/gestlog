@@ -1139,9 +1139,19 @@ export const HELP_THEMES: HelpTheme[] = [
             ],
           },
           {
+            h: "Toutes les commandes d'une boutique, toutes saisons",
+            lines: [
+              "En haut de la carte, bascule sur **Plusieurs saisons** : une pastille par saison, plus **Toutes**. Tu sors alors d'un coup toutes les commandes de la boutique, quelle que soit la saison.",
+              "Exemple r\u00e9el : *LE KORNER - Cap Sacr\u00e9 C\u0153ur* en toutes saisons \u2192 **670 lignes, 1 013 pi\u00e8ces, 6 commandes sur 4 saisons** (AH26, PE26, PE27 et R\u00e9assort).",
+              "Le fichier gagne alors une **15\u1d49 colonne Saison**, en bout de ligne \u2014 sinon deux commandes de saisons diff\u00e9rentes seraient impossibles \u00e0 distinguer. Les 14 colonnes habituelles ne bougent pas d'un pouce.",
+              "\u26a0\ufe0f Le filtre **catalogue** dispara\u00eet en multi-saisons : un catalogue appartient \u00e0 une seule saison.",
+              "\u26a0\ufe0f **Toutes les saisons sans aucun filtre, c'est 341 875 lignes** \u2014 au-del\u00e0 du plafond, donc tronqu\u00e9. Filtre par boutique : l'exemple ci-dessus ne fait que 670 lignes. L'\u00e9cran t'annonce le volume avant le clic.",
+            ],
+          },
+          {
             h: "Je ne vois qu'une commande pour ma boutique",
             lines: [
-              "L'export porte sur **UNE saison** \u2014 celle choisie tout en haut de la page, rappel\u00e9e dans la carte. Les autres commandes de la boutique sont tr\u00e8s probablement dans une autre saison.",
+              "Si tu es en mode **La saison de la page**, l'export ne porte que sur **UNE saison** \u2014 celle choisie tout en haut. Les autres commandes de la boutique sont tr\u00e8s probablement dans une autre saison : bascule sur **Plusieurs saisons**.",
               "D\u00e8s que tu s\u00e9lectionnes une ou plusieurs boutiques, un **bandeau bleu** te dit combien de commandes elles ont ailleurs, et dans quelles saisons. Exemple r\u00e9el : *LE KORNER - Cap Sacr\u00e9 C\u0153ur* a 1 commande en PE27, 1 en PE26 et **3 en R\u00e9assort**.",
               "\u26a0\ufe0f Si la saison porte des commandes **TEXAS** et **TIO**, seules les TEXAS sortent : ce sont les m\u00eames commandes, vues deux fois. Le bandeau le pr\u00e9cise \u00e0 part.",
               "\u26a0\ufe0f Deux boutiques d'une m\u00eame enseigne sont **deux fiches distinctes** (*LE KORNER* existe en Cap Sacr\u00e9 C\u0153ur, Saint-Leu et Saint-Paul). Cocher l'une ne prend pas les autres.",
