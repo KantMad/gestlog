@@ -1,6 +1,6 @@
-import { timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { handleApiError } from "@/lib/api";
+import { cleAssistantValide } from "@/lib/assistant-cle";
 import { prisma } from "@/lib/prisma";
 import { parisRangeToUtc } from "@/lib/btoc-dates";
 import {
@@ -16,17 +16,9 @@ import {
 // permet d'ÉCRIRE). Sans clé configurée, la route refuse tout.
 // Cf. docs/11-assistant-ia.md.
 
-function cleValide(recue: string | null): boolean {
-  const attendue = process.env.ASSISTANT_READ_KEY;
-  if (!attendue || !recue) return false;
-  const a = Buffer.from(recue);
-  const b = Buffer.from(attendue);
-  return a.length === b.length && timingSafeEqual(a, b);
-}
-
 export async function GET(request: NextRequest) {
   try {
-    if (!cleValide(request.headers.get("x-api-key"))) {
+    if (!cleAssistantValide(request.headers.get("x-api-key"))) {
       return NextResponse.json({ error: "Non autorise" }, { status: 401 });
     }
 

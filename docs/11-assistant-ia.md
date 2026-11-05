@@ -45,3 +45,24 @@ qu'elle renvoie, jamais la base.
 - **Prix absent ou à 0 : jamais valorisé à 0 en silence.** Les pièces concernées sont
   comptées dans `piecesSansPrixCout` / `piecesSansPrixPublic` — 14 % des EAN n'avaient pas de
   prix public au 29/09/2026 (cf. `06`).
+
+## `GET /api/assistant/produits?debut=YYYY-MM-DD&fin=YYYY-MM-DD`
+
+Même clé (`x-api-key` = `ASSISTANT_READ_KEY`, `src/lib/assistant-cle.ts`). Sert à Friday pour
+dire quels produits pousser sur le site : ceux qui se vendent ET dont il reste beaucoup.
+
+- `debut`, `fin` : jours de Paris inclus, 92 jours au plus.
+- Par **référence** (1re partie du SKU WooCommerce `RÉF-COULEUR-TAILLE`, = `Product.reference`) :
+  - `vendusSite`, `caSite` : `BtocOrderLine` moins `BtocRefundLine` des commandes de la période,
+    statuts `cancelled`, `refunded`, `failed` exclus (règles de l'export « Best sellers », sans
+    l'historique importé) ;
+  - `stock` : `StockEntry` actuel, toutes couleurs et tailles de la référence.
+- Une référence ni vendue ni en stock n'apparaît pas. Tri : ventes décroissantes.
+- Code : route `src/app/api/assistant/produits/route.ts` ; fusion pure et testée dans
+  `src/lib/assistant-produits.ts`.
+
+```json
+{ "debut": "2026-10-06", "fin": "2026-11-05",
+  "produits": [ { "reference": "…", "nom": "…", "categorie": "Pantalon",
+                  "vendusSite": 7, "caSite": 419.3, "stock": 12 } ] }
+```
