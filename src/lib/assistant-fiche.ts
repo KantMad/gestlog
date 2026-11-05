@@ -3,8 +3,8 @@
 // Servie par `GET /api/assistant/produit?reference=` : pour UNE référence, le stock entrepôt
 // par couleur et par taille (StockEntry.quantitiesBySize, dans l'ordre de Product.sizeScale),
 // les prix, et les ventes du site des derniers jours par couleur et taille (BtocOrderLine).
-// Référence inconnue : jusqu'à 10 références proches (référence ou désignation), pour que
-// l'assistant demande laquelle.
+// Référence inconnue : les références dont la référence ou la désignation contient le plus de
+// mots de la demande (10 au plus), pour que l'assistant prenne la seule ou demande laquelle.
 //
 // Fonctions PURES : la route ne fait que les requêtes.
 
@@ -85,4 +85,12 @@ export function construireFiche(stocks: FicheStockRow[], ventes: FicheVenteRow[]
       .filter((v) => v.quantite > 0)
       .sort((a, b) => b.quantite - a.quantite),
   };
+}
+
+const MOTS_VIDES = new Set(["les", "des", "une", "pour", "avec", "sur", "dans", "the"]);
+
+/** « Pull 1/2 zip lambswool » → ["pull", "zip", "lambswool"] : mots de 3 lettres ou plus, sans mots vides. */
+export function motsDeRecherche(demande: string): string[] {
+  const mots = demande.toLowerCase().split(/[^\p{L}\p{N}_]+/u).filter((m) => m.length >= 3 && !MOTS_VIDES.has(m));
+  return [...new Set(mots)].slice(0, 8);
 }

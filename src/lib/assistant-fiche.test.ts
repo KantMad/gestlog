@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { construireFiche } from "./assistant-fiche";
+import { construireFiche, motsDeRecherche } from "./assistant-fiche";
 
 const base = {
   reference: "FIC_PULL01", colorCode: null, label: "Pull fictif", category: "Maille", subCategory: "Pull",
@@ -29,5 +29,12 @@ describe("construireFiche — stock par couleur et taille", () => {
     const f = construireFiche([{ ...base, color: "001", colorLabel: null, quantitiesBySize: [] }], [])!;
     expect(f.couleurs[0].tailles.every((t) => t.stock === 0)).toBe(true);
     expect(construireFiche([], [])).toBeNull();
+  });
+});
+
+describe("motsDeRecherche", () => {
+  it("garde les mots utiles, sans doublon ni mot vide", () => {
+    expect(motsDeRecherche("Pull 1/2 zip lambswool, pull des RMPULL_W001")).toEqual(["pull", "zip", "lambswool", "rmpull_w001"]);
+    expect(motsDeRecherche("le M")).toEqual([]);
   });
 });
