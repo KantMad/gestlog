@@ -1106,44 +1106,51 @@ export const HELP_THEMES: HelpTheme[] = [
         ],
       },
       {
-        id: "export-commandes-ean",
+        id: "export-commandes-produits",
         icon: "\ud83d\udcca",
         title: "Commandes clients + infos produits et EAN",
         keywords:
-            "ean code barres commande client code client enseigne prix wholesale prix de vente conseill\u00e9 cat\u00e9gorie taille export excel",
+            "ean code barres commande client code client enseigne prix wholesale prix de vente conseill\u00e9 cat\u00e9gorie taille export excel g\u00e9n\u00e9r\u00e9",
         screen: "/export",
         sections: [
           {
             lines: [
-              "**Tout en bas de la page Exports.** D\u00e9pose l'export TIO **\u00ab commandes EAN \u00bb** (une ligne par taille) : tu re\u00e7ois un fichier Excel de **14 colonnes**, pr\u00eat \u00e0 filtrer.",
-              "Dans l'ordre : **EAN**, r\u00e9f\u00e9rence, nom produit, libell\u00e9 couleur, code couleur, taille, quantit\u00e9 command\u00e9e, cat\u00e9gorie, sous-cat\u00e9gorie, **prix wholesale**, **prix de vente conseill\u00e9**, num\u00e9ro de commande, **code client**, enseigne.",
-              "L'**EAN** et la **quantit\u00e9** sortent tels quels du fichier ; le **prix conseill\u00e9** et le **code client**, que TIO ne met pas dans cet export, viennent du r\u00e9f\u00e9rentiel GestLog.",
+              "**Tout en bas de la page Exports.** Tu ne d\u00e9poses rien : **GestLog g\u00e9n\u00e8re le fichier** depuis ses propres donn\u00e9es, pour la saison choisie en haut de la page.",
+              "Un fichier Excel de **14 colonnes** : **EAN**, r\u00e9f\u00e9rence, nom produit, libell\u00e9 couleur, code couleur, taille, quantit\u00e9 command\u00e9e, cat\u00e9gorie, sous-cat\u00e9gorie, **prix wholesale**, **prix de vente conseill\u00e9**, num\u00e9ro de commande, **code client**, enseigne.",
+              "**Une ligne par taille**, donc une ligne par code-barres. Les tailles non command\u00e9es n'y sont pas.",
             ],
-            tip: "Le fichier reste dans ton navigateur. Seules les **r\u00e9f\u00e9rences** et les **num\u00e9ros de commande** partent au serveur \u2014 les noms, e-mails et adresses de tes clients ne bougent pas, et ne sont **pas** dans le fichier de sortie. \ud83d\udd12",
+            tip: "L'\u00e9cran t'annonce le volume **avant** le t\u00e9l\u00e9chargement \u2014 « 39 102 lignes, 80 727 pi\u00e8ces » \u2014 et le fichier est fabriqu\u00e9 par le serveur, pas par ton navigateur. \u26a1",
+          },
+          {
+            h: "Restreindre le fichier",
+            lines: [
+              "Trois filtres : le **catalogue**, les **boutiques** (soit *seulement celles-ci*, soit *toutes sauf celles-ci*) et les **r\u00e9f\u00e9rences** (tu peux \u00e9crire `SMPTCH_C001`, ou juste `CCPE27` pour prendre tout ce qui commence par l\u00e0).",
+              "Sans filtre, tu as toute la saison. Une saison compl\u00e8te fait entre 35 000 et 40 000 lignes \u2014 c'est normal.",
+              "\u26a0\ufe0f Au-del\u00e0 de 150 000 lignes le fichier serait **tronqu\u00e9** : l'\u00e9cran te le dit avant, filtre alors par catalogue ou par boutique.",
+            ],
           },
           {
             h: "Quel prix wholesale ?",
             lines: [
-              "Deux boutons, parce que la question a deux r\u00e9ponses. **Prix factur\u00e9 sur la commande** (par d\u00e9faut) : le prix de la ligne, tel que la boutique le paie. **Tarif de gros du catalogue** : le prix avant remise.",
-              "\ud83d\udd34 Le prix du fichier **contient d\u00e9j\u00e0 la remise**. V\u00e9rifi\u00e9 : 79,80 \u20ac factur\u00e9s pour un tarif catalogue de 133 \u20ac et 40 % de remise. Ne la retire pas une deuxi\u00e8me fois \u00e0 la main.",
-              "Le fichier Excel \u00e9crit dans son onglet **Crit\u00e8res** lequel des deux a servi.",
+              "**Prix de la commande** : le prix r\u00e9ellement pay\u00e9 sur cette ligne. **Tarif de gros du catalogue** : le tarif de base, hors remise.",
+              "\ud83d\udd34 Sur une saison dont les commandes viennent de **TEXAS**, le prix de la commande est **indisponible** et le bouton est gris\u00e9. La raison : l'import Texas r\u00e9partit le total de la commande au prorata des pi\u00e8ces, donc toutes les lignes ressortent au m\u00eame prix \u2014 un blouson cuir et un pull sortiraient tous les deux \u00e0 37,75 \u20ac. Le tarif catalogue est utilis\u00e9 \u00e0 la place, et le fichier l'\u00e9crit.",
+              "L'onglet **Crit\u00e8res** du fichier dit toujours lequel des deux a servi.",
             ],
           },
           {
             h: "Ce qui peut rester vide",
             lines: [
-              "\u26a0\ufe0f **Prix de vente conseill\u00e9** : il n'existe pas sur tous les catalogues. Sur les exports de septembre 2026, **68 r\u00e9f\u00e9rences sur 112** n'en avaient pas (toutes les `CCPE27_`). L'\u00e9cran te liste lesquelles.",
-              "\u26a0\ufe0f **Code client** : vide si la commande n'est pas encore import\u00e9e dans GestLog. L'**enseigne** reste renseign\u00e9e, elle vient du fichier.",
-              "\u26a0\ufe0f **EAN** : si le fichier n'en a pas, GestLog va le chercher au r\u00e9f\u00e9rentiel. Introuvable, la cellule reste **vide** \u2014 un code-barres invent\u00e9 serait scann\u00e9 en caisse sur le mauvais article.",
-              "Une cellule vide ne fait **jamais** dispara\u00eetre la ligne.",
+              "\u26a0\ufe0f **Prix de vente conseill\u00e9** : il n'existe pas sur tous les catalogues. En PE27, **6 262 lignes sur 39 102** n'en ont pas (57 r\u00e9f\u00e9rences, toutes les `CCPE27_`).",
+              "\u26a0\ufe0f **EAN** : aujourd'hui **aucune** ligne n'en manque, mais si une taille n'avait pas de code-barres la cellule resterait **vide** \u2014 un code invent\u00e9 serait scann\u00e9 en caisse sur le mauvais article.",
+              "Une cellule vide ne fait **jamais** dispara\u00eetre la ligne, et l'\u00e9cran te dit combien il y en a.",
             ],
           },
           {
-            h: "Le bon fichier",
+            h: "Quelles commandes sont dedans",
             lines: [
-              "C'est l'export **\u00ab commandes EAN \u00bb** qu'il faut : une ligne par taille, avec son code-barres.",
-              "L'export **\u00ab \u00e0 la couleur \u00bb** est refus\u00e9, et l'\u00e9cran te dit pourquoi : il met les tailles en colonnes `T0\u2026T11` et ne porte aucun EAN.",
-              "Les lignes **sans r\u00e9f\u00e9rence** ou \u00e0 **quantit\u00e9 z\u00e9ro** sont \u00e9cart\u00e9es \u2014 et compt\u00e9es, l'\u00e9cran te dit combien.",
+              "Les **commandes** de la saison (les VSS sont hors p\u00e9rim\u00e8tre), avec les quantit\u00e9s **command\u00e9es** : les pi\u00e8ces sold\u00e9es ne sont pas d\u00e9duites.",
+              "\u26a0\ufe0f Si la saison porte \u00e0 la fois des commandes **TEXAS** et **TIO** \u2014 c'est le cas d'AH26 \u2014 seules les TEXAS sortent. Les compter toutes les deux doublerait les quantit\u00e9s. La source retenue est affich\u00e9e \u00e0 l'\u00e9cran.",
+              "Les tailles sont rang\u00e9es dans l'ordre de la **grille du produit** (S, M, L, XL\u2026), pas par ordre alphab\u00e9tique.",
             ],
           },
         ],

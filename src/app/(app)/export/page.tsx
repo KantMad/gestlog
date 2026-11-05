@@ -27,7 +27,7 @@ import { QuantitesCard } from "@/components/export/quantites-card";
 import { RecoupementCard } from "@/components/export/recoupement-card";
 import { EanSuppliersCard } from "@/components/export/ean-suppliers-card";
 import { DescriptionsCard } from "@/components/export/descriptions-card";
-import { CommandesEanCard } from "@/components/export/commandes-ean-card";
+import { CommandesProduitsCard } from "@/components/export/commandes-produits-card";
 
 interface ReceptionRow {
   id: string;
@@ -456,7 +456,7 @@ export default function ExportPage() {
           <h2 className="mb-3 text-sm font-semibold text-muted-foreground">
             Commandes clients — détail par code-barres
           </h2>
-          <CommandesEanCard />
+          <CommandesProduitsCard seasonId={seasonId} seasonName={season?.name || ""} />
         </div>
       </div>
     </div>

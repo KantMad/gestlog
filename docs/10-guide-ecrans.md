@@ -1126,55 +1126,68 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
     sur AH26) ; Réassort = 14 064 lignes, 1 740 couples réf×coloris, 175 boutiques,
     76 108 pièces, somme par coloris égale au total général.
 - **Commandes clients + infos produits et EAN** — *tout en bas de la page*
-  (`/api/export/commandes-ean-info` ; logique pure dans `lib/export-commandes-ean.ts`,
-  30 tests ; `components/export/commandes-ean-card.tsx`) : on dépose l'export TIO
-  **« commandes EAN »** et on obtient **un onglet de 14 colonnes**, dans l'ordre demandé —
-  `EAN`, `Référence produit`, `Nom produit`, `Libellé couleur`, `Code couleur`, `Taille`,
-  `Quantité commandée`, `Catégorie`, `Sous-catégorie`, `Prix wholesale`,
-  `Prix de vente conseillé`, `Numéro de commande client`, `Code client`, `Enseigne client`.
-  - 🔴 **Les 14 colonnes sont une LISTE BLANCHE, pas un filtrage.** Le fichier source en
-    porte 35, dont le nom, le prénom, le genre et l'e-mail du client **et** du responsable
-    commercial, plus les adresses de facturation. Rien d'autre que ces 14 colonnes ne peut
-    sortir, même si TIO ajoute des colonnes à son export. Un test échoue si une valeur
-    nominative réapparaît dans la sortie.
-  - 🔴 **« Prix à la variation » PORTE DÉJÀ LA REMISE — ne pas la redéduire.** *Mesuré sur
-    les 16 références des exports des 28 et 29/09/2026 : le prix du fichier vaut exactement
-    `Product.costPrice × 0,6`, et `Réduction à la variation` vaut 40 sur toutes les lignes
-    (79,80 € facturés pour un tarif catalogue de 133 €).* Le prix du fichier est donc le
-    **prix facturé**, remise comprise.
-  - Le **choix du prix wholesale est explicite** (bouton à deux positions, défaut *prix
-    facturé sur la commande*) : *tarif de gros du catalogue* (`Product.costPrice`, avant
-    remise) est l'autre réponse légitime à « le prix wholesale ». L'onglet `Critères` écrit
-    lequel a servi — un chiffre à 40 % près sans mention de l'origine serait indéfendable.
-  - **`Prix de vente conseillé`** = `Product.salePrice` (TIO `min_retail_price`,
-    catalogue 209), le seul des 14 champs que le fichier ne porte pas du tout. ⚠️ **Il
-    manque sur les catalogues hors 209** : *sur les trois exports de septembre 2026,
-    68 des 112 références n'en ont pas — toutes les `CCPE27_*`, qui ont pourtant un
-    `costPrice`.* Cellule vide, référence listée à l'écran.
-  - **`Code client`** = `Client.code` (ex. `BAZAR09201`), retrouvé par le **numéro de
-    commande** (`ClientOrder.orderNumber` **ou** `tioOrderNumber` : l'export écrit
-    `IS-455405299095`, que GestLog range dans l'un ou l'autre selon la source TIO/Texas).
-    *13 des 14 commandes des exports de septembre 2026 sont ainsi rattachées ;* la
-    quatorzième n'est pas importée → code vide, **enseigne conservée**.
-  - ⚠️ **Une commande rattachée à DEUX fiches boutique** (doublon de saison) retient le
-    premier code par ordre alphabétique **et l'écran affiche le conflit** : en inventer un
-    serait pire.
+  (`/api/export/commandes-produits` ; logique pure dans `lib/export-commandes-produits.ts`,
+  25 tests ; `components/export/commandes-produits-card.tsx`) : **généré par GestLog depuis
+  la base**, rien à déposer. Un onglet de **14 colonnes** — `EAN`, `Référence produit`,
+  `Nom produit`, `Libellé couleur`, `Code couleur`, `Taille`, `Quantité commandée`,
+  `Catégorie`, `Sous-catégorie`, `Prix wholesale`, `Prix de vente conseillé`,
+  `Numéro de commande client`, `Code client`, `Enseigne client` — plus un onglet `Critères`.
+  - **Une ligne par commande × produit × coloris × TAILLE.** 🔴 Les quantités sont stockées
+    en JSON (`ClientOrderLine.quantitiesBySize` = `{"S":1,"M":2}`) : une ligne de base vaut
+    plusieurs lignes d'export, éclatées en SQL par `jsonb_each`. Les tailles à **quantité
+    nulle** sont écartées — une taille à 0 n'a pas été commandée. *Mesuré le 05/11/2026 :
+    94 219 lignes de commande → **383 891 lignes taille**, 831 704 pièces.*
+  - **Le classeur est construit CÔTÉ SERVEUR** et renvoyé en pièce jointe. Une saison fait
+    35 000 à 40 000 lignes : les renvoyer en JSON pour que le navigateur fabrique le fichier
+    ferait passer une dizaine de Mo pour rien. *Mesuré : PE27 → 39 102 lignes, xlsx de
+    5,97 Mo en 791 ms ; la requête SQL en 482 ms.*
+  - **`?count=1`** rend les compteurs seuls (84–126 ms) : l'écran annonce « 39 102 lignes,
+    80 727 pièces » **avant** le téléchargement, et prévient si le plafond de
+    150 000 lignes serait atteint (fichier tronqué, en-tête `X-Capped`).
+  - 🔴 **LE PRIX DE LA COMMANDE EST REFUSÉ SUR TEXAS.** Il n'existe aucun prix unitaire en
+    base : `ClientOrderLine.amount` est le CA **net de la ligne**, et le prix est donc
+    reconstruit par `amount / totalQuantity`. *Vérifié sur les commandes de plus de deux
+    lignes : côté **TIO**, 8,91 prix unitaires distincts par commande en moyenne (3 235 des
+    3 349 commandes en ont plusieurs) et la médiane du rapport au `costPrice` vaut
+    exactement **1,000** sur neuf saisons — le prix est bien celui de la ligne. Côté
+    **TEXAS**, **225 des 269 commandes n'ont qu'UN SEUL prix unitaire pour toutes leurs
+    lignes** : l'import répartit le total au prorata des pièces, si bien qu'un blouson cuir
+    à 109,06 € de tarif et un pull à 24,97 € ressortent tous deux à 37,75 €.* Sur une saison
+    TEXAS, ce « prix » est donc la **moyenne de la commande**, pas celui du produit : le
+    bouton est **désactivé**, l'export se rabat sur `Product.costPrice`, et le dit
+    (`X-Wholesale-Forced`, bandeau à l'écran, ligne dans `Critères`). `prixCommandeExploitable()`
+    et `RAISON_PRIX_TEXAS` portent cette règle, testées.
+  - **Deux origines pour le prix wholesale** : *prix de la commande* (reconstruit, défaut sur
+    TIO) ou *tarif de gros du catalogue* (`Product.costPrice`, hors remise). L'onglet
+    `Critères` écrit lequel a servi.
+  - **`Prix de vente conseillé`** = `Product.salePrice` (TIO, catalogue 209). ⚠️ **Manquant
+    hors catalogue 209** : *6 262 lignes sur 39 102 en PE27 (57 réfs), 3 584 sur 34 689 en
+    AH26 (68 réfs), toutes les `CCPE27_*`.* Cellule vide, compté et signalé.
+  - **`EAN`** = `ProductSizeEan` (référence × couleur × taille). *Couverture mesurée :
+    383 891 lignes taille, **383 891 avec EAN — zéro manquant**, et les écritures de taille
+    du JSON et de la table coïncident exactement.* Une taille sans EAN laisserait la cellule
+    **vide** (jamais un code inventé) et serait comptée.
   - 🔴 **L'EAN reste du TEXTE.** Converti en nombre, un code à 13 chiffres s'affiche
-    `3,66525E+12` dans Excel et perd ses zéros de tête. Quantité et prix, eux, sont des
-    **NOMBRES** (formats `#,##0` et `#,##0.00 €`) : Excel doit pouvoir sommer et filtrer.
-  - **EAN complété depuis le référentiel** (`ProductSizeEan` sur référence × code couleur ×
-    taille) quand le fichier n'en porte pas, et **seulement** pour ces lignes-là : sur un
-    export EAN complet, zéro clé part au serveur. Une taille introuvable laisse la cellule
-    **vide** — un code-barres inventé serait scanné en caisse sur le mauvais article.
-  - `Libellé couleur`, `Catégorie` et `Sous-catégorie` viennent du **fichier** d'abord, du
-    référentiel en repli : le fichier porte la vérité de la commande.
-  - **Le fichier ne quitte pas le navigateur.** Seules partent au serveur : les références
-    distinctes, les numéros de commande, et les triplets taille des lignes **sans** EAN.
-  - Lignes **sans référence** ou à **quantité ≤ 0** écartées **et comptées** (affichées au
-    dépôt). L'export **« à la couleur »** est refusé avec la raison : il met les tailles en
-    colonnes `T0…T11` et ne porte **aucun** EAN.
-  - *Validé sur les exports des 28 et 29/09/2026 : 112 références, 14 commandes,
-    400/400 EAN retrouvés au référentiel, 13/14 codes clients.*
+    `3,66525E+12` et perd ses zéros de tête. Un test relit le xlsx produit pour vérifier que
+    la colonne ressort bien en chaîne après l'aller-retour Excel. Quantité et prix sont des
+    **NOMBRES** (`#,##0` et `#,##0.00 €`).
+  - 🔴 **Les tailles sont remises dans l'ordre de la GRILLE du produit**
+    (`Product.sizeScale`), coloris par coloris. Triées alphabétiquement, `{S,M,L,XL,2XL}`
+    ressortirait « 2XL, L, M, S, XL » sur un document qui sert à préparer une commande. Une
+    taille **hors grille** va à la fin plutôt que d'être perdue. *Vérifié sur AH26 :
+    `S → M → L → XL → 2XL → 4XL`.*
+  - ⚠️ **Source des commandes** : `resolveOrderSource` (TEXAS dès qu'il existe des commandes
+    Texas sur la saison, sinon TIO). Sans ce filtre, **AH26 — 282 commandes TEXAS et
+    337 TIO — sortirait en double**. La source retenue est affichée et écrite dans `Critères`.
+  - ⚠️ **Quantités COMMANDÉES** : les pièces soldées (`cancelledBySize`) ne sont **pas**
+    déduites, et le périmètre est `orderType = COMMANDE` (hors VSS), comme sur les autres
+    écrans B2B.
+  - **Filtres** : catalogue, boutiques (inclure / exclure), références (`REF` ou
+    `REF_COLORIS`, préfixe accepté). Aucune valeur d'utilisateur n'entre dans le texte SQL :
+    tout passe en paramètres numérotés.
+  - *Validé sur la base de production : PE27 → 39 102 lignes / 80 727 pièces / 322 réfs /
+    211 commandes / 165 boutiques / 1 985 185,87 € ; AH26 → 34 689 lignes / **69 925
+    pièces** (le total AH26 documenté plus haut) / 343 réfs / 282 commandes / 191 boutiques.*
 
 ## Utilisateurs (`/users`, ADMIN) & Mon compte (`/account`)
 - **Utilisateurs** : `User` (nom, code ≥4 chiffres, rôle, `isActive`, `screenAccess` JSON).
