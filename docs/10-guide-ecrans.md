@@ -1182,9 +1182,25 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
   - ⚠️ **Quantités COMMANDÉES** : les pièces soldées (`cancelledBySize`) ne sont **pas**
     déduites, et le périmètre est `orderType = COMMANDE` (hors VSS), comme sur les autres
     écrans B2B.
-  - **Filtres** : catalogue, boutiques (inclure / exclure), références (`REF` ou
-    `REF_COLORIS`, préfixe accepté). Aucune valeur d'utilisateur n'entre dans le texte SQL :
-    tout passe en paramètres numérotés.
+  - **Filtres** : catalogue, boutiques (inclure / exclure), **numéros de commande**,
+    références (`REF` ou `REF_COLORIS`, préfixe accepté). Aucune valeur d'utilisateur
+    n'entre dans le texte SQL : tout passe en paramètres numérotés.
+  - **Filtre par commande, deux chemins qui se cumulent** : on **coche** dans la liste des
+    commandes du périmètre (`?list=orders`, restreinte par le catalogue et les boutiques —
+    *211 commandes pour PE27 en 66 ms, 3 après sélection de deux boutiques*), **ou** on
+    **tape** un ou plusieurs numéros. Les deux ensembles sont réunis, dédoublonnés.
+    - 🔴 **Le périmètre de la LISTE exclut les numéros choisis.** Sinon cocher la première
+      commande ferait disparaître toutes les autres du sélecteur.
+    - 🔴 **Le préfixe est facultatif.** Un numéro est recopié d'un e-mail ou d'un BL : la
+      correspondance est tentée à l'identique sur `orderNumber` **et** `tioOrderNumber`
+      (casse ignorée), puis en « contient ». *Vérifié : `754287027085` retrouve
+      `PO-754287027085` — 350 lignes, 871 pièces, comme le numéro complet.*
+    - 🔴 **Un numéro sans correspondance est DIT, pas ignoré.** Il est renvoyé
+      (`numerosInconnus`, en-tête `X-Unknown-Orders`, ligne dans `Critères`, bandeau ambre)
+      et, s'il ne reste aucune ligne, le message d'erreur le nomme. Une faute de frappe
+      donnerait sinon un fichier vide sans explication.
+    - Une commande cochée qui **sort** du périmètre (changement de boutique) est décochée :
+      filtrer sur une commande absente de la liste n'aurait aucun sens.
   - *Validé sur la base de production : PE27 → 39 102 lignes / 80 727 pièces / 322 réfs /
     211 commandes / 165 boutiques / 1 985 185,87 € ; AH26 → 34 689 lignes / **69 925
     pièces** (le total AH26 documenté plus haut) / 343 réfs / 282 commandes / 191 boutiques.*

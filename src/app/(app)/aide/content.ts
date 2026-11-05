@@ -1124,9 +1124,18 @@ export const HELP_THEMES: HelpTheme[] = [
           {
             h: "Restreindre le fichier",
             lines: [
-              "Trois filtres : le **catalogue**, les **boutiques** (soit *seulement celles-ci*, soit *toutes sauf celles-ci*) et les **r\u00e9f\u00e9rences** (tu peux \u00e9crire `SMPTCH_C001`, ou juste `CCPE27` pour prendre tout ce qui commence par l\u00e0).",
+              "Quatre filtres : le **catalogue**, les **boutiques** (soit *seulement celles-ci*, soit *toutes sauf celles-ci*), les **commandes** et les **r\u00e9f\u00e9rences** (tu peux \u00e9crire `SMPTCH_C001`, ou juste `CCPE27` pour prendre tout ce qui commence par l\u00e0).",
               "Sans filtre, tu as toute la saison. Une saison compl\u00e8te fait entre 35 000 et 40 000 lignes \u2014 c'est normal.",
               "\u26a0\ufe0f Au-del\u00e0 de 150 000 lignes le fichier serait **tronqu\u00e9** : l'\u00e9cran te le dit avant, filtre alors par catalogue ou par boutique.",
+            ],
+          },
+          {
+            h: "Choisir une commande",
+            lines: [
+              "Deux fa\u00e7ons, et elles se **cumulent**. Soit tu **coches** dans la liste \u2014 si tu as d'abord s\u00e9lectionn\u00e9 une boutique, la liste ne montre que ses commandes. Soit tu **tapes** le num\u00e9ro dans le champ du dessous.",
+              "**Le pr\u00e9fixe est facultatif** : `754287027085` retrouve `PO-754287027085`. Plusieurs num\u00e9ros se s\u00e9parent par une virgule ou un espace.",
+              "\u26a0\ufe0f Si un num\u00e9ro ne correspond \u00e0 rien, l'\u00e9cran te le dit **avant** le t\u00e9l\u00e9chargement \u2014 une faute de frappe ne te donnera pas un fichier vide sans explication. V\u00e9rifie alors la saison et la boutique.",
+              "Rien de coch\u00e9 ni de tap\u00e9 = toutes les commandes du p\u00e9rim\u00e8tre.",
             ],
           },
           {

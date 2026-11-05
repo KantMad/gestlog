@@ -18,7 +18,11 @@ export const maxDuration = 120;
 // GET — Commandes clients + infos produits et EAN, généré depuis la BASE GestLog.
 //
 // ?seasonId (requis)  ?catalogId  ?clients=id,id  ?clientMode=include|exclude
+// ?orders=IS-123,PO-456  (numéros de commande ; exact sur orderNumber OU tioOrderNumber,
+//                         sinon « contient » — pour qu'un numéro recopié sans son préfixe
+//                         « IS- » trouve quand même sa commande)
 // ?sku=REF1,REF2      ?wholesale=commande|catalogue   ?count=1 (compte seul, sans fichier)
+// ?list=orders        (liste des commandes du périmètre, pour le sélecteur de l'écran)
 //
 // Rend un **classeur xlsx** (une ligne par commande × produit × coloris × taille) ou, avec
 // `count=1`, seulement les compteurs — pour que l'écran annonce le volume avant de lancer
@@ -53,6 +57,16 @@ export async function GET(request: NextRequest) {
     const skus = (p.get("sku") || "").split(",").map((s) => s.trim().toUpperCase()).filter(Boolean);
     const wholesaleDemande = p.get("wholesale") === "catalogue" ? "catalogue" : "commande";
     const countOnly = p.get("count") === "1";
+    const listOrders = p.get("list") === "orders";
+    // Numéros saisis OU cochés : les deux arrivent ici, dédoublonnés.
+    const orderNumbers = [
+      ...new Set(
+        (p.get("orders") || "")
+          .split(/[,;\s]+/)
+          .map((s) => s.trim())
+          .filter(Boolean)
+      ),
+    ];
 
     const [season, source] = await Promise.all([
       prisma.season.findUnique({ where: { id: seasonId }, select: { name: true } }),
@@ -82,6 +96,66 @@ export async function GET(request: NextRequest) {
           : `co."clientId" = ANY($${params.length}::text[])`
       );
     }
+    // Périmètre COMMANDE figé ici : le sélecteur de commandes de l'écran doit lister
+    // toutes les commandes de la boutique, y compris celles qui ne sont pas (encore)
+    // cochées — sinon cocher la première ferait disparaître les autres.
+    const condsPerimetre = [...conds];
+    const paramsPerimetre = [...params];
+
+    if (listOrders) {
+      const rows = await prisma.$queryRawUnsafe<
+        {
+          orderNumber: string;
+          clientName: string | null;
+          clientCode: string | null;
+          orderDate: Date | null;
+          lignes: number;
+          pieces: number;
+        }[]
+      >(
+        `SELECT co."orderNumber"                       AS "orderNumber",
+                cl."name"                              AS "clientName",
+                cl."code"                              AS "clientCode",
+                co."orderDate"                         AS "orderDate",
+                count(col.id)::int                     AS lignes,
+                COALESCE(sum(col."totalQuantity"), 0)::int AS pieces
+           FROM "ClientOrder" co
+           JOIN "Client" cl ON cl.id = co."clientId"
+           LEFT JOIN "ClientOrderLine" col ON col."clientOrderId" = co.id
+          WHERE ${condsPerimetre.join(" AND ")}
+          GROUP BY co."orderNumber", cl."name", cl."code", co."orderDate"
+          HAVING count(col.id) > 0
+          ORDER BY cl."name", co."orderNumber"
+          LIMIT 3000`,
+        ...paramsPerimetre
+      );
+      return NextResponse.json({
+        data: {
+          orders: rows.map((r) => ({
+            ...r,
+            orderDate: r.orderDate ? r.orderDate.toISOString().slice(0, 10) : null,
+          })),
+          source,
+          seasonName: season.name,
+        },
+      });
+    }
+
+    // 🔴 Un numéro de commande est recopié à la main, d'un e-mail ou d'un BL. On accepte
+    // donc l'écriture exacte (sur `orderNumber` comme sur `tioOrderNumber`, la casse en
+    // moins) ET le « contient » : « 455405299095 » retrouve « IS-455405299095 ». Un numéro
+    // qui ne correspond à rien n'est pas ignoré en silence — il est compté et renvoyé.
+    if (orderNumbers.length > 0) {
+      params.push(orderNumbers);
+      const i = params.length;
+      conds.push(
+        `EXISTS (SELECT 1 FROM unnest($${i}::text[]) AS o(v)
+                  WHERE upper(co."orderNumber") = upper(o.v)
+                     OR upper(COALESCE(co."tioOrderNumber", '')) = upper(o.v)
+                     OR upper(co."orderNumber") LIKE '%' || upper(o.v) || '%'
+                     OR upper(COALESCE(co."tioOrderNumber", '')) LIKE '%' || upper(o.v) || '%')`
+      );
+    }
     // Un SKU saisi vaut pour la référence seule ou pour « RÉFÉRENCE_COLORIS » : les deux
     // écritures circulent dans les fichiers métier.
     if (skus.length > 0) {
@@ -99,6 +173,27 @@ export async function GET(request: NextRequest) {
     }
 
     const where = conds.join(" AND ");
+
+    // Numéros saisis sans correspondance : une faute de frappe ne doit pas rendre un
+    // fichier vide sans explication.
+    const inconnus =
+      orderNumbers.length > 0
+        ? (
+            await prisma.$queryRawUnsafe<{ v: string }[]>(
+              `SELECT o.v
+                 FROM unnest($${paramsPerimetre.length + 1}::text[]) AS o(v)
+                WHERE NOT EXISTS (
+                      SELECT 1 FROM "ClientOrder" co
+                       WHERE ${condsPerimetre.join(" AND ")}
+                         AND (upper(co."orderNumber") = upper(o.v)
+                           OR upper(COALESCE(co."tioOrderNumber", '')) = upper(o.v)
+                           OR upper(co."orderNumber") LIKE '%' || upper(o.v) || '%'
+                           OR upper(COALESCE(co."tioOrderNumber", '')) LIKE '%' || upper(o.v) || '%'))`,
+              ...paramsPerimetre,
+              orderNumbers
+            )
+          ).map((r) => r.v)
+        : [];
 
     // 🔴 `quantitiesBySize` est un JSON stocké en texte : `{"S":1,"M":2}`. Une ligne de
     // base vaut donc plusieurs lignes d'export, éclatées ici par `jsonb_each`.
@@ -140,6 +235,7 @@ export async function GET(request: NextRequest) {
           plafond: MAX_LIGNES,
           prixCommandeExploitable: prixCommandeExploitable(source),
           raisonPrix: prixCommandeExploitable(source) ? null : RAISON_PRIX_TEXAS,
+          numerosInconnus: inconnus,
         },
       });
     }
@@ -187,7 +283,13 @@ export async function GET(request: NextRequest) {
 
     if (out.rows.length === 0) {
       return NextResponse.json(
-        { error: "Aucune ligne pour cette sélection", data: { source, seasonName: season.name } },
+        {
+          error:
+            inconnus.length > 0
+              ? `Aucune commande ne correspond à : ${inconnus.join(", ")}`
+              : "Aucune ligne pour cette sélection",
+          data: { source, seasonName: season.name, numerosInconnus: inconnus },
+        },
         { status: 404 }
       );
     }
@@ -234,6 +336,13 @@ export async function GET(request: NextRequest) {
               ? "toutes"
               : `${clientIds.length} ${clientMode === "exclude" ? "exclue(s)" : "incluse(s)"}`,
         },
+        {
+          Critère: "Commandes filtrées",
+          Valeur: orderNumbers.length === 0 ? "toutes" : orderNumbers.join(", "),
+        },
+        ...(inconnus.length > 0
+          ? [{ Critère: "Numéros saisis sans correspondance", Valeur: inconnus.join(", ") }]
+          : []),
         { Critère: "Références filtrées", Valeur: skus.length === 0 ? "toutes" : skus.join(", ") },
         { Critère: "Lignes", Valeur: out.rows.length },
         { Critère: "Pièces commandées", Valeur: out.pieces },
@@ -287,6 +396,7 @@ export async function GET(request: NextRequest) {
         "X-Source": source,
         "X-Wholesale": wholesaleSource,
         "X-Wholesale-Forced": wholesaleForce ? "1" : "0",
+        "X-Unknown-Orders": String(inconnus.length),
         "X-Capped": plafondAtteint ? "1" : "0",
       },
     });

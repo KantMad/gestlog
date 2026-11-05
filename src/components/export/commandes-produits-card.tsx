@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,14 @@ interface Boutique {
   code: string;
   name: string;
 }
+interface Commande {
+  orderNumber: string;
+  clientName: string | null;
+  clientCode: string | null;
+  orderDate: string | null;
+  lignes: number;
+  pieces: number;
+}
 interface Compte {
   lignes: number;
   pieces: number;
@@ -34,6 +42,7 @@ interface Compte {
   plafond: number;
   prixCommandeExploitable: boolean;
   raisonPrix: string | null;
+  numerosInconnus: string[];
 }
 
 export function CommandesProduitsCard({
@@ -50,6 +59,11 @@ export function CommandesProduitsCard({
   const [clientMode, setClientMode] = useState<"include" | "exclude">("include");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [recherche, setRecherche] = useState("");
+  const [commandes, setCommandes] = useState<Commande[]>([]);
+  const [cmdCochees, setCmdCochees] = useState<Set<string>>(new Set());
+  const [cmdSaisies, setCmdSaisies] = useState("");
+  const [cmdRecherche, setCmdRecherche] = useState("");
+  const [cmdChargement, setCmdChargement] = useState(false);
   const [wholesale, setWholesale] = useState<"commande" | "catalogue">("commande");
   const [compte, setCompte] = useState<Compte | null>(null);
   const [comptage, setComptage] = useState(false);
@@ -71,18 +85,68 @@ export function CommandesProduitsCard({
       .catch(() => setBoutiques([]));
   }, []);
 
-  // Filtres de périmètre, SANS le prix : changer l'origine du prix ne change pas le nombre
-  // de lignes, et relancerait un comptage pour rien.
-  const filtres = useCallback(() => {
+  // Numéros cochés dans la liste ET numéros tapés à la main : les deux comptent, en
+  // union. Cocher une commande puis en taper une autre prend les deux.
+  const numeros = useMemo(() => {
+    const tapes = cmdSaisies.split(/[,;\s]+/).map((x) => x.trim()).filter(Boolean);
+    return [...new Set([...cmdCochees, ...tapes])];
+  }, [cmdCochees, cmdSaisies]);
+
+  // Périmètre BOUTIQUE : ce qui restreint la liste des commandes. Les numéros n'en font
+  // pas partie — sinon cocher la première commande ferait disparaître les autres.
+  const filtresBoutique = useCallback(() => {
     const q = new URLSearchParams({ seasonId });
     if (catalogId) q.set("catalogId", catalogId);
-    if (sku.trim()) q.set("sku", sku.trim());
     if (selected.size > 0) {
       q.set("clients", [...selected].join(","));
       q.set("clientMode", clientMode);
     }
     return q;
-  }, [seasonId, catalogId, sku, selected, clientMode]);
+  }, [seasonId, catalogId, selected, clientMode]);
+
+  // Filtres complets, SANS le prix : changer l'origine du prix ne change pas le nombre de
+  // lignes, et relancerait un comptage pour rien.
+  const filtres = useCallback(() => {
+    const q = filtresBoutique();
+    if (sku.trim()) q.set("sku", sku.trim());
+    if (numeros.length > 0) q.set("orders", numeros.join(","));
+    return q;
+  }, [filtresBoutique, sku, numeros]);
+
+  // Liste des commandes du périmètre boutique, pour le sélecteur.
+  useEffect(() => {
+    if (!seasonId) {
+      setCommandes([]);
+      return;
+    }
+    let annule = false;
+    setCmdChargement(true);
+    const q = filtresBoutique();
+    q.set("list", "orders");
+    fetch(`/api/export/commandes-produits?${q.toString()}`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (annule) return;
+        const liste: Commande[] = d.data?.orders || [];
+        setCommandes(liste);
+        // Une commande cochée qui sort du périmètre (changement de boutique) est
+        // décochée : la garder filtrerait sur une commande absente de la liste.
+        const connus = new Set(liste.map((o) => o.orderNumber));
+        setCmdCochees((prev) => {
+          const n = new Set([...prev].filter((x) => connus.has(x)));
+          return n.size === prev.size ? prev : n;
+        });
+      })
+      .catch(() => {
+        if (!annule) setCommandes([]);
+      })
+      .finally(() => {
+        if (!annule) setCmdChargement(false);
+      });
+    return () => {
+      annule = true;
+    };
+  }, [seasonId, filtresBoutique]);
 
   // Comptage avant téléchargement : on annonce le volume plutôt que de lancer un fichier
   // de 40 000 lignes à l'aveugle.
@@ -125,6 +189,22 @@ export function CommandesProduitsCard({
     const q = recherche.trim().toLowerCase();
     return !q || b.name.toLowerCase().includes(q) || b.code.toLowerCase().includes(q);
   });
+  const commandesFiltrees = commandes.filter((o) => {
+    const q = cmdRecherche.trim().toLowerCase();
+    return (
+      !q ||
+      o.orderNumber.toLowerCase().includes(q) ||
+      (o.clientName || "").toLowerCase().includes(q) ||
+      (o.clientCode || "").toLowerCase().includes(q)
+    );
+  });
+  const basculerCmd = (num: string) =>
+    setCmdCochees((prev) => {
+      const n = new Set(prev);
+      if (n.has(num)) n.delete(num);
+      else n.add(num);
+      return n;
+    });
   const basculer = (id: string) =>
     setSelected((prev) => {
       const n = new Set(prev);
@@ -177,6 +257,11 @@ export function CommandesProduitsCard({
       if (h("X-No-Wholesale") > 0)
         toast.warning(
           `${formatNumber(h("X-No-Wholesale"))} ligne(s) sans prix wholesale : le total est sous-estimé.`
+        );
+      if (h("X-Unknown-Orders") > 0)
+        toast.warning(
+          `${h("X-Unknown-Orders")} numéro(s) de commande sans correspondance — aucune ligne ajoutée pour eux.`,
+          { duration: 9000 }
         );
       if (res.headers.get("X-Capped") === "1")
         toast.warning("Fichier tronqué au plafond — filtre par catalogue ou par boutique.", {
@@ -314,6 +399,110 @@ export function CommandesProduitsCard({
               : `${selected.size} boutique(s) ${clientMode === "exclude" ? "exclue(s)" : "incluse(s)"}.`}
           </p>
         </div>
+
+        {/* Commandes : on coche dans la liste (restreinte par la boutique) OU on tape un
+            numéro. Les deux se cumulent. */}
+        <div>
+          <div className="mb-1.5 flex items-center justify-between">
+            <p className="text-xs font-medium text-muted-foreground">
+              Commandes{" "}
+              {cmdChargement ? (
+                <span className="opacity-60">(chargement…)</span>
+              ) : (
+                <span className="opacity-60">({formatNumber(commandes.length)} dans le périmètre)</span>
+              )}
+            </p>
+            {cmdCochees.size > 0 && (
+              <button
+                type="button"
+                className="text-xs text-muted-foreground hover:underline"
+                onClick={() => setCmdCochees(new Set())}
+              >
+                Tout décocher
+              </button>
+            )}
+          </div>
+          <div className="rounded-md border">
+            <div className="flex items-center gap-2 border-b p-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  value={cmdRecherche}
+                  onChange={(e) => setCmdRecherche(e.target.value)}
+                  placeholder="Rechercher un numéro ou une boutique…"
+                  className="w-full rounded border-0 bg-transparent pl-7 text-sm outline-none"
+                />
+              </div>
+            </div>
+            <div className="max-h-40 overflow-y-auto p-1">
+              {commandesFiltrees.length === 0 ? (
+                <p className="px-2 py-3 text-center text-xs text-muted-foreground">
+                  {commandes.length === 0
+                    ? "Aucune commande dans ce périmètre."
+                    : "Aucun résultat."}
+                </p>
+              ) : (
+                commandesFiltrees.slice(0, 300).map((o) => (
+                  <label
+                    key={o.orderNumber}
+                    className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm hover:bg-muted/50"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={cmdCochees.has(o.orderNumber)}
+                      onChange={() => basculerCmd(o.orderNumber)}
+                      className="h-3.5 w-3.5"
+                    />
+                    <span className="min-w-0 flex-1 truncate">
+                      <span className="font-mono text-xs">{o.orderNumber}</span>{" "}
+                      <span className="text-xs text-muted-foreground">
+                        · {o.clientName || o.clientCode || "—"} · {formatNumber(o.pieces)} pcs
+                        {o.orderDate ? ` · ${o.orderDate}` : ""}
+                      </span>
+                    </span>
+                  </label>
+                ))
+              )}
+            </div>
+          </div>
+
+          <div className="mt-2 space-y-1.5">
+            <label htmlFor="cp-numeros" className="text-xs font-medium text-muted-foreground">
+              …ou tape directement un ou plusieurs numéros
+            </label>
+            <Input
+              id="cp-numeros"
+              value={cmdSaisies}
+              onChange={(e) => setCmdSaisies(e.target.value)}
+              placeholder="IS-455405299095, PO-754287027085…"
+              className="font-mono text-sm"
+            />
+            <p className="text-xs text-muted-foreground">
+              Le préfixe est facultatif : <span className="font-mono">754287027085</span> retrouve{" "}
+              <span className="font-mono">PO-754287027085</span>. Plusieurs numéros se séparent
+              par une virgule ou un espace.
+            </p>
+          </div>
+
+          <p className="mt-1 text-xs text-muted-foreground">
+            {numeros.length === 0
+              ? "Aucune commande choisie = toutes celles du périmètre."
+              : `${numeros.length} commande(s) demandée(s)${cmdCochees.size > 0 && cmdSaisies.trim() ? " (cochées + saisies)" : ""}.`}
+          </p>
+        </div>
+
+        {compte && compte.numerosInconnus?.length > 0 && (
+          <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+            <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>
+              <strong>
+                {compte.numerosInconnus.length} numéro(s) sans correspondance
+              </strong>{" "}
+              : <span className="font-mono">{compte.numerosInconnus.join(", ")}</span>. Vérifie la
+              saisie, la saison et la boutique — ces numéros n&apos;ajoutent aucune ligne.
+            </span>
+          </div>
+        )}
 
         {/* Le prix wholesale n'a pas une seule définition — et sur TEXAS il n'en a qu'une. */}
         <div>
