@@ -82,3 +82,34 @@ du RMPULL_W001 en bleu marine » :
 - Référence inconnue : `{ "trouve": false, "candidats": [{ "reference", "nom" }] }` (10 au plus,
   recherche dans la référence et la désignation).
 - Code : `src/app/api/assistant/produit/route.ts`, `src/lib/assistant-fiche.ts` (testé).
+
+## `GET /api/assistant/clients?recherche=texte`
+
+Même clé. **Données personnelles** : réservé à l'assistant de Kant, jamais à celui de l'équipe
+(le Mac mini ne branche cette route que pour Kant). Mots de 3 lettres ou plus, cherchés dans :
+
+- `b2b[]` : `Client` (nom, code, email, ville et CP de livraison) ; commandes **TIO** hors
+  `ANNULEE`, total, détail par saison et 5 dernières commandes.
+- `site[]` : commandes `BtocOrder` et `HistOrder` (ancien site) regroupées par email, fiche
+  `BtocCustomer` en complément (téléphone, VIP) ; dépense TTC remboursements déduits, statuts
+  `cancelled`, `refunded`, `failed` exclus ; 5 dernières commandes (toutes, avec leur statut).
+- Seuls les clients qui contiennent le **plus** de mots de la recherche, 5 au plus de chaque.
+
+## `GET /api/assistant/commandes?numero=N` ou `?jour=YYYY-MM-DD`
+
+Même clé. `numero` : la commande B2B (`orderNumber` ou `tioOrderNumber`), du site (`orderNumber`
+ou id WooCommerce) ou de l'ancien site, avec ses lignes. `jour` : les commandes du site de ce jour
+de Paris (50 au plus), `compte: false` pour celles exclues du CA.
+
+## `GET /api/assistant/statistiques?debut=YYYY-MM-DD&fin=YYYY-MM-DD`
+
+Même clé, 366 jours au plus, avec les mêmes totaux sur la même période de l'an dernier :
+
+- `site` : commandes, CA TTC net, CA HT (estimé : remboursement retiré au prorata du TTC de la
+  commande), panier moyen, articles, clients distincts, nouveaux clients (première commande, site
+  ou ancien site, dans la période), 5 premiers pays (livraison), catégories globales (titre du
+  produit, remboursements par ligne déduits), 5 meilleurs clients.
+- `b2b` : commandes TIO hors annulées (par date de commande TIO), montant au prix de gros,
+  clients distincts, commandes sans montant, 5 meilleurs clients.
+- Code : `src/app/api/assistant/{clients,commandes,statistiques}/route.ts`,
+  `src/lib/assistant-clients.ts` (testé).
