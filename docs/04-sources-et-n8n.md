@@ -55,8 +55,8 @@ Tables/clés utiles :
 
 | Workflow | ID | Rôle | Déclencheurs |
 |---|---|---|---|
-| **GestLog — Sync produits + EAN** | `NvAbzIgKKw5OvTk1` | Lit `lng_product` + variations, transforme (prix cat. 209, couleur code+nom, catégories, tailles) → POST `/api/sync/products`. Remplit `Product` + `ProductSizeEan`. | Schedule **toutes les 6h** + webhook **GET `/webhook/gestlog-test-products`** (test manuel) |
-| **Sync commandes** | `16sDefOysHJJstHE` | Commandes TIO → `/api/sync/orders`. Routage saison **Réassort** inclus. | (schedule/webhook) |
+| **GestLog — Sync produits + EAN** | `NvAbzIgKKw5OvTk1` | Lit `lng_product` + variations, transforme (prix cat. 209, couleur code+nom, catégories, tailles) → POST `/api/sync/products`. Remplit `Product` + `ProductSizeEan`. | Schedule **quotidien 05 h 05** + webhook **GET `/webhook/gestlog-test-products`** (test manuel) |
+| **GestLog — Sync commandes clients** | `16sDefOysHJJstHE` | `lng_order` (+ `lng_shop`, `lng_catalog`, `lng_content` tailles) → `/api/sync/orders`. ⚠️ **Lignes lues dans `lng_order.product_data` (JSON)** — il n'y a pas de table de lignes. Fenêtre glissante **30 jours** sur `date_update`, `LIMIT 1000` : synchro **incrémentale**, pas un instantané. Routage saison **Réassort** inclus. | Schedule **quotidien 05 h 00** + webhook de test |
 | **Sync BL/FAC (FTP)** | — | Récupère BL & factures dépôt depuis un **FTP**, parse, POST `/api/sync/shipments`. Remplit `WarehouseDocument(+Line)`. Lien BL↔commande TIO via le **nom de fichier** (`IS-xxx`). | (schedule) |
 | **Explore** | `rph8qNuSGm7k2iWv` | Sonde TIO (debug). `curl https://centralway.pro/webhook/gestlog-explore` renvoie 1 ligne du dernier nœud. | webhook |
 | **BtoC (WooCommerce)** | `wH890xjpZS616wpW` | Voir [`07-btoc-brevo.md`](07-btoc-brevo.md). Exécution longue (**~30 min**). | (schedule) |
