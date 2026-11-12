@@ -8,8 +8,10 @@ import { prisma } from "@/lib/prisma";
 import { parseTexasClientOrders, parseMcsClientOrders } from "@/lib/import/mcs-format";
 import {
   detecterFormat, lireFormatLong, lireColorOrders, lireTexasStatgen, decoderTailesTexas,
-  texteCsv, type FormatControle,
+  texteCsv, LIBELLE_FORMAT, coteDuFormat, type FormatControle,
 } from "./formats";
+
+export { LIBELLE_FORMAT, coteDuFormat };
 import { sortSizeScale } from "@/lib/size-order";
 import { cleCommande, cleCouleur, type Cote, type LigneNormalisee } from "./engine";
 
@@ -23,17 +25,9 @@ export interface FichierAnalyse {
   avertissements: string[];
 }
 
-export const LIBELLE_FORMAT: Record<FormatControle, string> = {
-  texas: "Commande client Texas (ERP)",
-  "texas-statgen": "StatGen commande client Texas (Q.N absolus + légende de gamme)",
-  "color-orders": "Commandes à la couleur TIO (CSV, colonnes T0..T12)",
-  long: "Une ligne par taille (export GestLog ou équivalent)",
-  statgen: "Commande client TIO (StatGen, Q.1..Q.n)",
-};
 
 /** Côté déduit du format : seul l'export Texas décrit l'ERP. */
-export const coteDuFormat = (f: FormatControle): Cote =>
-  f === "texas" || f === "texas-statgen" ? "TEXAS" : "TIO";
+
 
 const somme = (ns: number[]) => ns.reduce((s, n) => s + n, 0);
 

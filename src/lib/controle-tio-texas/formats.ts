@@ -16,8 +16,29 @@
 
 import * as XLSX from "xlsx";
 import { splitCsvLine } from "@/lib/recoupement";
+import type { Cote } from "./engine";
 
 export type FormatControle = "texas" | "texas-statgen" | "color-orders" | "long" | "statgen";
+
+/**
+ * Libellé affiché de chaque format, et côté du rapprochement.
+ *
+ * 🔴 UNE SEULE DÉFINITION, ici. Elles étaient recopiées dans l'écran et dans
+ * `normalise.ts` : ajouter le StatGen de Texas n'a mis à jour que la seconde, et l'écran
+ * rangeait le fichier Texas du côté TIO — « les deux fichiers sont du même côté » alors
+ * que le format affiché était le bon. `formats.ts` est pur, donc importable des deux côtés.
+ */
+export const LIBELLE_FORMAT: Record<FormatControle, string> = {
+  texas: "Commande client Texas (ERP)",
+  "texas-statgen": "StatGen commande client Texas",
+  "color-orders": "Commandes à la couleur TIO (CSV)",
+  long: "Une ligne par taille (export GestLog ou équivalent)",
+  statgen: "Commande client TIO (StatGen)",
+};
+
+/** Côté déduit du format : seuls les exports de l'ERP décrivent Texas. */
+export const coteDuFormat = (f: FormatControle): Cote =>
+  f === "texas" || f === "texas-statgen" ? "TEXAS" : "TIO";
 
 type Cell = string | number | boolean | null | undefined;
 type Grid = Cell[][];

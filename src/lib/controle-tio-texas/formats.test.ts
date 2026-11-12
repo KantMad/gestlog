@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import * as XLSX from "xlsx";
-import { detecterFormat, lireFormatLong } from "./formats";
+import {
+  detecterFormat, lireFormatLong, coteDuFormat, LIBELLE_FORMAT, type FormatControle,
+} from "./formats";
 
 /** Construit un classeur en mémoire à partir de lignes brutes. */
 function classeur(lignes: (string | number)[][], nomFeuille = "Commandes"): ArrayBuffer {
@@ -128,5 +130,32 @@ describe("lecture du format « une ligne par taille »", () => {
       ["PO-1", "RMPULL_W001", "M", 2, 25, 49],
     ]);
     expect(lireFormatLong(buf)[0].montantLigne).toBe(49);
+  });
+});
+
+// L'écran et le serveur recopiaient chacun cette correspondance : ajouter le StatGen de
+// Texas n'a mis à jour que le serveur, et l'écran rangeait le fichier Texas du côté TIO.
+// Elle n'existe plus qu'une fois — ces tests la verrouillent.
+describe("correspondance format → côté et libellé", () => {
+  const TOUS: FormatControle[] = ["texas", "texas-statgen", "color-orders", "long", "statgen"];
+
+  it("range du côté TEXAS tout ce qui vient de l'ERP", () => {
+    expect(coteDuFormat("texas")).toBe("TEXAS");
+    expect(coteDuFormat("texas-statgen")).toBe("TEXAS");
+  });
+
+  it("range du côté TIO tout le reste", () => {
+    expect(coteDuFormat("color-orders")).toBe("TIO");
+    expect(coteDuFormat("long")).toBe("TIO");
+    expect(coteDuFormat("statgen")).toBe("TIO");
+  });
+
+  it("donne un libellé non vide à chaque format", () => {
+    for (const f of TOUS) expect(LIBELLE_FORMAT[f]?.length).toBeGreaterThan(0);
+  });
+
+  it("ne laisse pas deux formats partager le même libellé", () => {
+    const libelles = TOUS.map((f) => LIBELLE_FORMAT[f]);
+    expect(new Set(libelles).size).toBe(libelles.length);
   });
 });

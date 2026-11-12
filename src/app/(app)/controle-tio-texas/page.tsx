@@ -33,7 +33,9 @@ import { toast } from "sonner";
 import * as XLSX from "xlsx";
 import { cn, formatNumber } from "@/lib/utils";
 import { fileStamp } from "@/lib/file-stamp";
-import { detecterFormat, type FormatControle } from "@/lib/controle-tio-texas/formats";
+import {
+  detecterFormat, coteDuFormat, LIBELLE_FORMAT, type FormatControle,
+} from "@/lib/controle-tio-texas/formats";
 import {
   rapportVersFeuilles,
   LIBELLE_STATUT_COMMANDE,
@@ -46,13 +48,6 @@ import {
   type SyntheseControle,
 } from "@/lib/controle-tio-texas/engine";
 
-const LIBELLE_FORMAT: Record<FormatControle, string> = {
-  texas: "Commande client Texas (ERP)",
-  "texas-statgen": "StatGen commande client Texas",
-  "color-orders": "Commandes à la couleur TIO (CSV)",
-  long: "Une ligne par taille (export GestLog)",
-  statgen: "Commande client TIO (StatGen)",
-};
 
 interface InfoFichier {
   nom: string;
@@ -251,8 +246,7 @@ export default function ControleTioTexasPage() {
   const [ecartsSeulement, setEcartsSeulement] = useState(true);
 
   // Les deux fichiers sont-ils de côtés opposés ? (Texas d'un côté, TIO de l'autre)
-  const coteDe = (f: Fente): Cote | null =>
-    f.cote ?? (f.format ? (f.format === "texas" ? "TEXAS" : "TIO") : null);
+  const coteDe = (f: Fente): Cote | null => f.cote ?? (f.format ? coteDuFormat(f.format) : null);
   const memeCote = !!(a.format && b.format && coteDe(a) === coteDe(b));
   const pret = !!(a.file && b.file && a.format && b.format && !memeCote);
 
