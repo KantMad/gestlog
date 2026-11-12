@@ -453,6 +453,33 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
 - **Formats acceptés** (détection automatique, `src/lib/controle-tio-texas/formats.ts`) :
   - `texas` — export commande client Texas : `Q.N` **absolus**, décodés par la légende de gamme
     + `Taille début`/`Taille fin` ; porte `Montant commandé net total` et `Soldé` ;
+  - `color-orders` — **export CSV TIO « commandes à la couleur »** : une ligne par commande ×
+    produit × coloris, quantités en colonnes **`T0..T12` positionnelles**. Reconnu sur son
+    texte (point-virgule, BOM, et repli **Windows-1252** si l'UTF-8 donne des caractères de
+    remplacement), jamais passé à SheetJS. *Export du 12/11/2026 : 5 934 enregistrements,
+    37 lignes annulées écartées, 145 commandes, 42 370 pièces, 1 263 117,05 €, et les
+    5 897 lignes restantes toutes décodables taille par taille.*
+    - 🔴 **`T0..Tn` suit la grille TRIÉE du produit (`Product.sizeScale`), pas l'ordre des
+      positions TIO.** *Mesuré sur 40 lignes confrontées aux mêmes lignes déjà synchronisées :
+      la grille triée retombe juste **40/40**, `SizeTypeMapping.position` seulement **3/40**.
+      Pour `HAU`, les positions TIO donnent M, L, XL, S, 2XL quand le fichier suit
+      S, M, L, XL, 2XL.* Repli si le produit est inconnu : la grille du **type de taille**,
+      triée elle aussi (`sortSizeScale`).
+    - 🔴 **Le découpage doit respecter les retours à la ligne DANS un champ.** *75 des 5 934
+      enregistrements portent un « Modalités de paiement » sur deux lignes, et cette colonne
+      **précède** les `T0..T12` : découpé ligne par ligne, le fichier rendait 75 répartitions
+      muettes sans rien signaler.* (`parseColorOrdersCsv` de l'écran Recoupement n'est pas
+      concerné : il n'exploite que des colonnes situées **avant** ce champ.)
+    - 🔴 **`Montant total` fait foi, remise déjà appliquée.** *1 139 lignes portent une
+      « Remise couleur » non nulle alors que le montant vaut exactement prix × quantité : la
+      remise est DANS le prix, la réappliquer la compterait deux fois. Et le prix affiché est
+      arrondi au centime — 33,61 × 14 donnerait 470,54 € là où le fichier dit 470,47 €
+      (prix réel 33,605).* Ne jamais recalculer le montant.
+    - **Commandes annulées exclues** (statut `cancel` / `annul…`) : les garder ferait sortir
+      des « commandes absentes de Texas » qui n'avaient pas à y être saisies. Un statut
+      inhabituel, lui, est **conservé** et signalé.
+    - **Pièces = « Quantité à la couleur »**, pas la somme des `T0..Tn` ; si les deux ne
+      concordent pas, les tailles sont abandonnées.
   - `long` — **une ligne par taille** : c'est la forme de l'export GestLog « Commandes clients —
     détail par code-barres », et de tout fichier ayant n° de commande / référence / taille /
     quantité. Le montant de ligne vient d'une colonne `Montant`, sinon de `Prix wholesale` × qté ;

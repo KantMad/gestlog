@@ -6,7 +6,10 @@
 
 import { prisma } from "@/lib/prisma";
 import { parseTexasClientOrders, parseMcsClientOrders } from "@/lib/import/mcs-format";
-import { detecterFormat, lireFormatLong, type FormatControle } from "./formats";
+import {
+  detecterFormat, lireFormatLong, lireColorOrders, texteCsv, type FormatControle,
+} from "./formats";
+import { sortSizeScale } from "@/lib/size-order";
 import type { Cote, LigneNormalisee } from "./engine";
 
 export interface FichierAnalyse {
@@ -21,6 +24,7 @@ export interface FichierAnalyse {
 
 export const LIBELLE_FORMAT: Record<FormatControle, string> = {
   texas: "Commande client Texas (ERP)",
+  "color-orders": "Commandes à la couleur TIO (CSV, colonnes T0..T12)",
   long: "Une ligne par taille (export GestLog ou équivalent)",
   statgen: "Commande client TIO (StatGen, Q.1..Q.n)",
 };
@@ -84,6 +88,36 @@ async function chargerGrilles(references: string[]) {
 }
 
 /**
+ * Grille (triée) de chaque type de taille cité, par code — repli quand le produit lui-même
+ * est inconnu du référentiel.
+ *
+ * 🔴 La grille est **triée** (`sortSizeScale`), PAS prise dans l'ordre des positions TIO.
+ * *Mesuré le 12/11/2026 sur 40 lignes de l'export « commandes à la couleur » confrontées aux
+ * mêmes lignes déjà synchronisées en base : le décodage par la grille triée retombe juste
+ * 40 fois sur 40, celui par `SizeTypeMapping.position` seulement 3 fois sur 40 (les 3 types
+ * où les deux ordres coïncident). Exemple `HAU` : les positions TIO donnent M, L, XL, S, 2XL
+ * alors que les colonnes T0..Tn du fichier suivent S, M, L, XL, 2XL.*
+ */
+async function chargerGrillesParType(codes: string[]) {
+  if (codes.length === 0) return () => null;
+  const types = await prisma.sizeType.findMany({
+    where: { code: { in: codes } },
+    select: { code: true, mappings: { select: { position: true, sizeName: true } } },
+  });
+  const map = new Map<string, string[]>();
+  for (const t of types) {
+    const noms = [...t.mappings]
+      .sort((a, b) => a.position - b.position)
+      .map((m) => m.sizeName);
+    if (noms.length > 0) map.set(t.code.trim().toUpperCase(), sortSizeScale(noms));
+  }
+  return (code: string): string[] | null => map.get(code.trim().toUpperCase()) ?? null;
+}
+
+/** Statuts de commande TIO qui valent annulation (« cancel », « Cancelled », « Annuler »). */
+const estAnnulee = (statut: string) => /^(cancel|annul)/i.test(statut.trim());
+
+/**
  * Lit un fichier et en tire des lignes comparables.
  *
  * Quand les tailles décodées ne totalisent pas le même nombre de pièces que le fichier,
@@ -139,6 +173,91 @@ export async function analyserFichier(
     if (taillesNonDecodees > 0) {
       avertissements.push(
         `${taillesNonDecodees} ligne(s) sans décodage des tailles (légende de gamme ou Taille début/fin absente) : comparées sur le total de pièces seulement.`
+      );
+    }
+  } else if (format === "color-orders") {
+    // Export CSV TIO « commandes à la couleur » : une ligne par commande × produit ×
+    // coloris, quantités réparties dans les colonnes T0..Tn (positionnelles).
+    const texte = texteCsv(buffer);
+    const brutes = texte ? lireColorOrders(texte) : [];
+    const [grilleDe, grilleType] = await Promise.all([
+      chargerGrilles([...new Set(brutes.map((l) => l.reference))]),
+      chargerGrillesParType([...new Set(brutes.map((l) => l.typeTaille).filter(Boolean))]),
+    ]);
+
+    let annulees = 0;
+    const autresStatuts = new Map<string, number>();
+    const introuvables = new Map<string, number>();
+    const catalogues = new Set<string>();
+
+    for (const l of brutes) {
+      // Les commandes annulées sont EXCLUES : les compter ferait sortir des « commandes
+      // absentes de Texas » qui n'avaient aucune raison d'y être saisies.
+      if (estAnnulee(l.statut)) {
+        annulees++;
+        continue;
+      }
+      if (l.statut && !/^confirm/i.test(l.statut)) {
+        autresStatuts.set(l.statut, (autresStatuts.get(l.statut) || 0) + 1);
+      }
+      if (l.catalogue) catalogues.add(l.catalogue);
+
+      const scale = grilleDe(l.reference, l.codeCouleur) ?? grilleType(l.typeTaille);
+      let tailles: Record<string, number> | undefined;
+      if (scale) {
+        const acc: Record<string, number> = {};
+        for (let i = 0; i < scale.length && i < l.quantitesParPosition.length; i++) {
+          const q = l.quantitesParPosition[i];
+          if (q > 0) acc[scale[i]] = (acc[scale[i]] || 0) + q;
+        }
+        // 🔴 « Quantité à la couleur » fait foi, pas la somme des T0..Tn : si les deux ne
+        // concordent pas, les tailles sont abandonnées (total seul comparable).
+        if (somme(Object.values(acc)) === l.quantite) tailles = acc;
+      }
+      if (!tailles) {
+        taillesNonDecodees++;
+        if (!scale) {
+          const k = `${l.reference} / ${l.codeCouleur}${l.libelleCouleur ? ` (${l.libelleCouleur})` : ""}`;
+          introuvables.set(k, (introuvables.get(k) || 0) + 1);
+        }
+      }
+
+      lignes.push({
+        numeroTio: l.numeroCommande,
+        codeClient: l.codeClient,
+        nomClient: l.nomClient || undefined,
+        reference: l.reference,
+        codeCouleur: l.codeCouleur,
+        libelleCouleur: l.libelleCouleur,
+        ...(tailles ? { tailles } : {}),
+        pieces: l.quantite,
+        ...(l.montant > 0 ? { montantLigne: l.montant } : {}),
+      });
+    }
+
+    if (annulees > 0) {
+      avertissements.push(
+        `${annulees} ligne(s) de commandes annulées écartées (statut « cancel ») — elles n'ont pas à être saisies dans Texas.`
+      );
+    }
+    if (autresStatuts.size > 0) {
+      avertissements.push(
+        `Statut(s) de commande inhabituel(s), conservés dans la comparaison : ${[...autresStatuts.entries()]
+          .map(([st, n]) => `${st} (${n} ligne(s))`)
+          .join(", ")}.`
+      );
+    }
+    if (catalogues.size > 1) {
+      avertissements.push(
+        `Ce fichier mélange ${catalogues.size} catalogues (${[...catalogues].join(", ")}) : si l'export Texas n'en couvre qu'un, les autres sortiront en « absentes de Texas ».`
+      );
+    }
+    if (introuvables.size > 0) {
+      const top = [...introuvables.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10);
+      avertissements.push(
+        `${introuvables.size} produit(s) absent(s) du référentiel GestLog et sans type de taille exploitable : comparaison au total de pièces seulement — ${top
+          .map(([k, n]) => `${k} ×${n}`)
+          .join(", ")}${introuvables.size > 10 ? ", …" : ""}.`
       );
     }
   } else if (format === "long") {

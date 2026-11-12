@@ -1013,7 +1013,8 @@ export const HELP_THEMES: HelpTheme[] = [
             h: "Quels fichiers déposer",
             lines: [
               "Côté **Texas** : l'export des commandes clients de l'ERP (celui qui sert déjà à l'import).",
-              "Côté **TIO** : soit l'export TIO des commandes clients, soit — le plus simple — l'export GestLog « **Commandes clients — détail par code-barres** » (page Exports, tout en bas).",
+              "Côté **TIO** : l'export « **commandes à la couleur** » (le CSV `export-color-orders-….csv`) — c'est celui qui marche le mieux, il porte les quantités par taille et les montants. L'export GestLog « **Commandes clients — détail par code-barres** » (page Exports, tout en bas) fait aussi l'affaire.",
+              "Les **commandes annulées** du fichier TIO sont écartées d'office : elles n'avaient pas à être saisies dans Texas.",
               "Le format est reconnu **dès le dépôt** : l'écran affiche ce qu'il a compris avant que tu lances la comparaison.",
             ],
             tip: "Si les deux fichiers sont reconnus du même côté, l'écran le dit — c'est qu'il manque l'un des deux exports.",

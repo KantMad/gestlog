@@ -48,6 +48,7 @@ import {
 
 const LIBELLE_FORMAT: Record<FormatControle, string> = {
   texas: "Commande client Texas (ERP)",
+  "color-orders": "Commandes à la couleur TIO (CSV)",
   long: "Une ligne par taille (export GestLog)",
   statgen: "Commande client TIO (StatGen)",
 };
@@ -380,7 +381,7 @@ export default function ControleTioTexasPage() {
             <div className="grid gap-4 md:grid-cols-2">
               <Depot
                 titre="Fichier 1"
-                description="L'export TIO (ou l'export GestLog « détail par code-barres »)."
+                description="L'export TIO « commandes à la couleur » (CSV), ou l'export GestLog « détail par code-barres »."
                 fente={a}
                 onChange={setA}
               />
