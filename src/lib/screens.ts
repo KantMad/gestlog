@@ -24,6 +24,7 @@ export const APP_SCREENS: { key: string; label: string }[] = [
   { key: "/a-vendre", label: "À vendre" },
   { key: "/conditionnelle", label: "Vente en conditionnelle" },
   { key: "/controle-commandes", label: "Contrôle commandes" },
+  { key: "/controle-tio-texas", label: "Contrôle TIO ↔ Texas" },
   { key: "/export", label: "Exports" },
   { key: "/btoc", label: "BtoC" },
 ];
@@ -63,6 +64,7 @@ const API_SCREEN_MAP: [string, string[]][] = [
   ["/api/samples", ["/samples", "/allocation"]],
   ["/api/btoc", ["/btoc"]],
   ["/api/controle-commandes", ["/controle-commandes"]],
+  ["/api/controle-tio-texas", ["/controle-tio-texas"]],
   ["/api/comparison", ["/comparison"]],
   ["/api/deliveries", ["/deliveries"]],
   ["/api/depot", ["/depot"]],

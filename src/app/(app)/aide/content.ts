@@ -977,6 +977,58 @@ export const HELP_THEMES: HelpTheme[] = [
         ],
       },
       {
+        id: "controle-tio-texas",
+        icon: "⚖️",
+        title: "Contrôle TIO ↔ Texas",
+        keywords: "contrôle tio texas comparer deux fichiers excel vérifier ressaisie écart quantité montant taille rapprochement",
+        screen: "/controle-tio-texas",
+        sections: [
+          {
+            h: "À quoi ça sert",
+            lines: [
+              "Vérifier que les commandes prises dans **TIO** ont été ressaisies **à l'identique** dans **Texas** : toutes les commandes sont-elles là, les bons produits, les bonnes quantités **par taille**, les bons montants.",
+              "Tu déposes **deux fichiers Excel** — l'export TIO et l'export Texas — et GestLog te sort la liste de ce qui ne colle pas.",
+            ],
+            tip: "Rien n'est importé : les deux fichiers sont seulement comparés. Aucune donnée de GestLog n'est modifiée.",
+          },
+          {
+            h: "Comment ça rapproche les commandes",
+            lines: [
+              "Par le **n° de commande TIO**, et lui seul : les n° de commande de Texas n'ont **rien à voir** avec ceux de TIO.",
+              "Côté Texas, ce n° est dans la colonne « **Référence commande client** » (PO-… pour une commande de catalogue, IS-… pour un réassort).",
+              "Une ligne Texas sans cette référence est **signalée** à part : impossible de savoir à quelle commande TIO elle correspond.",
+            ],
+            tip: "Les séparateurs n'ont pas d'importance : « IS-26 0014 » et « IS260014 » sont bien reconnus comme la même commande.",
+          },
+          {
+            h: "Ce qui est vérifié",
+            lines: [
+              "**Les commandes** : celles de TIO jamais saisies dans Texas, et celles de Texas qui n'existent pas dans TIO.",
+              "**Les produits** : un produit commandé mais absent de la saisie Texas, ou un produit en trop.",
+              "**Les quantités, taille par taille** — y compris le cas le plus traître : **même total, mais répartition différente** (3 S au lieu de 1, 1 L au lieu de 3). Celui-là ne se voit sur aucun total.",
+              "**Les montants** : écart au centime près par défaut, tolérance réglable.",
+            ],
+          },
+          {
+            h: "Quels fichiers déposer",
+            lines: [
+              "Côté **Texas** : l'export des commandes clients de l'ERP (celui qui sert déjà à l'import).",
+              "Côté **TIO** : soit l'export TIO des commandes clients, soit — le plus simple — l'export GestLog « **Commandes clients — détail par code-barres** » (page Exports, tout en bas).",
+              "Le format est reconnu **dès le dépôt** : l'écran affiche ce qu'il a compris avant que tu lances la comparaison.",
+            ],
+            tip: "Si les deux fichiers sont reconnus du même côté, l'écran le dit — c'est qu'il manque l'un des deux exports.",
+          },
+          {
+            h: "Bon à savoir",
+            lines: [
+              "Quand les tailles ne sont pas décodables d'un côté (produit absent du référentiel, légende de gamme manquante), la ligne est comparée sur son **total de pièces** et l'écran te le signale — plutôt que d'inventer des écarts de taille.",
+              "Si un seul des deux fichiers porte des montants, ils ne sont **pas** comparés (et c'est écrit noir sur blanc).",
+              "Le tableau affiche les 500 premières lignes ; le bouton « **Exporter le rapport** » sort tout, en quatre onglets : Synthèse, Commandes, Produits, Tailles.",
+            ],
+          },
+        ],
+      },
+      {
         id: "recap",
         icon: "🧑‍🤝‍🧑",
         title: "Récap clients",

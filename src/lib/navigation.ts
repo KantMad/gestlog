@@ -3,7 +3,7 @@ import {
   Users, Tag, ClipboardList, Warehouse, Receipt, RefreshCw, ShoppingBag, Store,
   ArrowLeftRight, Building2, UserCog, Download, LifeBuoy, ScanSearch, PackageCheck,
   FlaskConical, FileSpreadsheet, Rocket, Tags, Handshake, Boxes, ClipboardCheck, Barcode,
-  Send, SlidersHorizontal, type LucideIcon,
+  Send, SlidersHorizontal, FileCheck2, type LucideIcon,
 } from "lucide-react";
 import { canAccessScreen } from "./screens";
 
@@ -66,6 +66,7 @@ export const NAV_TREE: NavEntry[] = [
       { href: "/reassort", label: "Commandes client", icon: ClipboardList },
       { href: "/lancement-commande", label: "Lancement de commande", icon: Rocket },
       { href: "/controle-commandes", label: "Contrôle commandes", icon: ScanSearch },
+      { href: "/controle-tio-texas", label: "Contrôle TIO ↔ Texas", icon: FileCheck2 },
       { href: "/conditionnelle", label: "Vente en conditionnelle", icon: Handshake },
     ],
   },

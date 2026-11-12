@@ -439,6 +439,46 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
 - **Nuance métier** : en saison **Réassort**, une seule taille est **normal** (réassort à
   l'unité) — le contrôle vise les commandes de collection.
 
+## Contrôle TIO ↔ Texas (`/controle-tio-texas`)
+- **Rôle** : vérifier que les commandes prises dans **TIO** ont été ressaisies **à l'identique**
+  dans l'ERP **Texas** — commandes présentes, produits, quantités **par taille**, montants.
+- **Deux fichiers déposés, aucune base** : l'écran ne lit **pas** `ClientOrder`. On dépose
+  l'export TIO et l'export Texas, et ils sont comparés entre eux. 🔴 **La route n'écrit RIEN**
+  (`POST /api/controle-tio-texas`) : ni `ImportLog`, ni commande, ni produit re-clé. Elle
+  n'utilise donc **pas** `resolveProductWithEquivalence`, qui re-clé les produits au passage.
+- 🔴 **La clé de rapprochement est le n° de commande TIO — et lui seul.** Les n° de commande
+  Texas et TIO sont **totalement disjoints** ; côté Texas le n° TIO est porté par la colonne
+  **« Référence commande client »** (`PO-…` catalogue, `IS-…` réassort). Une ligne Texas sans
+  cette référence est **signalée comme non rapprochable**, jamais comptée conforme.
+- **Formats acceptés** (détection automatique, `src/lib/controle-tio-texas/formats.ts`) :
+  - `texas` — export commande client Texas : `Q.N` **absolus**, décodés par la légende de gamme
+    + `Taille début`/`Taille fin` ; porte `Montant commandé net total` et `Soldé` ;
+  - `long` — **une ligne par taille** : c'est la forme de l'export GestLog « Commandes clients —
+    détail par code-barres », et de tout fichier ayant n° de commande / référence / taille /
+    quantité. Le montant de ligne vient d'une colonne `Montant`, sinon de `Prix wholesale` × qté ;
+  - `statgen` — export commande client TIO : les `Q.1..Q.n` y sont **RELATIFS à la grille du
+    produit** → les tailles sont reconstituées depuis `Product.sizeScale` (lecture seule,
+    + `ColorEquivalence`). Produit inconnu du référentiel = tailles non décodées.
+- ⚠️ **Tailles abandonnées plutôt que fausses** : si les tailles décodées ne totalisent pas le
+  même nombre de pièces que le fichier, elles sont **jetées** et la ligne n'est comparée que sur
+  son **total**. Comparer une répartition incomplète inventerait des écarts de taille.
+- **Trois niveaux de contrôle** (`src/lib/controle-tio-texas/engine.ts`, pur et testé) :
+  1. **commande** — absente de Texas / en trop dans Texas / écart de pièces / écart de montant /
+     code client divergent ;
+  2. **produit** (réf + coloris) — absent d'un côté, écart de quantité ;
+  3. **taille** — 🔴 le cas traître : **même total, répartition différente** (`S 1→3, L 3→1`).
+     Il ne se voit sur **aucun** total, et c'est l'erreur de ressaisie la plus fréquente.
+- **Tolérances de rapprochement** : n° de commande et code client comparés **sans séparateurs**
+  (`IS-26 0014` = `IS260014`) ; code couleur numérique **sans zéros de tête** (`006` = `6`) ;
+  un produit réparti sur plusieurs lignes du même fichier est **additionné**.
+- **Montants** : `Montant commandé net total` est **répété sur chaque ligne** côté Texas → il est
+  pris **une fois** par commande, jamais sommé. Les montants donnés à la ligne, eux, sont sommés.
+  Si un seul des deux fichiers porte un montant, l'écran le dit (« montants non comparés »)
+  plutôt que d'afficher un faux écart. Tolérance réglable, **0,01 € par défaut**.
+- **Garde-fous** : 25 Mo par fichier (le VPS héberge aussi l'API caisse), détail renvoyé limité
+  aux **écarts** par défaut et tronqué à **20 000** produits, 500 lignes affichées à l'écran —
+  le **rapport Excel** (Synthèse / Commandes / Produits / Tailles) contient tout.
+
 ## Dashboard (`/dashboard`)
 - **Rôle** : vue d'ensemble d'une saison (7 KPI + graphes).
 - **Source** : `/api/statistics/season` + `/api/statistics/charts`. `ClientOrder` **source
