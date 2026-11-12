@@ -23,6 +23,17 @@ export interface LigneNormalisee {
   nomClient?: string;
   reference: string;
   codeCouleur: string;
+  /**
+   * Code couleur ramené au référentiel, quand une équivalence existe — c'est LUI qui sert
+   * de clé de rapprochement, pas le code affiché.
+   *
+   * 🔴 Les deux sources n'écrivent pas toujours le même code pour le même coloris.
+   * *Mesuré le 12/11/2026 sur 145 commandes : 9 produits sortaient « absents de Texas » et
+   * 9 autres « en trop », alors qu'il s'agissait des MÊMES lignes — `ZZZ_LOGO` et
+   * `QMCHEC_C999` en coloris « 000 » côté TIO et « SSS » côté Texas.* La table
+   * `ColorEquivalence` connaît déjà ce couple ; `normalise.ts` la lit et renseigne ce champ.
+   */
+  codeCouleurCanonique?: string;
   libelleCouleur?: string;
   /**
    * Quantités par taille, quand le fichier (ou la grille du produit) permet de les
@@ -149,7 +160,8 @@ export function cleCouleur(code: string): string {
   return /^\d+$/.test(s) ? String(parseInt(s, 10)) : s;
 }
 
-const cleLigne = (l: LigneNormalisee) => `${cleReference(l.reference)}\u0000${cleCouleur(l.codeCouleur)}`;
+const cleLigne = (l: LigneNormalisee) =>
+  `${cleReference(l.reference)}\u0000${cleCouleur(l.codeCouleurCanonique ?? l.codeCouleur)}`;
 
 // ─────────────────────────────────────────────────────── helpers
 

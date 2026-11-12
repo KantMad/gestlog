@@ -152,6 +152,21 @@ async function chargerRepartitionsTio(numerosCommande: string[]) {
     map.get(`${cleCommande(commande)}\u0000${reference.toUpperCase()}\u0000${cleCouleur(couleur)}`) ?? null;
 }
 
+/**
+ * Ramène un code couleur au code du référentiel (« SSS » → « 000 »), pour que la même
+ * ligne écrite différemment des deux côtés se rapproche quand même.
+ */
+async function chargerCanonCouleur() {
+  const equivalences = await prisma.colorEquivalence.findMany({
+    select: { sourceCode: true, targetCode: true },
+  });
+  const map = new Map<string, string>();
+  for (const e of equivalences) {
+    map.set(e.sourceCode.trim().toUpperCase(), e.targetCode.trim().toUpperCase());
+  }
+  return (code: string) => map.get(String(code ?? "").trim().toUpperCase()) ?? code;
+}
+
 /** Statuts de commande TIO qui valent annulation (« cancel », « Cancelled », « Annuler »). */
 const estAnnulee = (statut: string) => /^(cancel|annul)/i.test(statut.trim());
 
@@ -440,6 +455,22 @@ export async function analyserFichier(
   if (lignes.length === 0) {
     throw new Error(
       `« ${nom} » : format reconnu (${LIBELLE_FORMAT[format]}) mais aucune ligne de commande exploitable.`
+    );
+  }
+
+  // Équivalences de couleur, appliquées à TOUS les formats d'un seul endroit.
+  const canon = await chargerCanonCouleur();
+  let ramenes = 0;
+  for (const l of lignes) {
+    const c = canon(l.codeCouleur);
+    if (c !== l.codeCouleur) {
+      l.codeCouleurCanonique = c;
+      ramenes++;
+    }
+  }
+  if (ramenes > 0) {
+    avertissements.push(
+      `${ramenes} ligne(s) dont le code couleur a été ramené au référentiel pour le rapprochement (équivalences de couleur) — le code d'origine reste affiché.`
     );
   }
 

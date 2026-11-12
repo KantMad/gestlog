@@ -520,6 +520,11 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
 - **Tolérances de rapprochement** : n° de commande et code client comparés **sans séparateurs**
   (`IS-26 0014` = `IS260014`) ; code couleur numérique **sans zéros de tête** (`006` = `6`) ;
   un produit réparti sur plusieurs lignes du même fichier est **additionné**.
+  - 🔴 **Les équivalences de couleur (`ColorEquivalence`) s'appliquent à la CLÉ**, via
+    `LigneNormalisee.codeCouleurCanonique` — le code d'origine reste affiché. *Mesuré le
+    12/11/2026 sur 145 commandes : sans cette tolérance, 9 produits sortaient « absents de
+    Texas » et 9 autres « en trop » alors que c'étaient les mêmes lignes — `ZZZ_LOGO` et
+    `QMCHEC_C999` en coloris « 000 » côté TIO, « SSS » côté Texas.*
 - **Montants** : `Montant commandé net total` est **répété sur chaque ligne** côté Texas → il est
   pris **une fois** par commande, jamais sommé. Les montants donnés à la ligne, eux, sont sommés.
   Si un seul des deux fichiers porte un montant, l'écran le dit (« montants non comparés »)

@@ -190,6 +190,38 @@ describe("niveau produit", () => {
     expect(r.synthese.lignesConformes).toBe(1);
   });
 
+  it("rapproche un coloris écrit « 000 » d'un côté et « SSS » de l'autre", () => {
+    // 9 produits sortaient « absents de Texas » et 9 « en trop » faute de cette tolérance :
+    // c'étaient les mêmes lignes, ZZZ_LOGO et QMCHEC_C999, écrites 000 côté TIO et SSS côté Texas.
+    const r = comparer(
+      [T({ codeCouleur: "000", tailles: { TU: 1 } })],
+      [T({ codeCouleur: "SSS", codeCouleurCanonique: "000", tailles: { TU: 1 } })]
+    );
+    expect(r.lignes).toHaveLength(1);
+    expect(r.lignes[0].statut).toBe("ok");
+    expect(r.synthese.lignesManquantes).toBe(0);
+    expect(r.synthese.lignesEnTrop).toBe(0);
+  });
+
+  it("garde le code d'origine à l'affichage, même rapproché par équivalence", () => {
+    const r = comparer(
+      [T({ codeCouleur: "000", tailles: { TU: 2 } })],
+      [T({ codeCouleur: "SSS", codeCouleurCanonique: "000", tailles: { TU: 1 } })]
+    );
+    expect(r.lignes[0].codeCouleur).toBe("000");
+    expect(r.lignes[0].statut).toBe("ecart_pieces");
+  });
+
+  it("ne rapproche pas deux coloris sans équivalence déclarée", () => {
+    const r = comparer(
+      [T({ codeCouleur: "208", tailles: { M: 1 } })],
+      [T({ codeCouleur: "714", tailles: { M: 1 } })]
+    );
+    expect(r.lignes).toHaveLength(2);
+    expect(r.synthese.lignesManquantes).toBe(1);
+    expect(r.synthese.lignesEnTrop).toBe(1);
+  });
+
   it("additionne un produit réparti sur plusieurs lignes du même fichier", () => {
     const r = comparer(
       [T({ tailles: { M: 2 } }), T({ tailles: { L: 3 } })],
