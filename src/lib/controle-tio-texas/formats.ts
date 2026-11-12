@@ -2,20 +2,22 @@
 // PUR (aucun accès base) : utilisable côté client pour prévisualiser, côté serveur
 // pour l'analyse autoritaire.
 //
-// Quatre dispositions sont reconnues :
+// Cinq dispositions sont reconnues :
 //  - « texas »        : export commande client de l'ERP Texas (Q.N absolus + légende de gamme) ;
 //  - « color-orders » : export CSV TIO « commandes à la couleur » — une ligne par commande ×
 //                       produit × coloris, quantités en colonnes T0..T12 POSITIONNELLES ;
 //  - « long »         : UNE LIGNE PAR TAILLE — c'est la forme de l'export GestLog
 //                       « Commandes clients — détail par code-barres », et celle de tout
 //                       fichier portant les colonnes commande / référence / taille / quantité ;
+//  - « texas-statgen »: StatGen commande client de Texas sans « Langue+Gamme » — les Q.N y
+//                       sont ABSOLUS dans la gamme, donnée par la légende en tête de fichier ;
 //  - « statgen »      : export commande client TIO (Q.1..Q.16 RELATIFS à la grille du produit
 //                       → le décodage par taille exige le référentiel, cf. normalise.ts).
 
 import * as XLSX from "xlsx";
 import { splitCsvLine } from "@/lib/recoupement";
 
-export type FormatControle = "texas" | "color-orders" | "long" | "statgen";
+export type FormatControle = "texas" | "texas-statgen" | "color-orders" | "long" | "statgen";
 
 type Cell = string | number | boolean | null | undefined;
 type Grid = Cell[][];
@@ -132,6 +134,8 @@ export function detecterFormat(buffer: ArrayBuffer): FormatControle | null {
     for (let r = 0; r < Math.min(grid.length, 30); r++) {
       const cells = (grid[r] || []).map(up);
       if (estEnteteTexas(cells)) return "texas";
+      // AVANT « statgen » : le StatGen de Texas porte lui aussi « Fiche client ».
+      if (estEnteteTexasStatgen(cells)) return "texas-statgen";
       if (reperColonnesLong(cells)) return "long";
       if (estEnteteStatgen(cells)) return "statgen";
     }
@@ -420,4 +424,187 @@ export function lireColorOrders(texte: string): LigneColorOrders[] {
 /** Le texte d'un fichier CSV, pour les lecteurs qui travaillent sur du texte. */
 export function texteCsv(buffer: ArrayBuffer): string | null {
   return texteSiPasBinaire(buffer);
+}
+
+// ─────────────────────────────────────────── Texas StatGen « commande client »
+
+/**
+ * En-tête du StatGen commande client exporté par Texas, variante SANS « Langue+Gamme »
+ * ni « Taille début / Taille fin ».
+ *
+ * Elle se reconnaît à « Référence commande client », la colonne qui porte le n° TIO :
+ * un StatGen purement TIO ne l'a pas. ⚠️ Elle porte aussi « Fiche client », donc elle
+ * doit être testée AVANT le format StatGen TIO, qui ne demande que cette colonne-là.
+ */
+const estEnteteTexasStatgen = (cells: string[]): boolean =>
+  cells.includes("FICHE PRODUIT FINI") &&
+  cells.some((c) => /^R[EÉ]F[EÉ]RENCE COMMANDE CLIENT/.test(c));
+
+export interface LigneTexasStatgen {
+  /** « N° commande client » — le n° propre à Texas. */
+  numeroTexas: string;
+  /** « Référence commande client » — le n° TIO (PO-…, IS-…). */
+  numeroTio: string;
+  codeClient: string;
+  nomClient: string;
+  reference: string;
+  codeCouleur: string;
+  libelleCouleur: string;
+  /** Quantités Q.1..Q.n — positions ABSOLUES dans la gamme, cf. `legende`. */
+  quantitesParPosition: number[];
+  /** « Total Q ». */
+  quantite: number;
+  /** « Total CA » — montant NET de la ligne. */
+  montant: number;
+}
+
+export interface TexasStatgen {
+  /**
+   * Légende des gammes, lue en tête de fichier : code de gamme → tailles, dans l'ordre
+   * des colonnes Q.1..Q.n. Ex. `PAN` → 28, 29, 30, …, 46.
+   */
+  legende: Record<string, string[]>;
+  lignes: LigneTexasStatgen[];
+}
+
+/**
+ * Lit le StatGen commande client de Texas.
+ *
+ * 🔴 Les `Q.N` y sont des positions dans la gamme ENTIÈRE, pas dans la grille du produit.
+ * *Mesuré le 12/11/2026 en croisant ce fichier et l'export TIO des mêmes 145 commandes :
+ * 1 219 lignes sur 5 888 ont le même total mais un vecteur décalé d'exactement un cran —
+ * toutes des pantalons. La légende Texas `PAN` commence à 28 quand la grille de ces
+ * produits commence à 29.* Le décodage exige donc la légende ET la grille du produit
+ * (cf. normalise.ts) ; aligner les `Q.N` sur la grille du produit décalerait toutes les
+ * tailles sans rien changer au total — l'erreur resterait invisible.
+ */
+export function lireTexasStatgen(buffer: ArrayBuffer): TexasStatgen {
+  for (const { grid } of feuilles(buffer)) {
+    let h = -1;
+    for (let r = 0; r < Math.min(grid.length, 30); r++) {
+      if (estEnteteTexasStatgen((grid[r] || []).map(up))) {
+        h = r;
+        break;
+      }
+    }
+    if (h === -1) continue;
+
+    const header = (grid[h] || []).map(up);
+    const trouve = (p: (c: string) => boolean) => header.findIndex(p);
+    const iRef = header.indexOf("FICHE PRODUIT FINI");
+    const iColoris = trouve((c) => c.includes("COLORIS"));
+    const iTio = trouve((c) => /^R[EÉ]F[EÉ]RENCE COMMANDE CLIENT/.test(c));
+    const iTexas = trouve((c) => c.startsWith("N° COMMANDE CLIENT"));
+    const iTexas2 = trouve((c) => c.startsWith("N° COMMANDE("));
+    const iClient = trouve((c) => c.startsWith("CODE CLIENT"));
+    const iClient2 = header.indexOf("FICHE CLIENT");
+    const iNom = trouve((c) => c.includes("RAISON SOCIALE"));
+    const iTotalQ = header.indexOf("TOTAL Q");
+    const iTotalCA = header.indexOf("TOTAL CA");
+    const qCols: number[] = [];
+    header.forEach((c, i) => {
+      if (/^Q\.\s*\d+$/.test(c)) qCols.push(i);
+    });
+    if (iRef < 0 || qCols.length === 0) continue;
+
+    // Légende : les lignes en tête SANS référence produit portent le code de gamme dans
+    // la colonne « Total Q » et les tailles dans les colonnes Q.N.
+    const legende: Record<string, string[]> = {};
+    let premiereDonnee = h + 1;
+    if (iTotalQ >= 0) {
+      for (let r = h + 1; r < grid.length; r++) {
+        if (norm(grid[r]?.[iRef])) {
+          premiereDonnee = r;
+          break;
+        }
+        const code = up(grid[r]?.[iTotalQ]);
+        const tailles = qCols.map((i) => norm(grid[r]?.[i])).filter(Boolean);
+        if (code && tailles.length > 0) legende[code] = tailles;
+      }
+    }
+
+    const lignes: LigneTexasStatgen[] = [];
+    for (let r = premiereDonnee; r < grid.length; r++) {
+      const row = grid[r] || [];
+      const reference = norm(row[iRef]);
+      if (!reference || reference.toUpperCase() === "TOTAL") continue;
+      const quantite = iTotalQ >= 0 ? Math.round(nombre(row[iTotalQ])) : 0;
+      const quantitesParPosition = qCols.map((i) => Math.round(nombre(row[i])));
+      const total = quantite || quantitesParPosition.reduce((s, q) => s + q, 0);
+      if (total <= 0) continue;
+      const coloris = separeColoris(row[iColoris]);
+
+      lignes.push({
+        numeroTexas: iTexas >= 0 ? norm(row[iTexas]) : iTexas2 >= 0 ? norm(row[iTexas2]) : "",
+        numeroTio: iTio >= 0 ? norm(row[iTio]) : "",
+        codeClient: iClient >= 0 ? norm(row[iClient]) : iClient2 >= 0 ? norm(row[iClient2]) : "",
+        nomClient: iNom >= 0 ? norm(row[iNom]) : "",
+        reference,
+        codeCouleur: coloris.code,
+        libelleCouleur: coloris.nom,
+        quantitesParPosition,
+        quantite: total,
+        montant: iTotalCA >= 0 ? nombre(row[iTotalCA]) : 0,
+      });
+    }
+    if (lignes.length > 0) return { legende, lignes };
+  }
+  return { legende: {}, lignes: [] };
+}
+
+/**
+ * Décode les `Q.N` d'une ligne Texas en tailles nommées.
+ *
+ * La gamme est retrouvée en cherchant, dans la légende du fichier, celle qui CONTIENT la
+ * grille du produit d'un seul tenant — c'est elle qui donne l'origine des `Q.N`. Le
+ * résultat n'est retenu que si chaque taille décodée appartient à la grille du produit et
+ * si le total retombe sur « Total Q ». Sinon : rien, et la ligne se compare au total.
+ *
+ * ⚠️ Le contrôle de total ne suffit PAS à lui seul : un décalage de position conserve le
+ * total. C'est l'appartenance à la grille du produit qui le détecte.
+ */
+export function decoderTailesTexas(
+  quantitesParPosition: number[],
+  grilleProduit: string[] | null,
+  legende: Record<string, string[]>,
+  total: number
+): Record<string, number> | undefined {
+  if (!grilleProduit || grilleProduit.length === 0) return undefined;
+  const dansGrille = new Set(grilleProduit);
+
+  for (const gamme of Object.values(legende)) {
+    if (indexSousSuite(gamme, grilleProduit) < 0) continue;
+    const acc: Record<string, number> = {};
+    let somme = 0;
+    let ok = true;
+    for (let i = 0; i < quantitesParPosition.length; i++) {
+      const q = quantitesParPosition[i];
+      if (q <= 0) continue;
+      const nom = gamme[i];
+      if (nom === undefined || !dansGrille.has(nom)) {
+        ok = false;
+        break;
+      }
+      acc[nom] = (acc[nom] || 0) + q;
+      somme += q;
+    }
+    if (ok && somme === total) return acc;
+  }
+  return undefined;
+}
+
+/** Indice où `petit` apparaît d'un seul tenant dans `grand`, ou -1. */
+function indexSousSuite(grand: string[], petit: string[]): number {
+  if (petit.length === 0 || petit.length > grand.length) return -1;
+  for (let i = 0; i + petit.length <= grand.length; i++) {
+    let ok = true;
+    for (let j = 0; j < petit.length; j++) {
+      if (grand[i + j] !== petit[j]) {
+        ok = false;
+        break;
+      }
+    }
+    if (ok) return i;
+  }
+  return -1;
 }

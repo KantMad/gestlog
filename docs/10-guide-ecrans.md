@@ -453,6 +453,20 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
 - **Formats acceptés** (détection automatique, `src/lib/controle-tio-texas/formats.ts`) :
   - `texas` — export commande client Texas : `Q.N` **absolus**, décodés par la légende de gamme
     + `Taille début`/`Taille fin` ; porte `Montant commandé net total` et `Soldé` ;
+  - `texas-statgen` — **StatGen commande client de Texas**, variante SANS « Langue+Gamme » ni
+    « Taille début / Taille fin ». Reconnue à sa colonne **« Référence commande client »** (le
+    n° TIO) ; ⚠️ elle porte aussi « Fiche client », donc elle doit être testée **avant** le
+    StatGen TIO. Donne `Total Q`, `Q.1..Q.16`, `Total CA` (montant NET de la ligne, prix
+    unitaire réel — pas un total de commande réparti au prorata) et une **légende de gammes**
+    en tête de fichier.
+    - 🔴 **Les `Q.N` y sont ABSOLUS dans la gamme, pas dans la grille du produit** — l'inverse
+      de l'export TIO. *Mesuré le 12/11/2026 en croisant le StatGen Texas et l'export TIO des
+      mêmes 145 commandes : 1 219 lignes sur 5 888 ont le même total mais un vecteur décalé
+      d'exactement un cran, toutes des pantalons — la gamme `PAN` commence à 28 quand la
+      grille de ces produits commence à 29.* Le décodage croise donc la **légende** (origine
+      des positions) et la **grille du produit** (bornes), et n'est retenu que si chaque
+      taille décodée appartient à la grille **et** que le total retombe. ⚠️ Le seul contrôle
+      de total ne suffirait pas : un décalage de position le conserve.
   - `color-orders` — **export CSV TIO « commandes à la couleur »** : une ligne par commande ×
     produit × coloris, quantités en colonnes **`T0..T12` positionnelles**. Reconnu sur son
     texte (point-virgule, BOM, et repli **Windows-1252** si l'UTF-8 donne des caractères de
@@ -480,6 +494,14 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
       inhabituel, lui, est **conservé** et signalé.
     - **Pièces = « Quantité à la couleur »**, pas la somme des `T0..Tn` ; si les deux ne
       concordent pas, les tailles sont abandonnées.
+    - 🔴 **Les répartitions déjà synchronisées depuis TIO font autorité sur le décodage
+      positionnel.** *Mesuré sur 5 893 lignes confrontées à ce que la synchro TIO avait écrit :
+      le décodage par la grille du produit retombe juste **5 859 fois (99,4 %)** mais échoue sur
+      trois gammes à tailles groupées — **CER 2/33, CAL 2/4, SOC 2/3** (ceintures, chaussettes).
+      Exemple : `AMBELT_P004`, grille « L,3XL », le fichier donne `T0=4` ce qui vaudrait « L »
+      là où TIO a bien envoyé « 3XL ».* Sans ce recoupement, le contrôle inventerait 34 écarts
+      de répartition. La base n'est retenue que si elle totalise le même nombre de pièces que
+      le fichier ; sinon on garde le décodage positionnel.
   - `long` — **une ligne par taille** : c'est la forme de l'export GestLog « Commandes clients —
     détail par code-barres », et de tout fichier ayant n° de commande / référence / taille /
     quantité. Le montant de ligne vient d'une colonne `Montant`, sinon de `Prix wholesale` × qté ;

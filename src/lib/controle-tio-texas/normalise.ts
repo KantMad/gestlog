@@ -7,10 +7,11 @@
 import { prisma } from "@/lib/prisma";
 import { parseTexasClientOrders, parseMcsClientOrders } from "@/lib/import/mcs-format";
 import {
-  detecterFormat, lireFormatLong, lireColorOrders, texteCsv, type FormatControle,
+  detecterFormat, lireFormatLong, lireColorOrders, lireTexasStatgen, decoderTailesTexas,
+  texteCsv, type FormatControle,
 } from "./formats";
 import { sortSizeScale } from "@/lib/size-order";
-import type { Cote, LigneNormalisee } from "./engine";
+import { cleCommande, cleCouleur, type Cote, type LigneNormalisee } from "./engine";
 
 export interface FichierAnalyse {
   nom: string;
@@ -24,13 +25,15 @@ export interface FichierAnalyse {
 
 export const LIBELLE_FORMAT: Record<FormatControle, string> = {
   texas: "Commande client Texas (ERP)",
+  "texas-statgen": "StatGen commande client Texas (Q.N absolus + légende de gamme)",
   "color-orders": "Commandes à la couleur TIO (CSV, colonnes T0..T12)",
   long: "Une ligne par taille (export GestLog ou équivalent)",
   statgen: "Commande client TIO (StatGen, Q.1..Q.n)",
 };
 
 /** Côté déduit du format : seul l'export Texas décrit l'ERP. */
-export const coteDuFormat = (f: FormatControle): Cote => (f === "texas" ? "TEXAS" : "TIO");
+export const coteDuFormat = (f: FormatControle): Cote =>
+  f === "texas" || f === "texas-statgen" ? "TEXAS" : "TIO";
 
 const somme = (ns: number[]) => ns.reduce((s, n) => s + n, 0);
 
@@ -114,6 +117,47 @@ async function chargerGrillesParType(codes: string[]) {
   return (code: string): string[] | null => map.get(code.trim().toUpperCase()) ?? null;
 }
 
+/**
+ * Répartitions par taille déjà synchronisées depuis TIO, pour les commandes du fichier.
+ *
+ * 🔴 Elles font AUTORITÉ sur le décodage positionnel des colonnes T0..Tn. *Mesuré le
+ * 12/11/2026 en confrontant 5 893 lignes de l'export « commandes à la couleur » à ce que
+ * la synchro TIO avait écrit : le décodage par la grille du produit retombe juste 5 859
+ * fois (99,4 %), mais échoue sur trois gammes à tailles groupées — CER 2/33, CAL 2/4,
+ * SOC 2/3 (ceintures, chaussettes). Exemple : `AMBELT_P004`, grille « L,3XL », le fichier
+ * dit T0=4 ce qui donnerait « L » là où TIO a bien envoyé « 3XL ». Sans ce recoupement,
+ * le contrôle inventerait 34 écarts de répartition qui n'existent pas.*
+ *
+ * Le total fait foi : la base n'est retenue que si elle totalise le même nombre de pièces
+ * que le fichier.
+ */
+async function chargerRepartitionsTio(numerosCommande: string[]) {
+  if (numerosCommande.length === 0) return () => null;
+  const lignes = await prisma.clientOrderLine.findMany({
+    where: { clientOrder: { orderNumber: { in: numerosCommande }, source: "TIO" } },
+    select: {
+      quantitiesBySize: true,
+      totalQuantity: true,
+      clientOrder: { select: { orderNumber: true } },
+      product: { select: { reference: true, color: true } },
+    },
+  });
+  const map = new Map<string, { tailles: Record<string, number>; total: number }>();
+  for (const l of lignes) {
+    const k = `${cleCommande(l.clientOrder.orderNumber)}\u0000${l.product.reference.toUpperCase()}\u0000${cleCouleur(l.product.color)}`;
+    try {
+      const brut = JSON.parse(l.quantitiesBySize) as Record<string, number>;
+      const tailles: Record<string, number> = {};
+      for (const [t, q] of Object.entries(brut)) if (q > 0) tailles[t] = q;
+      map.set(k, { tailles, total: l.totalQuantity });
+    } catch {
+      /* répartition illisible : on s'en remet au décodage du fichier */
+    }
+  }
+  return (commande: string, reference: string, couleur: string) =>
+    map.get(`${cleCommande(commande)}\u0000${reference.toUpperCase()}\u0000${cleCouleur(couleur)}`) ?? null;
+}
+
 /** Statuts de commande TIO qui valent annulation (« cancel », « Cancelled », « Annuler »). */
 const estAnnulee = (statut: string) => /^(cancel|annul)/i.test(statut.trim());
 
@@ -175,15 +219,69 @@ export async function analyserFichier(
         `${taillesNonDecodees} ligne(s) sans décodage des tailles (légende de gamme ou Taille début/fin absente) : comparées sur le total de pièces seulement.`
       );
     }
+  } else if (format === "texas-statgen") {
+    // StatGen commande client de Texas : Q.1..Q.n ABSOLUS dans la gamme (légende en tête
+    // de fichier), et non dans la grille du produit. Le décodage croise les deux.
+    const { legende, lignes: brutes } = lireTexasStatgen(buffer);
+    const grilleDe = await chargerGrilles([...new Set(brutes.map((l) => l.reference))]);
+    let sansReference = 0;
+    const introuvables = new Map<string, number>();
+
+    for (const l of brutes) {
+      const grille = grilleDe(l.reference, l.codeCouleur);
+      const tailles = decoderTailesTexas(l.quantitesParPosition, grille, legende, l.quantite);
+      if (!tailles) {
+        taillesNonDecodees++;
+        if (!grille) {
+          const k = `${l.reference} / ${l.codeCouleur}${l.libelleCouleur ? ` (${l.libelleCouleur})` : ""}`;
+          introuvables.set(k, (introuvables.get(k) || 0) + 1);
+        }
+      }
+      if (!l.numeroTio) sansReference++;
+
+      lignes.push({
+        numeroTio: l.numeroTio,
+        numeroTexas: l.numeroTexas,
+        codeClient: l.codeClient,
+        nomClient: l.nomClient || undefined,
+        reference: l.reference,
+        codeCouleur: l.codeCouleur,
+        libelleCouleur: l.libelleCouleur,
+        ...(tailles ? { tailles } : {}),
+        pieces: l.quantite,
+        ...(l.montant > 0 ? { montantLigne: l.montant } : {}),
+      });
+    }
+
+    if (Object.keys(legende).length === 0) {
+      avertissements.push(
+        "Aucune légende de gamme en tête de fichier : les tailles ne peuvent pas être décodées, la comparaison se fera sur les totaux de pièces."
+      );
+    }
+    if (sansReference > 0) {
+      avertissements.push(
+        `${sansReference} ligne(s) sans « Référence commande client » : ces commandes Texas ne portent pas leur n° TIO, elles ne peuvent pas être rapprochées.`
+      );
+    }
+    if (introuvables.size > 0) {
+      const top = [...introuvables.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10);
+      avertissements.push(
+        `${introuvables.size} produit(s) absent(s) du référentiel GestLog : leur grille est inconnue, donc leurs tailles ne sont pas décodables (comparaison au total) — ${top
+          .map(([k, n]) => `${k} ×${n}`)
+          .join(", ")}${introuvables.size > 10 ? ", …" : ""}.`
+      );
+    }
   } else if (format === "color-orders") {
     // Export CSV TIO « commandes à la couleur » : une ligne par commande × produit ×
     // coloris, quantités réparties dans les colonnes T0..Tn (positionnelles).
     const texte = texteCsv(buffer);
     const brutes = texte ? lireColorOrders(texte) : [];
-    const [grilleDe, grilleType] = await Promise.all([
+    const [grilleDe, grilleType, repartitionTio] = await Promise.all([
       chargerGrilles([...new Set(brutes.map((l) => l.reference))]),
       chargerGrillesParType([...new Set(brutes.map((l) => l.typeTaille).filter(Boolean))]),
+      chargerRepartitionsTio([...new Set(brutes.map((l) => l.numeroCommande))]),
     ]);
+    let corroborees = 0;
 
     let annulees = 0;
     const autresStatuts = new Map<string, number>();
@@ -202,9 +300,18 @@ export async function analyserFichier(
       }
       if (l.catalogue) catalogues.add(l.catalogue);
 
-      const scale = grilleDe(l.reference, l.codeCouleur) ?? grilleType(l.typeTaille);
       let tailles: Record<string, number> | undefined;
-      if (scale) {
+
+      // D'abord la répartition déjà synchronisée depuis TIO : elle nomme les tailles au
+      // lieu de les déduire d'une position, et tranche les gammes à tailles groupées.
+      const deBase = repartitionTio(l.numeroCommande, l.reference, l.codeCouleur);
+      if (deBase && deBase.total === l.quantite) {
+        tailles = deBase.tailles;
+        corroborees++;
+      }
+
+      const scale = grilleDe(l.reference, l.codeCouleur) ?? grilleType(l.typeTaille);
+      if (!tailles && scale) {
         const acc: Record<string, number> = {};
         for (let i = 0; i < scale.length && i < l.quantitesParPosition.length; i++) {
           const q = l.quantitesParPosition[i];
@@ -235,6 +342,11 @@ export async function analyserFichier(
       });
     }
 
+    if (corroborees > 0 && corroborees < lignes.length) {
+      avertissements.push(
+        `${corroborees} ligne(s) sur ${lignes.length} ont vu leurs tailles confirmées par les commandes TIO déjà synchronisées dans GestLog ; les autres sont décodées depuis les colonnes T0..Tn du fichier.`
+      );
+    }
     if (annulees > 0) {
       avertissements.push(
         `${annulees} ligne(s) de commandes annulées écartées (statut « cancel ») — elles n'ont pas à être saisies dans Texas.`

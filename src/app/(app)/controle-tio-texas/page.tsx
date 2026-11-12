@@ -48,6 +48,7 @@ import {
 
 const LIBELLE_FORMAT: Record<FormatControle, string> = {
   texas: "Commande client Texas (ERP)",
+  "texas-statgen": "StatGen commande client Texas",
   "color-orders": "Commandes à la couleur TIO (CSV)",
   long: "Une ligne par taille (export GestLog)",
   statgen: "Commande client TIO (StatGen)",
