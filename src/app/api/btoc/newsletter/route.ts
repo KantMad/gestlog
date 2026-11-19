@@ -38,8 +38,9 @@ export async function GET(request: NextRequest) {
     const { gte, lt } = parisRangeToUtc(p.get("dateFrom"), p.get("dateTo"));
     const nlIds = newsletterListIds();
 
-    // Paramètres SQL fixes : $1 statuts exclus, $2 listes newsletter.
-    const args: unknown[] = [[...NON_ORDER_STATUSES], nlIds];
+    // $1 = statuts exclus ; les filtres ajoutent leurs paramètres à la suite
+    // (jamais de paramètre inutilisé : Postgres ne saurait pas le typer).
+    const args: unknown[] = [[...NON_ORDER_STATUSES]];
     const where: string[] = [];
     if (status === "subscribed") where.push("c.subscribed");
     else if (status === "unsubscribed") where.push(`c."inNewsletterList" AND NOT c.subscribed`);
@@ -48,7 +49,7 @@ export async function GET(request: NextRequest) {
     if (ordered === "no") where.push("o.k IS NULL");
     if (Number.isInteger(list) && list > 0) {
       args.push(list);
-      where.push(`($${args.length} = ANY(c."listIds") OR $${args.length} = ANY(c."unsubscribedListIds"))`);
+      where.push(`($${args.length}::int = ANY(c."listIds") OR $${args.length}::int = ANY(c."unsubscribedListIds"))`);
     }
     if (gte) { args.push(gte); where.push(`c."subscribedAt" >= $${args.length}`); }
     if (lt) { args.push(lt); where.push(`c."subscribedAt" < $${args.length}`); }
@@ -109,15 +110,17 @@ export async function GET(request: NextRequest) {
       [...NON_ORDER_STATUSES],
     );
     const byList = await prisma.$queryRawUnsafe<{ id: number; n: bigint }[]>(
-      `SELECT id, COUNT(*) n FROM "BtocNewsletterContact" c, unnest(c."listIds") id
-        WHERE c.subscribed AND id = ANY($1) GROUP BY id ORDER BY n DESC`,
+      // ⚠️ alias list_id : la table a déjà une colonne « id » (ambiguïté SQL).
+      `SELECT l.list_id id, COUNT(*) n
+         FROM "BtocNewsletterContact" c, unnest(c."listIds") AS l(list_id)
+        WHERE c.subscribed AND l.list_id = ANY($1) GROUP BY l.list_id ORDER BY n DESC`,
       nlIds,
     );
     // Par mois (Paris), 18 derniers mois : nouveaux inscrits (encore inscrits ou non)
     // et désinscriptions constatées.
     const monthly = await prisma.$queryRawUnsafe<{ month: string; subs: bigint; unsubs: bigint }[]>(
       `WITH m AS (
-         SELECT to_char(("subscribedAt" AT TIME ZONE 'UTC') AT TIME ZONE 'Europe/Paris', 'YYYY-MM') month,
+         SELECT to_char(("subscribedAt" AT TIME ZONE 'UTC') AT TIME ZONE 'Europe/Paris', 'YYYY-MM') AS month,
                 1 subs, 0 unsubs
            FROM "BtocNewsletterContact" WHERE "inNewsletterList" AND "subscribedAt" IS NOT NULL
          UNION ALL
