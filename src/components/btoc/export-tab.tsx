@@ -25,6 +25,12 @@ import {
 import { formatNumber } from "@/lib/utils";
 import * as XLSX from "xlsx";
 import { fileStamp } from "@/lib/file-stamp";
+import {
+  clientSheetRow,
+  prospectSheetRow,
+  type ClientRow,
+  type ProspectRow,
+} from "@/lib/btoc-contacts";
 
 // ─── Types ──────────────────────────────────────────
 interface ExportFields {
@@ -162,6 +168,8 @@ export function BtocExportTab() {
   const [exportingOrders, setExportingOrders] = useState(false);
   const [exportingCustomers, setExportingCustomers] = useState(false);
   const [exportingTopClients, setExportingTopClients] = useState(false);
+  const [exportingContacts, setExportingContacts] = useState(false);
+  const [contactsInfo, setContactsInfo] = useState<string | null>(null);
   const [exportingBestSellers, setExportingBestSellers] = useState(false);
   const [exportingSalesDetails, setExportingSalesDetails] = useState(false);
   const [exportingParents, setExportingParents] = useState(false);
@@ -517,6 +525,44 @@ export function BtocExportTab() {
       console.error("Erreur export clients:", e);
     } finally {
       setExportingCustomers(false);
+    }
+  };
+
+  // ─── Export Clients & prospects ───────────────────
+  // 1 classeur, 2 onglets : Clients (ont commandé) / Prospects (newsletter, compte,
+  // panier non abouti — sans commande). Règles : lib/btoc-contacts.
+  const handleExportContacts = async () => {
+    setExportingContacts(true);
+    setContactsInfo(null);
+    try {
+      const res = await fetch("/api/btoc/export/contacts");
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data: {
+        clients: ClientRow[];
+        prospects: ProspectRow[];
+        meta: { brevoError: string | null };
+      } = await res.json();
+      const wb = XLSX.utils.book_new();
+      const addSheet = (rows: Record<string, string | number>[], name: string) => {
+        const ws = XLSX.utils.json_to_sheet(rows);
+        const keys = rows.length ? Object.keys(rows[0]) : [];
+        ws["!cols"] = keys.map((k) => ({
+          wch: Math.min(40, Math.max(k.length + 2, ...rows.slice(0, 2000).map((r) => String(r[k] ?? "").length))),
+        }));
+        XLSX.utils.book_append_sheet(wb, ws, name);
+      };
+      addSheet(data.clients.map(clientSheetRow), "Clients");
+      addSheet(data.prospects.map(prospectSheetRow), "Prospects");
+      XLSX.writeFile(wb, `clients-prospects-btoc-${today()}.xlsx`);
+      setContactsInfo(
+        `${formatNumber(data.clients.length)} clients · ${formatNumber(data.prospects.length)} prospects` +
+          (data.meta.brevoError ? ` — ⚠️ ${data.meta.brevoError}` : ""),
+      );
+    } catch (e) {
+      console.error("Erreur export clients & prospects:", e);
+      setContactsInfo("Erreur pendant l'export, réessaie dans un instant.");
+    } finally {
+      setExportingContacts(false);
     }
   };
 
@@ -1181,6 +1227,42 @@ export function BtocExportTab() {
       </Card>
 
       {/* ─── Export Top Clients ───────────────────────── */}
+      {/* ─── Export Clients & prospects ───────────────── */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-sky-50">
+              <Users className="h-5 w-5 text-sky-600" />
+            </div>
+            <div>
+              <CardTitle className="text-base">Export Clients &amp; prospects</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Onglet Clients (live + historique) : email, téléphone, prénom, nom, code postal, ville, pays,
+                dernière commande, nb commandes, total dépensé. Onglet Prospects (jamais commandé) : inscrits
+                newsletter Brevo, comptes sans commande, paniers non aboutis — mêmes colonnes + date et origine.
+              </p>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap items-center gap-3">
+            {contactsInfo && <span className="text-sm text-muted-foreground">{contactsInfo}</span>}
+            <Button
+              onClick={handleExportContacts}
+              disabled={exportingContacts}
+              className="gap-2 h-9 ml-auto"
+            >
+              {exportingContacts ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="h-4 w-4" />
+              )}
+              {exportingContacts ? "Lecture Brevo…" : "Exporter clients & prospects"}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <div className="flex items-center gap-3">

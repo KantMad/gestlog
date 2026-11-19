@@ -211,4 +211,33 @@ export async function getAccount(): Promise<unknown> {
   return brevoRequest("/account");
 }
 
+export interface BrevoContact {
+  email: string;
+  emailBlacklisted: boolean;
+  listIds: number[];
+  createdAt: string;
+  attributes: Record<string, unknown>;
+}
+
+/**
+ * Lit TOUS les contacts du compte (pages de 1000, ≈ 21 appels pour 20 000 contacts),
+ * par lots parallèles de 4 pour rester sous la limite de débit Brevo.
+ */
+export async function listAllContacts(): Promise<BrevoContact[]> {
+  const PAGE = 1000;
+  type Page = { contacts?: BrevoContact[]; count?: number };
+  const first = await brevoRequest<Page>(`/contacts?limit=${PAGE}&offset=0&sort=asc`);
+  const out = [...(first?.contacts ?? [])];
+  const total = first?.count ?? out.length;
+  const offsets: number[] = [];
+  for (let o = PAGE; o < total; o += PAGE) offsets.push(o);
+  for (let i = 0; i < offsets.length; i += 4) {
+    const pages = await Promise.all(
+      offsets.slice(i, i + 4).map((o) => brevoRequest<Page>(`/contacts?limit=${PAGE}&offset=${o}&sort=asc`)),
+    );
+    for (const p of pages) out.push(...(p?.contacts ?? []));
+  }
+  return out;
+}
+
 export { brevoRequest };

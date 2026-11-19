@@ -12,7 +12,7 @@ produits, commandes, stock, remboursements) + **gestion VIP via Brevo**.
   `vip-recompute`. (Auth `x-api-key=SYNC_API_KEY` comme les autres `/api/sync`.)
 - Écran : **`/btoc`** (onglets Statistiques, Export, **Segmentation**, Clients, Paramètres).
   API de lecture/exports sous `/api/btoc/*` : `customers`, `stats`, `size-distribution`,
-  **`segmentation`**, `export/{orders,products,best-sellers,top-clients,sales-details,parents}`,
+  **`segmentation`**, `export/{orders,products,best-sellers,top-clients,contacts,sales-details,parents}`,
   `settings`.
 
 ## Stats BtoC — Top 15 produits
@@ -218,6 +218,33 @@ produit**, insensible à la **casse**, aux **accents** et au **pluriel**.
   Sous-vêtements 2, Autres 3.
 - ⚠️ **Surchemise n'est pas une chemise** (mot distinct, 24 produits) : le classement est
   par MOT, pas par sous-chaîne.
+
+## Export « Clients & prospects » (`/api/btoc/export/contacts`)
+
+Carte **Export Clients & prospects** de l'onglet Export de `/btoc` → **1 classeur, 2 onglets**.
+Règles de fusion dans `src/lib/btoc-contacts.ts` (pur, testé) ; lecture Brevo via
+`listAllContacts()` de `src/lib/brevo.ts` (pages de 1000, ≈ 21 appels, 10-20 s).
+
+- **Clients** = e-mails (normalisés `LOWER(TRIM())`) ayant au moins une commande **aboutie**
+  dans `BtocOrder` **ou** `HistOrder`. ⚠️ Plus strict que les autres exports : on exclut aussi
+  `pending` et `checkout-draft` (jamais payées) en plus de `cancelled/refunded/failed`.
+  Total dépensé = `total − totalRefunded`. Identité : fiche `BtocCustomer` > dernière commande
+  > historique ; téléphone complété par Brevo (`SMS`/`PHONE`). ⚠️ L'**adresse vient de la
+  dernière commande** : la fiche compte n'a quasiment jamais de code postal (11/2 560).
+- **Prospects** = jamais commandé (tout e-mail client est retiré), 1 ligne par e-mail,
+  colonne **Origine** cumulable et **Date** = 1er contact connu :
+  - `newsletter` : contact Brevo **non désinscrit** (`emailBlacklisted=false`) d'une liste
+    newsletter — par défaut **8 FR, 9 EN, 12 Boutique Réaumur**, surchargeable par
+    `BREVO_NEWSLETTER_LIST_IDS` (CSV). Les listes 5 « WooCommerce » / 13
+    « WooCommerce_NonSubscribers » sont celles du plugin, **pas** des abonnés. Date = `createdAt` Brevo.
+  - `compte` : `BtocCustomer` sans commande. ⚠️ GestLog ne stocke **pas** la date d'inscription
+    Woo : date = `createdAt` Brevo du contact (créé par le plugin à l'inscription), sinon
+    `BtocCustomer.createdAt` **sauf** l'import initial du 08/06/2026 (date vide).
+  - `panier` : commande `pending/failed/cancelled/checkout-draft` (e-mail saisi au checkout,
+    jamais payée). ⚠️ **Les vrais paniers abandonnés ne sont disponibles nulle part** : l'API
+    Brevo n'expose que les événements `order_completed` et `client_vip` (vérifié le 19/11/2026),
+    aucun `cart_*`. Ces commandes non abouties en sont le meilleur substitut.
+- Si Brevo est injoignable, l'export sort quand même (sans newsletter) avec un avertissement.
 
 ## VIP Brevo
 
