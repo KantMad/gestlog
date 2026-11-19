@@ -6,13 +6,14 @@ produits, commandes, stock, remboursements) + **gestion VIP via Brevo**.
 ## Données & synchro
 
 - Modèles : `BtocCustomer`, `BtocProduct`, `BtocOrder`, `BtocOrderLine`, `BtocRefundLine`,
-  `BtocSyncLog` (+ `HistOrder`/`HistOrderLine` pour l'historique importé).
+  `BtocSyncLog`, **`BtocNewsletterContact`** (miroir des contacts Brevo)
+  (+ `HistOrder`/`HistOrderLine` pour l'historique importé).
 - Synchro poussée via n8n vers **`/api/sync/btoc/*`** :
   `customers`, `orders`, `products`, `stock`, `refunds`, `order-countries`,
-  `vip-recompute`. (Auth `x-api-key=SYNC_API_KEY` comme les autres `/api/sync`.)
-- Écran : **`/btoc`** (onglets Statistiques, Export, **Segmentation**, Clients, Paramètres).
+  `vip-recompute`, **`newsletter`** (lit Brevo lui-même, sans corps). (Auth `x-api-key=SYNC_API_KEY` comme les autres `/api/sync`.)
+- Écran : **`/btoc`** (onglets Statistiques, Export, **Segmentation**, Clients, **Newsletter**, Paramètres).
   API de lecture/exports sous `/api/btoc/*` : `customers`, `stats`, `size-distribution`,
-  **`segmentation`**, `export/{orders,products,best-sellers,top-clients,contacts,sales-details,parents}`,
+  **`segmentation`**, **`newsletter`**, `export/{orders,products,best-sellers,top-clients,contacts,sales-details,parents}`,
   `settings`.
 
 ## Stats BtoC — Top 15 produits
@@ -219,32 +220,59 @@ produit**, insensible à la **casse**, aux **accents** et au **pluriel**.
 - ⚠️ **Surchemise n'est pas une chemise** (mot distinct, 24 produits) : le classement est
   par MOT, pas par sous-chaîne.
 
+## Newsletter (`BtocNewsletterContact`, onglet Newsletter)
+
+**Miroir local de TOUS les contacts Brevo** (≈ 20 000), pas seulement des inscrits — il sert
+aussi à dater les comptes Woo dans l'export Clients & prospects.
+
+- **Synchro** : `POST /api/sync/btoc/newsletter` (x-api-key, **sans corps**) — GestLog lit
+  lui-même Brevo (`listAllContacts()`, pages de 1000, ~10 s) et fait un upsert par e-mail
+  normalisé (`jsonb_to_recordset`, lots de 1000). Appelée par n8n en **dernier nœud** du
+  workflow « GestLog — Sync BtoC WooCommerce » (après VIP Recompute). Journal :
+  `BtocSyncLog.syncType = "NEWSLETTER"`.
+- **Inscrit** (`subscribed`) = non désinscrit (`emailBlacklisted=false`) **ET** dans une liste
+  newsletter : par défaut **8 FR, 9 EN, 12 Boutique Réaumur**, surchargeable par
+  `BREVO_NEWSLETTER_LIST_IDS` (CSV) — règle dans `src/lib/btoc-newsletter.ts` (pur, testé).
+  ⚠️ Les listes **5 « WooCommerce »** et **13 « WooCommerce_NonSubscribers »** sont alimentées
+  par le plugin Woo avec **tous** les clients : ce ne sont **pas** des abonnés.
+- **Désinscrit** = `inNewsletterList` (a été dans une liste newsletter, via `listIds` ou
+  `listUnsubscribed`, valeur collante) **ET NOT** `subscribed`.
+- **Dates** : `subscribedAt` = `createdAt` Brevo. ⚠️ Brevo ne fournit **pas** de date de
+  désinscription : `unsubscribedAt` = `modifiedAt` Brevo au moment où la synchro **constate**
+  le passage inscrit → désinscrit (remis à `NULL` en cas de réinscription). Pour les
+  désinscrits déjà présents à la 1re synchro (19/11/2026), c'est donc une approximation.
+- **Jamais de suppression** : un contact disparu de Brevo passe `subscribed=false` +
+  `removedAt`. Garde-fou : si Brevo renvoie **< 50 %** de la base connue, ce marquage est
+  sauté (erreur journalisée) pour ne pas tout désinscrire sur une réponse partielle.
+- **Onglet Newsletter** (`src/components/btoc/newsletter-tab.tsx`, API `GET /api/btoc/newsletter`) :
+  compteurs (inscrits / sans commande / clients / désinscrits), graphe 18 mois
+  inscriptions-désinscriptions, inscrits par liste, liste filtrable (statut, a commandé,
+  liste, date d'inscription, recherche) et export Excel (`export=1`). « A commandé » =
+  commande aboutie live **ou** historique (même règle que l'export ci-dessous).
+
 ## Export « Clients & prospects » (`/api/btoc/export/contacts`)
 
 Carte **Export Clients & prospects** de l'onglet Export de `/btoc` → **1 classeur, 2 onglets**.
-Règles de fusion dans `src/lib/btoc-contacts.ts` (pur, testé) ; lecture Brevo via
-`listAllContacts()` de `src/lib/brevo.ts` (pages de 1000, ≈ 21 appels, 10-20 s).
+Règles de fusion dans `src/lib/btoc-contacts.ts` (pur, testé). Les contacts Brevo sont lus
+dans **`BtocNewsletterContact`** (plus d'appel Brevo en direct → export instantané ; si la
+table est vide, l'export sort sans newsletter avec un avertissement).
 
 - **Clients** = e-mails (normalisés `LOWER(TRIM())`) ayant au moins une commande **aboutie**
   dans `BtocOrder` **ou** `HistOrder`. ⚠️ Plus strict que les autres exports : on exclut aussi
   `pending` et `checkout-draft` (jamais payées) en plus de `cancelled/refunded/failed`.
   Total dépensé = `total − totalRefunded`. Identité : fiche `BtocCustomer` > dernière commande
-  > historique ; téléphone complété par Brevo (`SMS`/`PHONE`). ⚠️ L'**adresse vient de la
-  dernière commande** : la fiche compte n'a quasiment jamais de code postal (11/2 560).
+  > historique ; téléphone complété par Brevo. ⚠️ L'**adresse vient de la dernière commande** :
+  la fiche compte n'a quasiment jamais de code postal (11/2 560).
 - **Prospects** = jamais commandé (tout e-mail client est retiré), 1 ligne par e-mail,
   colonne **Origine** cumulable et **Date** = 1er contact connu :
-  - `newsletter` : contact Brevo **non désinscrit** (`emailBlacklisted=false`) d'une liste
-    newsletter — par défaut **8 FR, 9 EN, 12 Boutique Réaumur**, surchargeable par
-    `BREVO_NEWSLETTER_LIST_IDS` (CSV). Les listes 5 « WooCommerce » / 13
-    « WooCommerce_NonSubscribers » sont celles du plugin, **pas** des abonnés. Date = `createdAt` Brevo.
+  - `newsletter` : `BtocNewsletterContact.subscribed` (voir ci-dessus). Date = `subscribedAt`.
   - `compte` : `BtocCustomer` sans commande. ⚠️ GestLog ne stocke **pas** la date d'inscription
-    Woo : date = `createdAt` Brevo du contact (créé par le plugin à l'inscription), sinon
-    `BtocCustomer.createdAt` **sauf** l'import initial du 08/06/2026 (date vide).
+    Woo : date = `subscribedAt` du contact Brevo (créé par le plugin à l'inscription, même
+    non abonné), sinon `BtocCustomer.createdAt` **sauf** l'import initial du 08/06/2026 (vide).
   - `panier` : commande `pending/failed/cancelled/checkout-draft` (e-mail saisi au checkout,
     jamais payée). ⚠️ **Les vrais paniers abandonnés ne sont disponibles nulle part** : l'API
     Brevo n'expose que les événements `order_completed` et `client_vip` (vérifié le 19/11/2026),
     aucun `cart_*`. Ces commandes non abouties en sont le meilleur substitut.
-- Si Brevo est injoignable, l'export sort quand même (sans newsletter) avec un avertissement.
 
 ## VIP Brevo
 

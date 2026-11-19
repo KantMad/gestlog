@@ -672,6 +672,37 @@ model BtocRefundLine {
   @@index([sku])
 }
 
+// Miroir des contacts Brevo (TOUS, ≈ 20 000), synchronisé par
+// POST /api/sync/btoc/newsletter (n8n, quotidien). Sert l'onglet Newsletter de /btoc
+// et l'export Clients & prospects (qui n'appelle plus Brevo en direct).
+// « Inscrit newsletter » = subscribed : non désinscrit ET dans une liste newsletter
+// (BREVO_NEWSLETTER_LIST_IDS, défaut 8 FR / 9 EN / 12 Boutique Réaumur).
+// Les contacts ne sont JAMAIS supprimés : un contact disparu de Brevo passe
+// subscribed=false + removedAt, pour garder l'historique.
+model BtocNewsletterContact {
+  id              String    @id
+  email           String    @unique // normalisé LOWER(TRIM())
+  brevoId         Int?
+  firstName       String?
+  lastName        String?
+  phone           String?
+  listIds         Int[]     @default([])
+  unsubscribedListIds Int[] @default([]) // listUnsubscribed Brevo
+  blacklisted     Boolean   @default(false) // emailBlacklisted Brevo (désinscrit de tout)
+  inNewsletterList Boolean  @default(false) // a été (ou est) dans une liste newsletter
+  subscribed      Boolean   @default(false)
+  subscribedAt    DateTime? // createdAt Brevo
+  unsubscribedAt  DateTime? // 1re synchro où on l'a vu désinscrit (≈ modifiedAt Brevo)
+  brevoModifiedAt DateTime?
+  removedAt       DateTime? // disparu de Brevo (supprimé côté Brevo)
+  lastSeenAt      DateTime
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([subscribed])
+  @@index([subscribedAt])
+}
+
 model BtocSyncLog {
   id         String   @id @default(cuid())
   syncType   String   // CUSTOMERS, PRODUCTS, ORDERS, STOCK

@@ -5,7 +5,7 @@ import {
   clientSheetRow,
   prospectSheetRow,
   type AccountInput,
-  type BrevoContactInput,
+  type NewsletterContactInput,
   type ClientRow,
   type UnfinishedOrderInput,
 } from "./btoc-contacts";
@@ -18,11 +18,12 @@ const cart = (o: Partial<UnfinishedOrderInput>): UnfinishedOrderInput => ({
   email: "x@y.fr", firstName: null, lastName: null, customerName: null,
   postcode: null, city: null, country: null, lastDate: new Date("2026-10-01T10:00:00Z"), ...o,
 });
-const bv = (o: Partial<BrevoContactInput>): BrevoContactInput => ({
-  email: "x@y.fr", emailBlacklisted: false, listIds: [8], createdAt: "2026-03-01T10:00:00Z", attributes: {}, ...o,
+const bv = (o: Partial<NewsletterContactInput>): NewsletterContactInput => ({
+  email: "x@y.fr", subscribed: true, subscribedAt: new Date("2026-03-01T10:00:00Z"),
+  firstName: null, lastName: null, phone: null, ...o,
 });
 const run = (o: Partial<Parameters<typeof buildProspects>[0]>) =>
-  buildProspects({ clientEmails: new Set(), accounts: [], unfinished: [], brevo: [], newsletterListIds: [8, 9, 12], ...o });
+  buildProspects({ clientEmails: new Set(), accounts: [], unfinished: [], brevo: [], ...o });
 
 describe("buildProspects", () => {
   it("exclut tout e-mail déjà client, quelle que soit la casse", () => {
@@ -34,7 +35,7 @@ describe("buildProspects", () => {
     const [p] = run({
       accounts: [acc({ email: "a@b.fr", firstName: "Léa", city: "Lyon" })],
       unfinished: [cart({ email: "a@b.fr" })],
-      brevo: [bv({ email: "A@b.fr", attributes: { PRENOM: "Autre", SMS: "+33600000000" } })],
+      brevo: [bv({ email: "A@b.fr", firstName: "Autre", phone: "+33600000000" })],
     });
     expect(p.origin).toBe("newsletter, compte, panier");
     expect(p.date).toBe("2026-03-01");
@@ -43,8 +44,8 @@ describe("buildProspects", () => {
     expect(p.city).toBe("Lyon");
   });
 
-  it("ignore les désinscrits et les listes hors newsletter", () => {
-    const r = run({ brevo: [bv({ email: "a@b.fr", emailBlacklisted: true }), bv({ email: "c@d.fr", listIds: [5, 13] })] });
+  it("ignore les contacts Brevo non inscrits", () => {
+    const r = run({ brevo: [bv({ email: "a@b.fr", subscribed: false })] });
     expect(r).toEqual([]);
   });
 
@@ -55,13 +56,13 @@ describe("buildProspects", () => {
         acc({ email: "new@x.fr", createdAt: new Date("2026-09-15T08:00:00Z") }),
         acc({ email: "br@x.fr" }),
       ],
-      brevo: [bv({ email: "br@x.fr", listIds: [5], createdAt: "2025-12-24T10:00:00Z" })],
+      brevo: [bv({ email: "br@x.fr", subscribed: false, subscribedAt: new Date("2025-12-24T10:00:00Z") })],
     });
     const by = Object.fromEntries(r.map((p) => [p.email, p]));
     expect(by["old@x.fr"].date).toBeNull();
     expect(by["new@x.fr"].date).toBe("2026-09-15");
     expect(by["br@x.fr"].date).toBe("2025-12-24");
-    expect(by["br@x.fr"].origin).toBe("compte"); // liste 5 ≠ newsletter
+    expect(by["br@x.fr"].origin).toBe("compte"); // contact Brevo non inscrit
   });
 
   it("découpe le nom de la commande quand le prénom/nom de facturation manque", () => {
@@ -76,7 +77,7 @@ describe("enrichClients / feuilles", () => {
     country: "FR", lastOrder: "2026-11-01", ordersCount: 2, totalSpent: 123.456,
   };
   it("complète le téléphone depuis Brevo sans écraser le reste", () => {
-    const [c] = enrichClients([cl], [bv({ email: "A@B.FR", attributes: { SMS: "0601", PRENOM: "Z" } })]);
+    const [c] = enrichClients([cl], [bv({ email: "A@B.FR", phone: "0601", firstName: "Z" })]);
     expect(c.phone).toBe("0601");
     expect(c.firstName).toBe("A");
   });

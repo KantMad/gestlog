@@ -96,7 +96,7 @@ middleware laisse passer `/api/sync/` sans cookie — cf. `PUBLIC_PATHS`). Princ
   valeur vide n'écrase pas l'existant.
 - `/api/sync/shipments`, `/api/sync/shipment-pdfs`, `/api/sync/bl-order-numbers` — BL/FAC dépôt.
 - `/api/sync/btoc/*` — BtoC (customers, orders, products, stock, refunds, order-countries,
-  vip-recompute). Voir [`07`](07-btoc-brevo.md).
+  vip-recompute, **newsletter** = contacts Brevo, dernier nœud du workflow BtoC). Voir [`07`](07-btoc-brevo.md).
 - `/api/sync/caisse-retry` — relance des envois caisse en échec (voir [`06`](06-integration-caisse.md)).
 
 ## Règle quand tu modifies un flux

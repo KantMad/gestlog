@@ -1,23 +1,22 @@
 import { NextResponse } from "next/server";
 import { handleApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
-import { listAllContacts, type BrevoContact } from "@/lib/brevo";
 import {
   NON_ORDER_STATUSES,
   UNFINISHED_STATUSES,
-  DEFAULT_NEWSLETTER_LIST_IDS,
   buildProspects,
   enrichClients,
   parisYmd,
   splitName,
   type AccountInput,
   type ClientRow,
+  type NewsletterContactInput,
   type UnfinishedOrderInput,
 } from "@/lib/btoc-contacts";
 
 // Export « Clients & prospects » : 2 listes (cf. lib/btoc-contacts pour les règles).
-// La lecture Brevo prend ~10-20 s (≈ 21 pages de 1000 contacts).
-export const maxDuration = 120;
+// Brevo est lu depuis BtocNewsletterContact (synchro quotidienne), plus en direct.
+export const maxDuration = 60;
 
 export async function GET() {
   try {
@@ -125,27 +124,17 @@ export async function GET() {
       [...UNFINISHED_STATUSES],
     );
 
-    // 4) Brevo (newsletter). En cas d'échec, on livre quand même le reste + un avertissement.
-    let brevo: BrevoContact[] = [];
-    let brevoError: string | null = null;
-    try {
-      brevo = await listAllContacts();
-    } catch (e) {
-      console.error("[api/btoc/export/contacts] Brevo", e);
-      brevoError = "Brevo injoignable : les inscrits newsletter ne sont pas dans l'export.";
-    }
-
-    const newsletterListIds = (process.env.BREVO_NEWSLETTER_LIST_IDS ?? "")
-      .split(",").map((x) => Number(x.trim())).filter((n) => Number.isInteger(n) && n > 0);
+    // 4) Contacts Brevo (miroir local, cf. /api/sync/btoc/newsletter).
+    const brevo = await prisma.$queryRawUnsafe<NewsletterContactInput[]>(
+      `SELECT email, subscribed, "subscribedAt", "firstName", "lastName", phone
+         FROM "BtocNewsletterContact" WHERE "removedAt" IS NULL`,
+    );
+    const brevoError = brevo.length === 0
+      ? "Contacts Brevo pas encore synchronisés : les inscrits newsletter ne sont pas dans l'export."
+      : null;
 
     clients = enrichClients(clients, brevo);
-    const prospects = buildProspects({
-      clientEmails,
-      accounts,
-      unfinished,
-      brevo,
-      newsletterListIds: newsletterListIds.length ? newsletterListIds : DEFAULT_NEWSLETTER_LIST_IDS,
-    });
+    const prospects = buildProspects({ clientEmails, accounts, unfinished, brevo });
 
     return NextResponse.json({
       clients,

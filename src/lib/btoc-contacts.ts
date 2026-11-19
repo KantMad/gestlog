@@ -5,7 +5,7 @@
 //
 //  1. CLIENTS   : au moins une commande aboutie (boutique live OU historique importé).
 //  2. PROSPECTS : contacts qui n'ont JAMAIS commandé, de trois origines cumulables :
-//       • newsletter : contact Brevo d'une liste newsletter, non désinscrit ;
+//       • newsletter : inscrit newsletter (BtocNewsletterContact.subscribed, miroir Brevo) ;
 //       • compte     : compte WooCommerce (BtocCustomer) sans commande ;
 //       • panier     : commande WooCommerce non aboutie (en attente de paiement,
 //                      échouée, annulée) — e-mail saisi au checkout, jamais payé.
@@ -17,9 +17,6 @@
 export const NON_ORDER_STATUSES = ["cancelled", "refunded", "failed", "pending", "checkout-draft"] as const;
 /** Statuts « panier non abouti » : l'e-mail a été saisi mais rien n'a été payé. */
 export const UNFINISHED_STATUSES = ["pending", "failed", "cancelled", "checkout-draft"] as const;
-
-/** Listes Brevo considérées comme « newsletter » (FR, EN, Boutique Réaumur). */
-export const DEFAULT_NEWSLETTER_LIST_IDS = [8, 9, 12];
 
 /**
  * La 1re synchro des comptes WooCommerce a eu lieu le 08/06/2026 : pour les comptes
@@ -74,12 +71,14 @@ export interface UnfinishedOrderInput {
   lastDate: Date;
 }
 
-export interface BrevoContactInput {
+/** Contact Brevo tel que stocké dans BtocNewsletterContact. */
+export interface NewsletterContactInput {
   email: string;
-  emailBlacklisted: boolean;
-  listIds: number[];
-  createdAt: string;
-  attributes: Record<string, unknown>;
+  subscribed: boolean;
+  subscribedAt: Date | null; // createdAt Brevo
+  firstName: string | null;
+  lastName: string | null;
+  phone: string | null;
 }
 
 export function normEmail(e: string | null | undefined): string {
@@ -105,16 +104,8 @@ export function splitName(full: string | null | undefined): { firstName: string;
   return { firstName: parts.shift() ?? "", lastName: parts.join(" ") };
 }
 
-function brevoIdentity(c: BrevoContactInput): Omit<Identity, "email"> {
-  const a = c.attributes ?? {};
-  return {
-    phone: s(a.SMS) || s(a.PHONE) || s(a.LANDLINE_NUMBER) || s(a.WHATSAPP),
-    firstName: s(a.PRENOM) || s(a.FIRSTNAME),
-    lastName: s(a.NOM) || s(a.LASTNAME),
-    postcode: "",
-    city: "",
-    country: "",
-  };
+function brevoIdentity(c: NewsletterContactInput): Omit<Identity, "email"> {
+  return { phone: s(c.phone), firstName: s(c.firstName), lastName: s(c.lastName), postcode: "", city: "", country: "" };
 }
 
 /** Remplit les champs vides de `into` avec ceux de `from` (jamais d'écrasement). */
@@ -124,12 +115,8 @@ function fillBlanks(into: Identity, from: Partial<Omit<Identity, "email">>) {
   }
 }
 
-export function isNewsletterContact(c: BrevoContactInput, listIds: number[]): boolean {
-  return !c.emailBlacklisted && (c.listIds ?? []).some((id) => listIds.includes(id));
-}
-
 /** Complète le téléphone des clients depuis Brevo quand la boutique ne l'a pas. */
-export function enrichClients(clients: ClientRow[], brevo: BrevoContactInput[]): ClientRow[] {
+export function enrichClients(clients: ClientRow[], brevo: NewsletterContactInput[]): ClientRow[] {
   const byEmail = new Map(brevo.map((c) => [normEmail(c.email), c]));
   return clients.map((cl) => {
     const b = byEmail.get(normEmail(cl.email));
@@ -144,11 +131,10 @@ export function buildProspects(input: {
   clientEmails: Set<string>;
   accounts: AccountInput[];
   unfinished: UnfinishedOrderInput[];
-  brevo: BrevoContactInput[];
-  newsletterListIds: number[];
+  brevo: NewsletterContactInput[];
 }): ProspectRow[] {
-  const { clientEmails, newsletterListIds } = input;
-  const brevoByEmail = new Map<string, BrevoContactInput>();
+  const { clientEmails } = input;
+  const brevoByEmail = new Map<string, NewsletterContactInput>();
   for (const c of input.brevo) {
     const k = normEmail(c.email);
     if (k) brevoByEmail.set(k, c);
@@ -171,8 +157,7 @@ export function buildProspects(input: {
     return a;
   };
   const brevoDate = (k: string): Date | null => {
-    const b = brevoByEmail.get(k);
-    const d = b ? new Date(b.createdAt) : null;
+    const d = brevoByEmail.get(k)?.subscribedAt ?? null;
     return d && !Number.isNaN(d.getTime()) ? d : null;
   };
 
@@ -202,7 +187,7 @@ export function buildProspects(input: {
 
   for (const c of input.brevo) {
     const k = normEmail(c.email);
-    const subscribed = isNewsletterContact(c, newsletterListIds);
+    const subscribed = c.subscribed;
     // Un contact Brevo hors newsletter n'entre pas, mais sert à compléter l'identité.
     const a = subscribed ? get(k) : map.get(k) ?? null;
     if (!a) continue;

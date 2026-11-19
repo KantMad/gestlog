@@ -212,10 +212,13 @@ export async function getAccount(): Promise<unknown> {
 }
 
 export interface BrevoContact {
+  id?: number;
   email: string;
   emailBlacklisted: boolean;
   listIds: number[];
+  listUnsubscribed?: number[];
   createdAt: string;
+  modifiedAt?: string;
   attributes: Record<string, unknown>;
 }
 

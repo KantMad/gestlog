@@ -1239,7 +1239,7 @@ export function BtocExportTab() {
               <p className="text-sm text-muted-foreground">
                 Onglet Clients (live + historique) : email, téléphone, prénom, nom, code postal, ville, pays,
                 dernière commande, nb commandes, total dépensé. Onglet Prospects (jamais commandé) : inscrits
-                newsletter Brevo, comptes sans commande, paniers non aboutis — mêmes colonnes + date et origine.
+                newsletter (onglet Newsletter), comptes sans commande, paniers non aboutis — mêmes colonnes + date et origine.
               </p>
             </div>
           </div>
@@ -1257,7 +1257,7 @@ export function BtocExportTab() {
               ) : (
                 <Download className="h-4 w-4" />
               )}
-              {exportingContacts ? "Lecture Brevo…" : "Exporter clients & prospects"}
+              Exporter clients &amp; prospects
             </Button>
           </div>
         </CardContent>

@@ -103,6 +103,8 @@ colonne.
 ### BtoC (voir `07-btoc-brevo.md`)
 - **`BtocCustomer`**, **`BtocProduct`**, **`BtocOrder`**, **`BtocOrderLine`**,
   **`BtocRefundLine`**, **`BtocSyncLog`** — données WooCommerce + journaux de synchro.
+- **`BtocNewsletterContact`** — miroir des contacts Brevo (inscrits newsletter, désinscrits,
+  dates) ; jamais supprimé, voir [`07`](07-btoc-brevo.md#newsletter-btocnewslettercontact-onglet-newsletter).
 - **`HistOrder`**, **`HistOrderLine`** — historique de commandes (import historique).
 
 ### Système & auth
