@@ -103,6 +103,9 @@ colonne.
 ### BtoC (voir `07-btoc-brevo.md`)
 - **`BtocCustomer`**, **`BtocProduct`**, **`BtocOrder`**, **`BtocOrderLine`**,
   **`BtocRefundLine`**, **`BtocSyncLog`** — données WooCommerce + journaux de synchro.
+  `BtocOrder.marketplace` / `marketplaceRef` : commandes arrivées via **Shopping Feed**
+  (méta Woo `sf_marketplace`, ex. `laredoutemirakl`, et `sf_reference`, n° de commande
+  marketplace) — vides pour une commande passée sur le site (GESTLOG-15).
 - **`BtocNewsletterContact`** — miroir des contacts Brevo (inscrits newsletter, désinscrits,
   dates) ; jamais supprimé, voir [`07`](07-btoc-brevo.md#newsletter-btocnewslettercontact-onglet-newsletter).
 - **`HistOrder`**, **`HistOrderLine`** — historique de commandes (import historique).

@@ -613,6 +613,10 @@ model BtocOrder {
   itemCount       Int      @default(0)
   couponCodes     String?  // JSON array of coupon codes
   customerNote    String?
+  // Commandes venues d'une marketplace via Shopping Feed (GESTLOG-15) : méta WooCommerce
+  // sf_marketplace (ex. « laredoutemirakl ») et sf_reference (n° de commande côté marketplace).
+  marketplace     String?
+  marketplaceRef  String?
   orderDate       DateTime
   completedAt     DateTime?
   createdAt       DateTime @default(now())
@@ -622,6 +626,7 @@ model BtocOrder {
   lines    BtocOrderLine[]
 
   @@index([status])
+  @@index([marketplaceRef])
   @@index([orderDate])
   @@index([customerId])
 }

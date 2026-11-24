@@ -11,6 +11,11 @@ produits, commandes, stock, remboursements) + **gestion VIP via Brevo**.
 - Synchro poussée via n8n vers **`/api/sync/btoc/*`** :
   `customers`, `orders`, `products`, `stock`, `refunds`, `order-countries`,
   `vip-recompute`, **`newsletter`** (lit Brevo lui-même, sans corps). (Auth `x-api-key=SYNC_API_KEY` comme les autres `/api/sync`.)
+- **Commandes marketplaces (Shopping Feed)** : La Redoute & co. arrivent dans Woo avec
+  `payment_method = shopping-feed` et les méta `sf_marketplace` / `sf_reference`.
+  `/api/sync/btoc/orders` les range dans `BtocOrder.marketplace` / `marketplaceRef`
+  (`src/lib/marketplace.ts`, testé ; jamais effacés une fois connus). C'est la **clé de
+  rapprochement** avec les exports Shopping Feed / La Redoute (GESTLOG-15).
 - Écran : **`/btoc`** (onglets Statistiques, Export, **Segmentation**, Clients, **Newsletter**, Paramètres).
   API de lecture/exports sous `/api/btoc/*` : `customers`, `stats`, `size-distribution`,
   **`segmentation`**, **`newsletter`**, `export/{orders,products,best-sellers,top-clients,contacts,sales-details,parents}`,

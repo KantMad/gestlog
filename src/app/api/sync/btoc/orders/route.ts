@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { handleApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
+import { marketplaceFromMeta } from "@/lib/marketplace";
 
 export const maxDuration = 60;
 
@@ -81,6 +82,9 @@ export async function POST(request: NextRequest) {
           ? JSON.stringify(o.coupon_lines.map((c: { code?: string }) => c.code))
           : null;
 
+        // Marketplace (Shopping Feed → La Redoute…) : méta sf_marketplace / sf_reference (GESTLOG-15).
+        const mp = marketplaceFromMeta(o.meta_data);
+
         // Upsert order — inclut désormais les nom/prénom/adresse de FACTURATION et de
         // LIVRAISON (WooCommerce billing.*/shipping.*) pour l'export « Ventes détaillées ».
         await prisma.$executeRawUnsafe(
@@ -91,9 +95,9 @@ export async function POST(request: NextRequest) {
             "couponCodes", "customerNote", "orderDate", "completedAt", "billingCountry", "totalRefunded",
             "billingFirstName", "billingLastName", "billingAddress1", "billingPostcode",
             "shippingFirstName", "shippingLastName", "shippingAddress1", "shippingPostcode", "shippingCountry",
-            "createdAt", "updatedAt")
+            marketplace, "marketplaceRef", "createdAt", "updatedAt")
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24,
-             $25, $26, $27, $28, $29, $30, $31, $32, $33, NOW(), NOW())
+             $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, NOW(), NOW())
            ON CONFLICT ("wooId")
            DO UPDATE SET
              status = $4,
@@ -123,6 +127,8 @@ export async function POST(request: NextRequest) {
              "shippingAddress1" = COALESCE($31, "BtocOrder"."shippingAddress1"),
              "shippingPostcode" = COALESCE($32, "BtocOrder"."shippingPostcode"),
              "shippingCountry" = COALESCE($33, "BtocOrder"."shippingCountry"),
+             marketplace = COALESCE($34, "BtocOrder".marketplace),
+             "marketplaceRef" = COALESCE($35, "BtocOrder"."marketplaceRef"),
              "updatedAt" = NOW()`,
           genId(),
           wooId,
@@ -161,7 +167,9 @@ export async function POST(request: NextRequest) {
           o.shipping?.last_name || null,
           o.shipping?.address_1 || null,
           o.shipping?.postcode || null,
-          (o.shipping?.country || "").toUpperCase() || null
+          (o.shipping?.country || "").toUpperCase() || null,
+          mp.marketplace,
+          mp.marketplaceRef
         );
 
         // Upsert order lines (pré-chargement produits + bulk insert) — sur la liste DÉDUP.
