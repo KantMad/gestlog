@@ -252,7 +252,7 @@ aussi à dater les comptes Woo dans l'export Clients & prospects.
 
 ## Historique des ventes (`SalesHistoryLine`, onglet Historique ventes)
 
-Analyse **produit × couleur × taille sur plusieurs années**, toutes catégories (demande de la
+Analyse **modèle × couleur × taille sur plusieurs années**, toutes catégories (demande de la
 réunion du 24/11/2026, réunion pulls). Code : `src/lib/sales-history.ts` (pur, testé :
 lecture des exports, tri des tailles, grilles, classeur Excel), `src/lib/sales-history-db.ts`
 (requêtes), `src/app/api/btoc/sales-history/route.ts` (lecture) et `…/import/route.ts`
@@ -281,7 +281,26 @@ lecture des exports, tri des tailles, grilles, classeur Excel), `src/lib/sales-h
   les porte pas). Libellé couleur : couleur la plus fréquente de ce code dans les ventes live,
   sinon `Product.colorLabel`, sinon « Code 123 ». UGS sans code couleur → « Non précisée »,
   taille « ? » (ex. lambswool 2024).
-- **Catégorie** = catégorie globale déduite du nom (`btoc-global-category`), en TypeScript.
+- **Regroupement** (sélecteur « Regrouper par », `modelKeyOf` / `groupSalesRows`, testés). La
+  référence vaut `SAISON + LIGNE + TYPE_CODE` (`NMPULL_W001` = saison N, ligne M, type PULL,
+  code W001) :
+  - **Code modèle** (défaut) : `PULL_W001` — réunit toutes les saisons **et** les lignes M et F
+    (« Pull 1/2 zip col camionneur en laine », « Pull lambswool 1/2 zip »… = un seul modèle) ;
+  - **Référence hors saison** : `MPULL_W001` ≠ `FPULL_W001` ;
+  - **Nom du produit** : tel que vendu.
+  ⚠️ La ligne **F** réutilise parfois un code pour un autre produit (`FPULL_W004` = pull
+  camionneur, `MPULL_W004` = col rond) : en mode Code modèle ils sont réunis. Chaque modèle
+  affiche ses références et ses autres noms pour que ça se voie ; sinon passer en « Référence
+  hors saison ». Sans référence exploitable, on regroupe par nom.
+  Nom affiché = **nom le plus vendu** du groupe.
+- **Catégorie** = catégorie globale déduite du nom (`btoc-global-category`), en TypeScript,
+  attribuée au **modèle entier** (catégorie la plus vendue du groupe, « Autres » ne gagnant que
+  seule — les noms anglais du site EN ne sont pas reconnus) : un modèle n'est jamais coupé par
+  le filtre. **Plusieurs catégories** cumulables (boutons), aucune = toutes.
+- **Statistiques de tailles** : affichage *Pièces*, *% des tailles* ou *les deux* ; tableau de
+  répartition des tailles de toute la sélection par année (+ taille n°1) ; dans chaque grille,
+  % par ligne couleur × année et taille n°1. L'export Excel reprend pièces **et** % (onglets
+  Grilles, Tailles par année, Par modèle, Par couleur, Données).
 - **CA** = prix × quantité de la ligne, **avant remise de commande** : indicatif, l'analyse se
   lit en **pièces**.
 - `channel` vaut toujours `BTOC` : il prépare l'ajout des ventes B2B dans la même table.

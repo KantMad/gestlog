@@ -2,6 +2,10 @@ import { describe, it, expect } from "vitest";
 import * as XLSX from "xlsx";
 import {
   buildProductGrids,
+  groupSalesRows,
+  modelKeyOf,
+  sizeSummary,
+  topSize,
   buildSalesHistoryWorkbook,
   compareSizes,
   parseExportDay,
@@ -10,6 +14,7 @@ import {
   parseNumber,
   parseSku,
   sizeShares,
+  type RawSalesRow,
   type SalesAggRow,
 } from "./sales-history";
 
@@ -93,43 +98,98 @@ describe("compareSizes", () => {
   });
 });
 
+describe("modelKeyOf", () => {
+  it("code : TYPE_CODE, toutes saisons et lignes réunies", () => {
+    for (const r of ["NMPULL_W001", "PMPULL_W001", "JMPULL_W001", "MFPULL_W001"]) {
+      expect(modelKeyOf(r, "x", "code")).toBe("PULL_W001");
+    }
+    expect(modelKeyOf("NMD201_D810", "Jean", "code")).toBe("D201_D810");
+  });
+  it("ref : sans la lettre de saison (ligne F séparée)", () => {
+    expect(modelKeyOf("NMPULL_W001", "x", "ref")).toBe("MPULL_W001");
+    expect(modelKeyOf("MFPULL_W001", "x", "ref")).toBe("FPULL_W001");
+  });
+  it("nom, ou référence inexploitable : le nom du produit", () => {
+    expect(modelKeyOf("NMPULL_W001", "Pull col V", "name")).toBe("Pull col V");
+    expect(modelKeyOf(null, "Carte cadeau", "code")).toBe("Carte cadeau");
+    expect(modelKeyOf("CMM1001000", "Mug", "code")).toBe("Mug");
+  });
+});
+
+const raw = (o: Partial<RawSalesRow>): RawSalesRow => ({
+  year: 2024, reference: "NMPULL_W001", productName: "Pull 1/2 zip col camionneur en laine",
+  color: "Marine", size: "M", qty: 1, amount: 50, ...o,
+});
+const cat = (n: string) => (/^pull/i.test(n) ? "Pull" : /^gilet/i.test(n) ? "Gilet" : "Autres");
+
+describe("groupSalesRows", () => {
+  const rows = groupSalesRows(
+    [
+      raw({ qty: 5 }),
+      raw({ reference: "JMPULL_W001", productName: "Pull lambswool 1/2 zip", qty: 3 }),
+      raw({ reference: "NMPULL_W001", productName: "1/2 zip wool sweater", qty: 1 }),
+      raw({ reference: "NMPULL_W002", productName: "Gilet laine", qty: 2 }),
+    ],
+    "code",
+    cat
+  );
+  it("réunit les saisons d'un même code sous le nom le plus vendu", () => {
+    const w001 = rows.filter((r) => r.model === "PULL_W001");
+    expect(w001).toHaveLength(3);
+    expect(new Set(w001.map((r) => r.label))).toEqual(new Set(["Pull 1/2 zip col camionneur en laine"]));
+  });
+  it("catégorie du modèle = la plus vendue, « Autres » (nom anglais) ne gagne pas", () => {
+    expect(rows.find((r) => r.productName === "1/2 zip wool sweater")!.category).toBe("Pull");
+    expect(rows.find((r) => r.model === "PULL_W002")!.category).toBe("Gilet");
+  });
+});
+
 const agg = (o: Partial<SalesAggRow>): SalesAggRow => ({
-  year: 2024, productName: "Pull A", category: "Pull", color: "Marine", size: "M", qty: 1, amount: 50, ...o,
+  year: 2024, reference: "NMPULL_W001", productName: "Pull A", model: "PULL_W001", label: "Pull A",
+  category: "Pull", color: "Marine", size: "M", qty: 1, amount: 50, ...o,
 });
 
 describe("buildProductGrids", () => {
   const rows = [
     agg({ qty: 3 }),
     agg({ size: "L", qty: 2 }),
-    agg({ year: 2025, size: "L", qty: 4 }),
+    agg({ year: 2025, size: "L", qty: 4, reference: "PMPULL_W001", productName: "Pull A bis" }),
     agg({ color: "Beige", size: "XL", qty: 1 }),
-    agg({ productName: "Pull B", qty: 20 }),
+    agg({ model: "PULL_W002", label: "Gilet B", productName: "Gilet B", qty: 20 }),
   ];
   const grids = buildProductGrids(rows);
 
-  it("trie les produits puis les couleurs par volume", () => {
-    expect(grids.map((g) => g.productName)).toEqual(["Pull B", "Pull A"]);
+  it("une grille par modèle, triées par volume, couleurs triées", () => {
+    expect(grids.map((g) => g.model)).toEqual(["PULL_W002", "PULL_W001"]);
     expect(grids[1].colors.map((c) => c.color)).toEqual(["Marine", "Beige"]);
+    expect(grids[1].references).toEqual(["NMPULL_W001", "PMPULL_W001"]);
+    expect(grids[1].names).toEqual(["Pull A", "Pull A bis"]);
   });
-  it("une grille de tailles par couleur et par année, plus toutes couleurs", () => {
+  it("grille de tailles par couleur et par année, plus toutes couleurs", () => {
     const a = grids[1];
     expect(a.sizes).toEqual(["M", "L", "XL"]);
-    const marine = a.colors[0];
-    expect(marine.byYear).toEqual([
+    expect(a.colors[0].byYear).toEqual([
       { year: 2024, sizes: { M: 3, L: 2 }, total: 5 },
       { year: 2025, sizes: { L: 4 }, total: 4 },
     ]);
     expect(a.allColors.sizes).toEqual({ M: 3, L: 6, XL: 1 });
     expect(a.byYear).toEqual({ 2024: 6, 2025: 4 });
-    expect(a.total).toBe(10);
   });
-  it("parts de taille en %", () => {
-    expect(sizeShares({ M: 3, L: 6, XL: 1 })).toEqual({ M: 30, L: 60, XL: 10 });
+  it("statistiques de tailles : parts, taille n°1, synthèse par année", () => {
+    expect(sizeShares({ M: 1, L: 2 })).toEqual({ M: 33.3, L: 66.7 });
+    expect(topSize({ M: 3, L: 6, "?": 9 })).toBe("L");
+    expect(topSize({ "?": 2 })).toBe("?");
+    const s = sizeSummary(rows);
+    expect(s.sizes).toEqual(["M", "L", "XL"]);
+    expect(s.years.map((y) => [y.year, y.total, y.top])).toEqual([[2024, 26, "M"], [2025, 4, "L"]]);
+    expect(s.all.shares.M).toBeCloseTo(76.7);
   });
-  it("le classeur contient les grilles et les synthèses", () => {
+  it("le classeur contient grilles (pièces + %) et synthèses", () => {
     const wb = buildSalesHistoryWorkbook(rows, "Test");
-    expect(wb.SheetNames).toEqual(["Grilles produit×couleur", "Par produit", "Par couleur", "Par taille", "Données"]);
-    const tailles = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets["Par taille"]);
-    expect(tailles.map((t) => t.Taille)).toEqual(["M", "L", "XL"]);
+    expect(wb.SheetNames).toEqual(["Grilles modèle×couleur", "Tailles par année", "Par modèle", "Par couleur", "Données"]);
+    const grid = XLSX.utils.sheet_to_json<string[]>(wb.Sheets["Grilles modèle×couleur"], { header: 1 });
+    expect(grid.some((r) => r.includes("% L"))).toBe(true);
+    const t = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets["Tailles par année"]);
+    expect(t.map((x) => x["Année"])).toEqual(["2024", "2025", "Toutes années"]);
   });
 });

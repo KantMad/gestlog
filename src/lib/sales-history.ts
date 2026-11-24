@@ -186,18 +186,93 @@ export function compareSizes(a: string, b: string): number {
 export const UNKNOWN_SIZE = "?";
 export const UNKNOWN_COLOR = "Non précisée";
 
-// ─── Grilles produit × couleur × taille ─────────────────────────────────
+// ─── Regroupement par modèle ────────────────────────────────────────────
+//
+// La référence MCS vaut `SAISON + LIGNE + TYPE_CODE` : NMPULL_W001 (saison N, ligne M,
+// type PULL, code W001), JMPULL_W001, MFPULL_W001 (ligne F)… Le même code modèle revient
+// d'une saison à l'autre, parfois sous un autre nom (« Pull 1/2 zip col camionneur en
+// laine », « Pull lambswool 1/2 zip »). Trois façons de regrouper :
+//   - code : TYPE_CODE (PULL_W001) — toutes saisons ET toutes lignes réunies ;
+//   - ref  : référence sans la lettre de saison (MPULL_W001 ≠ FPULL_W001) ;
+//   - name : nom du produit tel que vendu.
+// ⚠️ La ligne F réutilise parfois un code pour un autre produit (FPULL_W004 = pull
+// camionneur, MPULL_W004 = col rond) : en mode « code » ils sont réunis. Chaque groupe
+// affiche ses références et ses noms pour que ça se voie.
 
-/** Ligne agrégée renvoyée par l'API (une par année × produit × couleur × taille). */
-export interface SalesAggRow {
+export type GroupMode = "code" | "ref" | "name";
+
+export const GROUP_MODE_LABELS: Record<GroupMode, string> = {
+  code: "Code modèle (PULL_W001)",
+  ref: "Référence hors saison (MPULL_W001)",
+  name: "Nom du produit",
+};
+
+/** Clé de regroupement d'une vente. Sans référence exploitable : le nom du produit. */
+export function modelKeyOf(reference: string | null, productName: string, mode: GroupMode): string {
+  const ref = (reference ?? "").trim().toUpperCase();
+  if (mode !== "name" && ref) {
+    if (mode === "code") {
+      const m = ref.match(/([A-Z0-9]{3,4})_([A-Z0-9]+)$/);
+      if (m) return `${m[1]}_${m[2]}`;
+    } else if (/^[A-Z][A-Z0-9]+_[A-Z0-9]+$/.test(ref)) {
+      return ref.slice(1);
+    }
+  }
+  return productName;
+}
+
+/** Vente agrégée telle que lue en base (une par année × référence × nom × couleur × taille). */
+export interface RawSalesRow {
   year: number;
+  reference: string | null;
   productName: string;
-  category: string;
   color: string;
   size: string;
   qty: number;
   amount: number;
 }
+
+/** Ligne agrégée renvoyée par l'API, rattachée à son groupe (modèle). */
+export interface SalesAggRow extends RawSalesRow {
+  model: string; // clé de regroupement
+  label: string; // nom affiché du groupe = nom le plus vendu
+  category: string; // catégorie du groupe
+}
+
+/**
+ * Rattache chaque vente à son modèle. Nom affiché = nom le plus vendu du groupe ;
+ * catégorie = catégorie (déduite du nom) qui pèse le plus en pièces, « Autres » ne
+ * gagnant que s'il n'y a rien d'autre (les noms anglais du site EN ne sont pas reconnus).
+ */
+export function groupSalesRows(
+  raw: RawSalesRow[],
+  mode: GroupMode,
+  categoryOf: (name: string) => string,
+  unclassified = "Autres"
+): SalesAggRow[] {
+  const keys = raw.map((r) => modelKeyOf(r.reference, r.productName, mode));
+  const names = new Map<string, Map<string, number>>();
+  const cats = new Map<string, Map<string, number>>();
+  raw.forEach((r, i) => {
+    const k = keys[i];
+    const n = names.get(k) ?? new Map<string, number>();
+    n.set(r.productName, (n.get(r.productName) ?? 0) + r.qty);
+    names.set(k, n);
+    const c = cats.get(k) ?? new Map<string, number>();
+    const cat = categoryOf(r.productName);
+    c.set(cat, (c.get(cat) ?? 0) + r.qty);
+    cats.set(k, c);
+  });
+  const top = (m: Map<string, number>, skip?: string) =>
+    [...m.entries()].filter(([k]) => k !== skip).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0];
+  const label = new Map<string, string>();
+  const category = new Map<string, string>();
+  for (const [k, n] of names) label.set(k, top(n)!);
+  for (const [k, c] of cats) category.set(k, top(c, unclassified) ?? unclassified);
+  return raw.map((r, i) => ({ ...r, model: keys[i], label: label.get(keys[i])!, category: category.get(keys[i])! }));
+}
+
+// ─── Grilles modèle × couleur × taille ──────────────────────────────────
 
 export interface ColorGrid {
   color: string;
@@ -207,133 +282,223 @@ export interface ColorGrid {
 }
 
 export interface ProductGrid {
-  productName: string;
+  model: string;
+  label: string;
   category: string;
+  names: string[]; // noms vendus sous ce modèle, du plus vendu au moins vendu
+  references: string[]; // références complètes rencontrées
   total: number;
   amount: number;
-  sizes: string[]; // tailles vendues de ce produit, triées
+  sizes: string[]; // tailles vendues de ce modèle, triées
   byYear: Record<number, number>;
   colors: ColorGrid[];
   allColors: ColorGrid; // ligne « toutes couleurs »
 }
 
-/** Regroupe les lignes agrégées en une grille par produit (couleurs × années × tailles), produits triés par volume. */
-export function buildProductGrids(rows: SalesAggRow[]): ProductGrid[] {
-  const products = new Map<string, { category: string; rows: SalesAggRow[] }>();
-  for (const r of rows) {
-    const p = products.get(r.productName) ?? { category: r.category, rows: [] };
-    p.rows.push(r);
-    products.set(r.productName, p);
+function colorGrid(color: string, rs: SalesAggRow[]): ColorGrid {
+  const years = new Map<number, { sizes: Record<string, number>; total: number }>();
+  const sizes: Record<string, number> = {};
+  let total = 0;
+  for (const r of rs) {
+    const y = years.get(r.year) ?? { sizes: {}, total: 0 };
+    y.sizes[r.size] = (y.sizes[r.size] ?? 0) + r.qty;
+    y.total += r.qty;
+    years.set(r.year, y);
+    sizes[r.size] = (sizes[r.size] ?? 0) + r.qty;
+    total += r.qty;
   }
-  const grid = (color: string, rs: SalesAggRow[]): ColorGrid => {
-    const years = new Map<number, { sizes: Record<string, number>; total: number }>();
-    const sizes: Record<string, number> = {};
-    let total = 0;
-    for (const r of rs) {
-      const y = years.get(r.year) ?? { sizes: {}, total: 0 };
-      y.sizes[r.size] = (y.sizes[r.size] ?? 0) + r.qty;
-      y.total += r.qty;
-      years.set(r.year, y);
-      sizes[r.size] = (sizes[r.size] ?? 0) + r.qty;
-      total += r.qty;
-    }
-    return {
-      color,
-      total,
-      sizes,
-      byYear: [...years.entries()].sort((a, b) => a[0] - b[0]).map(([year, v]) => ({ year, ...v })),
-    };
+  return {
+    color,
+    total,
+    sizes,
+    byYear: [...years.entries()].sort((a, b) => a[0] - b[0]).map(([year, v]) => ({ year, ...v })),
   };
-  return [...products.entries()]
-    .map(([productName, p]) => {
+}
+
+/** Une grille par modèle (couleurs × années × tailles), modèles triés par volume. */
+export function buildProductGrids(rows: SalesAggRow[]): ProductGrid[] {
+  const models = new Map<string, SalesAggRow[]>();
+  for (const r of rows) models.set(r.model, [...(models.get(r.model) ?? []), r]);
+  return [...models.entries()]
+    .map(([model, rs]) => {
       const byColor = new Map<string, SalesAggRow[]>();
-      for (const r of p.rows) byColor.set(r.color, [...(byColor.get(r.color) ?? []), r]);
+      for (const r of rs) byColor.set(r.color, [...(byColor.get(r.color) ?? []), r]);
       const byYear: Record<number, number> = {};
-      for (const r of p.rows) byYear[r.year] = (byYear[r.year] ?? 0) + r.qty;
-      const colors = [...byColor.entries()].map(([c, rs]) => grid(c, rs)).sort((a, b) => b.total - a.total);
-      const allColors = grid("Toutes couleurs", p.rows);
+      const nameQty = new Map<string, number>();
+      for (const r of rs) {
+        byYear[r.year] = (byYear[r.year] ?? 0) + r.qty;
+        nameQty.set(r.productName, (nameQty.get(r.productName) ?? 0) + r.qty);
+      }
+      const allColors = colorGrid("Toutes couleurs", rs);
       return {
-        productName,
-        category: p.category,
+        model,
+        label: rs[0].label,
+        category: rs[0].category,
+        names: [...nameQty.entries()].sort((a, b) => b[1] - a[1]).map(([n]) => n),
+        references: [...new Set(rs.map((r) => r.reference).filter((x): x is string => !!x))].sort(),
         total: allColors.total,
-        amount: round2(p.rows.reduce((s, r) => s + r.amount, 0)),
-        sizes: [...new Set(p.rows.map((r) => r.size))].sort(compareSizes),
+        amount: round2(rs.reduce((s, r) => s + r.amount, 0)),
+        sizes: [...new Set(rs.map((r) => r.size))].sort(compareSizes),
         byYear,
-        colors,
+        colors: [...byColor.entries()].map(([c, x]) => colorGrid(c, x)).sort((a, b) => b.total - a.total),
         allColors,
       };
     })
-    .sort((a, b) => b.total - a.total || a.productName.localeCompare(b.productName, "fr"));
+    .sort((a, b) => b.total - a.total || a.label.localeCompare(b.label, "fr"));
 }
 
-/** Part de chaque taille (en %) d'une grille, arrondie à l'unité. */
+// ─── Statistiques de tailles ────────────────────────────────────────────
+
+/** Part de chaque taille (en %), à une décimale. Total nul → 0 partout. */
 export function sizeShares(sizes: Record<string, number>): Record<string, number> {
   const total = Object.values(sizes).reduce((s, n) => s + n, 0);
   const out: Record<string, number> = {};
-  for (const [k, v] of Object.entries(sizes)) out[k] = total > 0 ? Math.round((100 * v) / total) : 0;
+  for (const [k, v] of Object.entries(sizes)) out[k] = total > 0 ? Math.round((1000 * v) / total) / 10 : 0;
   return out;
+}
+
+/** Taille la plus vendue (null si aucune vente ; « ? » ignorée s'il y a mieux). */
+export function topSize(sizes: Record<string, number>): string | null {
+  const e = Object.entries(sizes).filter(([, n]) => n > 0);
+  const known = e.filter(([s]) => s !== UNKNOWN_SIZE);
+  const pool = known.length ? known : e;
+  return pool.sort((a, b) => b[1] - a[1] || compareSizes(a[0], b[0]))[0]?.[0] ?? null;
+}
+
+export interface SizeSummary {
+  sizes: string[];
+  years: { year: number; sizes: Record<string, number>; shares: Record<string, number>; total: number; top: string | null }[];
+  all: { sizes: Record<string, number>; shares: Record<string, number>; total: number; top: string | null };
+}
+
+/** Répartition des tailles de toute la sélection, par année et toutes années. */
+export function sizeSummary(rows: SalesAggRow[]): SizeSummary {
+  const g = colorGrid("all", rows as SalesAggRow[]);
+  return {
+    sizes: Object.keys(g.sizes).sort(compareSizes),
+    years: g.byYear.map((y) => ({ ...y, shares: sizeShares(y.sizes), top: topSize(y.sizes) })),
+    all: { sizes: g.sizes, shares: sizeShares(g.sizes), total: g.total, top: topSize(g.sizes) },
+  };
 }
 
 // ─── Export Excel ───────────────────────────────────────────────────────
 
-/** Classeur : grilles par produit et par couleur, synthèses produit / couleur / taille, et lignes agrégées. */
+const pct = (n: number | undefined) => (n ? `${String(n).replace(".", ",")} %` : "");
+
+/** Classeur : grilles par modèle et couleur (pièces + %), synthèses modèle / couleur / taille, données. */
 export function buildSalesHistoryWorkbook(rows: SalesAggRow[], title: string): XLSX.WorkBook {
   const grids = buildProductGrids(rows);
   const years = [...new Set(rows.map((r) => r.year))].sort((a, b) => a - b);
   const wb = XLSX.utils.book_new();
 
-  // 1. Grilles : un bloc par produit, une ligne par couleur et par année, tailles en colonnes.
+  // 1. Grilles : un bloc par modèle, une ligne par couleur et par année ; tailles en pièces
+  //    puis en % de la ligne.
   const aoa: (string | number)[][] = [[title], []];
   for (const g of grids) {
-    aoa.push([`${g.productName} (${g.category}) — ${g.total} pièces`]);
-    aoa.push(["Couleur", "Année", ...g.sizes, "Total"]);
+    aoa.push([`${g.label} — ${g.model} (${g.category}) — ${g.total} pièces`]);
+    aoa.push([`Références : ${g.references.join(", ") || "—"} · Noms : ${g.names.join(" / ")}`]);
+    aoa.push(["Couleur", "Année", ...g.sizes, "Total", "", ...g.sizes.map((s) => `% ${s}`), "Taille n°1"]);
     for (const c of [...g.colors, g.allColors]) {
-      for (const y of c.byYear) aoa.push([c.color, y.year, ...g.sizes.map((s) => y.sizes[s] || ""), y.total]);
-      if (c.byYear.length > 1) aoa.push([c.color, "Total", ...g.sizes.map((s) => c.sizes[s] || ""), c.total]);
+      const lines = [
+        ...c.byYear.map((y) => ({ label: y.year as string | number, sizes: y.sizes, total: y.total })),
+        ...(c.byYear.length > 1 ? [{ label: "Total", sizes: c.sizes, total: c.total }] : []),
+      ];
+      for (const l of lines) {
+        const sh = sizeShares(l.sizes);
+        aoa.push([
+          c.color,
+          l.label,
+          ...g.sizes.map((s) => l.sizes[s] || ""),
+          l.total,
+          "",
+          ...g.sizes.map((s) => pct(sh[s])),
+          topSize(l.sizes) ?? "",
+        ]);
+      }
     }
     aoa.push([], []);
   }
   const ws = XLSX.utils.aoa_to_sheet(aoa);
-  ws["!cols"] = [{ wch: 26 }, { wch: 7 }, ...Array(14).fill({ wch: 7 })];
-  XLSX.utils.book_append_sheet(wb, ws, "Grilles produit×couleur");
+  ws["!cols"] = [{ wch: 26 }, { wch: 7 }, ...Array(30).fill({ wch: 7 })];
+  XLSX.utils.book_append_sheet(wb, ws, "Grilles modèle×couleur");
 
-  // 2. Synthèses.
-  const sum = (key: (r: SalesAggRow) => string, label: string) => {
-    const m = new Map<string, { y: Record<number, number>; q: number; a: number }>();
-    for (const r of rows) {
-      const k = key(r);
-      const e = m.get(k) ?? { y: {}, q: 0, a: 0 };
-      e.y[r.year] = (e.y[r.year] ?? 0) + r.qty;
-      e.q += r.qty;
-      e.a += r.amount;
-      m.set(k, e);
-    }
-    return [...m.entries()]
-      .sort((a, b) => b[1].q - a[1].q)
-      .map(([k, e]): Record<string, string | number> => ({
-        [label]: k,
-        ...Object.fromEntries(years.map((y) => [String(y), e.y[y] ?? 0])),
-        "Total pièces": e.q,
-        "CA (€)": Math.round(e.a),
-      }));
-  };
   const add = (data: Record<string, unknown>[], name: string) => {
     if (!data.length) return;
     const s = XLSX.utils.json_to_sheet(data);
     s["!autofilter"] = { ref: s["!ref"]! };
     XLSX.utils.book_append_sheet(wb, s, name);
   };
-  add(sum((r) => r.productName, "Produit"), "Par produit");
-  add(sum((r) => r.color, "Couleur"), "Par couleur");
+
+  // 2. Tailles de toute la sélection, par année.
+  const sum = sizeSummary(rows);
   add(
-    sum((r) => r.size, "Taille").sort((a, b) => compareSizes(String(a.Taille), String(b.Taille))),
-    "Par taille"
+    [...sum.years.map((y) => ({ label: String(y.year), ...y })), { label: "Toutes années", year: 0, ...sum.all }].map(
+      (y): Record<string, string | number> => ({
+        Année: y.label,
+        ...Object.fromEntries(sum.sizes.map((s) => [s, y.sizes[s] ?? 0])),
+        Total: y.total,
+        ...Object.fromEntries(sum.sizes.map((s) => [`% ${s}`, y.shares[s] ?? 0])),
+        "Taille n°1": y.top ?? "",
+      })
+    ),
+    "Tailles par année"
   );
+
+  // 3. Par modèle : pièces par année + répartition des tailles.
+  add(
+    grids.map((g): Record<string, string | number> => {
+      const sh = sizeShares(g.allColors.sizes);
+      return {
+        Modèle: g.model,
+        Nom: g.label,
+        Catégorie: g.category,
+        ...Object.fromEntries(years.map((y) => [String(y), g.byYear[y] ?? 0])),
+        "Total pièces": g.total,
+        "CA (€)": Math.round(g.amount),
+        "Taille n°1": topSize(g.allColors.sizes) ?? "",
+        ...Object.fromEntries(sum.sizes.map((s) => [`% ${s}`, sh[s] ?? 0])),
+        Références: g.references.join(", "),
+      };
+    }),
+    "Par modèle"
+  );
+
+  // 4. Par couleur.
+  const byColor = new Map<string, { y: Record<number, number>; q: number; a: number; sizes: Record<string, number> }>();
+  for (const r of rows) {
+    const e = byColor.get(r.color) ?? { y: {}, q: 0, a: 0, sizes: {} };
+    e.y[r.year] = (e.y[r.year] ?? 0) + r.qty;
+    e.q += r.qty;
+    e.a += r.amount;
+    e.sizes[r.size] = (e.sizes[r.size] ?? 0) + r.qty;
+    byColor.set(r.color, e);
+  }
+  add(
+    [...byColor.entries()]
+      .sort((a, b) => b[1].q - a[1].q)
+      .map(([c, e]): Record<string, string | number> => {
+        const sh = sizeShares(e.sizes);
+        return {
+          Couleur: c,
+          ...Object.fromEntries(years.map((y) => [String(y), e.y[y] ?? 0])),
+          "Total pièces": e.q,
+          "CA (€)": Math.round(e.a),
+          "Taille n°1": topSize(e.sizes) ?? "",
+          ...Object.fromEntries(sum.sizes.map((s) => [`% ${s}`, sh[s] ?? 0])),
+        };
+      }),
+    "Par couleur"
+  );
+
+  // 5. Données agrégées.
   add(
     rows.map((r) => ({
       Année: r.year,
       Catégorie: r.category,
-      Produit: r.productName,
+      Modèle: r.model,
+      "Nom du groupe": r.label,
+      "Nom vendu": r.productName,
+      Référence: r.reference ?? "",
       Couleur: r.color,
       Taille: r.size,
       Pièces: r.qty,

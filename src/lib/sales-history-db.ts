@@ -47,6 +47,7 @@ export async function colorLabels(): Promise<Map<string, string>> {
 
 export interface RawAgg {
   year: number;
+  reference: string | null;
   productName: string;
   colorCode: string | null;
   size: string | null;
@@ -54,14 +55,14 @@ export interface RawAgg {
   amount: number;
 }
 
-/** Ventes agrégées par année × produit × code couleur × taille, sur [from, to] (jours inclus, optionnels). */
+/** Ventes agrégées par année × référence × produit × code couleur × taille, sur [from, to] (jours inclus, optionnels). */
 export async function salesAggregates(cutoff: string | null, from: string | null, to: string | null): Promise<RawAgg[]> {
   const day = parisDayExpr('o."orderDate"');
   const rows = await prisma.$queryRawUnsafe<
-    { year: number; productName: string; colorCode: string | null; size: string | null; qty: bigint; amount: number }[]
+    { year: number; reference: string | null; productName: string; colorCode: string | null; size: string | null; qty: bigint; amount: number }[]
   >(
     `WITH lines AS (
-       SELECT EXTRACT(YEAR FROM h."orderDay")::int AS year, h."productName", h."colorCode", h.size,
+       SELECT EXTRACT(YEAR FROM h."orderDay")::int AS year, h.reference, h."productName", h."colorCode", h.size,
               h.quantity AS qty, h."lineTotal" AS amount
          FROM "SalesHistoryLine" h
         WHERE h.channel = 'BTOC'
@@ -69,7 +70,7 @@ export async function salesAggregates(cutoff: string | null, from: string | null
           AND ($2::date IS NULL OR h."orderDay" >= $2::date)
           AND ($3::date IS NULL OR h."orderDay" <= $3::date)
        UNION ALL
-       SELECT EXTRACT(YEAR FROM ${day})::int, ol.name,
+       SELECT EXTRACT(YEAR FROM ${day})::int, NULLIF(SPLIT_PART(ol.sku, '-', 1), ''), ol.name,
               NULLIF(SPLIT_PART(ol.sku, '-', 2), ''),
               COALESCE(NULLIF(UPPER(ol.size), ''), NULLIF(UPPER(SPLIT_PART(ol.sku, '-', 3)), '')),
               ol.quantity, ol.total
@@ -79,7 +80,7 @@ export async function salesAggregates(cutoff: string | null, from: string | null
           AND ($2::date IS NULL OR ${day}::date >= $2::date)
           AND ($3::date IS NULL OR ${day}::date <= $3::date)
        UNION ALL
-       SELECT EXTRACT(YEAR FROM ${day})::int, COALESCE(ol.name, rl.name, ''),
+       SELECT EXTRACT(YEAR FROM ${day})::int, NULLIF(SPLIT_PART(rl.sku, '-', 1), ''), COALESCE(ol.name, rl.name, ''),
               NULLIF(SPLIT_PART(rl.sku, '-', 2), ''),
               NULLIF(UPPER(SPLIT_PART(rl.sku, '-', 3)), ''),
               -rl.quantity, -rl.total
@@ -93,10 +94,10 @@ export async function salesAggregates(cutoff: string | null, from: string | null
           AND ($2::date IS NULL OR ${day}::date >= $2::date)
           AND ($3::date IS NULL OR ${day}::date <= $3::date)
      )
-     SELECT year, "productName", "colorCode", size, SUM(qty)::bigint AS qty, SUM(amount)::float8 AS amount
+     SELECT year, reference, "productName", "colorCode", size, SUM(qty)::bigint AS qty, SUM(amount)::float8 AS amount
        FROM lines
       WHERE "productName" != ''
-      GROUP BY 1, 2, 3, 4
+      GROUP BY 1, 2, 3, 4, 5
      HAVING SUM(qty) != 0`,
     cutoff,
     from,

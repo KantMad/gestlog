@@ -940,11 +940,14 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
   **Drill-down** : chaque ligne chiffrée est cliquable → liste des clients du segment avec
   recherche e-mail/nom et export. ⚠️ Les blocs promo/panier comptent des **commandes**, le
   détail liste des **clients** : les totaux diffèrent légitimement.
-- **Onglet Historique ventes** : ventes du site sur plusieurs années, **par produit, couleur et
-  taille**, pour n'importe quelle catégorie (Pull, Chemise, Jean…). Pour chaque produit, une
-  **grille des tailles par couleur et par année** (+ ligne toutes couleurs et part de chaque
-  taille). Filtres catégorie / nom du produit / dates, **export Excel** (grilles + synthèses par
-  produit, couleur, taille). En haut, la **couverture mois par mois** (bleu = historique importé,
+- **Onglet Historique ventes** : ventes du site sur plusieurs années, **par modèle, couleur et
+  taille**, pour une ou plusieurs catégories au choix (Pull, Gilet, Chemise, Jean…). Les
+  modèles sont regroupés par **code modèle** (tous les `PULL_W001` de toutes les saisons
+  ensemble), ou au choix par référence hors saison ou par nom. Pour chaque modèle, une **grille
+  des tailles par couleur et par année**, en pièces et/ou en **% des tailles**, avec la taille
+  n°1 ; en tête, la répartition des tailles de toute la sélection par année. Filtres catégories /
+  nom ou référence / dates, **export Excel** (grilles pièces + %, synthèses par modèle, couleur,
+  taille). En haut, la **couverture mois par mois** (bleu = historique importé,
   vert = synchro live, rouge = trou) et le bouton **Importer des exports WooCommerce** pour
   compléter l'historique. ⚠️ Mois sans donnée = ventes absentes, pas ventes nulles.
 - **Note** : hors périmètre du **menu Exports** (`/export`) qui regroupe les exports **B2B**.

@@ -6,15 +6,19 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
-import { ChevronDown, ChevronRight, Download, History, Loader2, Search, Upload } from "lucide-react";
+import { ChevronDown, ChevronRight, Download, History, Loader2, Ruler, Search, Upload } from "lucide-react";
 import * as XLSX from "xlsx";
 import { formatNumber } from "@/lib/utils";
 import { fileStamp } from "@/lib/file-stamp";
 import {
   buildProductGrids,
   buildSalesHistoryWorkbook,
+  GROUP_MODE_LABELS,
   parseExportWorkbook,
   sizeShares,
+  sizeSummary,
+  topSize,
+  type GroupMode,
   type ProductGrid,
   type SalesAggRow,
 } from "@/lib/sales-history";
@@ -26,16 +30,22 @@ interface HistoryData {
   categories: { name: string; qty: number }[];
 }
 
+type Display = "qty" | "pct" | "both";
+const DISPLAY_LABELS: Record<Display, string> = { qty: "Pièces", pct: "% des tailles", both: "Pièces et %" };
+
 const MONTHS = ["J", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D"];
 const BATCH = 2000;
 const PAGE = 25;
 const fr = (ymd: string | null) => (ymd ? ymd.split("-").reverse().join("/") : "—");
+const pctLabel = (n: number | undefined) => `${String(n ?? 0).replace(".", ",")} %`;
 
 export function BtocSalesHistoryTab() {
   const [data, setData] = useState<HistoryData | null>(null);
   const [loadedKey, setLoadedKey] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
-  const [category, setCategory] = useState("Pull");
+  const [categories, setCategories] = useState<string[]>(["Pull"]);
+  const [group, setGroup] = useState<GroupMode>("code");
+  const [display, setDisplay] = useState<Display>("both");
   const [search, setSearch] = useState("");
   const [q, setQ] = useState("");
   const [dateFrom, setDateFrom] = useState("");
@@ -47,7 +57,8 @@ export function BtocSalesHistoryTab() {
   const fileInput = useRef<HTMLInputElement>(null);
 
   const queryKey = (() => {
-    const p = new URLSearchParams({ category });
+    const p = new URLSearchParams({ group });
+    if (categories.length) p.set("categories", categories.join(","));
     if (q) p.set("q", q);
     if (dateFrom) p.set("dateFrom", dateFrom);
     if (dateTo) p.set("dateTo", dateTo);
@@ -75,9 +86,8 @@ export function BtocSalesHistoryTab() {
   }, [queryKey]);
 
   const grids = useMemo(() => buildProductGrids(data?.rows ?? []), [data]);
-  const years = useMemo(() => [...new Set((data?.rows ?? []).map((r) => r.year))].sort((a, b) => a - b), [data]);
-  const totalQty = grids.reduce((s, g) => s + g.total, 0);
-  const totalByYear = (y: number) => grids.reduce((s, g) => s + (g.byYear[y] ?? 0), 0);
+  const summary = useMemo(() => sizeSummary(data?.rows ?? []), [data]);
+  const years = summary.years.map((y) => y.year);
 
   const coverageYears = useMemo(() => {
     const m = new Map<string, Map<number, { history: number; live: number }>>();
@@ -88,6 +98,11 @@ export function BtocSalesHistoryTab() {
     }
     return [...m.entries()].sort((a, b) => b[0].localeCompare(a[0]));
   }, [data]);
+
+  const toggleCategory = (c: string) => {
+    setCategories((cur) => (cur.includes(c) ? cur.filter((x) => x !== c) : [...cur, c]));
+    setShown(PAGE);
+  };
 
   const handleFiles = async (files: FileList | null) => {
     if (!files?.length) return;
@@ -136,11 +151,16 @@ export function BtocSalesHistoryTab() {
     }
   };
 
+  const selectionLabel = categories.length ? categories.join(" + ") : "Toutes catégories";
+
   const handleExport = () => {
     if (!data?.rows.length) return;
-    const label = category === "all" ? "Toutes catégories" : category;
-    const wb = buildSalesHistoryWorkbook(data.rows, `Ventes site (B2C) — ${label}${q ? ` — « ${q} »` : ""} — pièces`);
-    XLSX.writeFile(wb, `historique-ventes-${label.toLowerCase().replace(/\s+/g, "-")}-${fileStamp()}.xlsx`);
+    const wb = buildSalesHistoryWorkbook(
+      data.rows,
+      `Ventes site (B2C) — ${selectionLabel}${q ? ` — « ${q} »` : ""} — regroupement : ${GROUP_MODE_LABELS[group]}`
+    );
+    const slug = selectionLabel.toLowerCase().normalize("NFD").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    XLSX.writeFile(wb, `historique-ventes-${slug}-${fileStamp()}.xlsx`);
   };
 
   return (
@@ -223,32 +243,72 @@ export function BtocSalesHistoryTab() {
 
       {/* Filtres */}
       <Card>
-        <CardContent className="pt-6">
-          <div className="flex flex-wrap items-end gap-3">
-            <div className="space-y-1">
-              <label className="block text-xs font-medium text-muted-foreground">Catégorie</label>
-              <Select
-                value={category}
-                onValueChange={(v) => {
-                  setCategory(v || "all");
+        <CardContent className="pt-6 space-y-4">
+          <div className="space-y-1.5">
+            <label className="block text-xs font-medium text-muted-foreground">
+              Catégories (cliquez pour en choisir une ou plusieurs)
+            </label>
+            <div className="flex flex-wrap gap-1.5">
+              <Button
+                size="sm"
+                variant={categories.length === 0 ? "default" : "outline"}
+                className="h-7"
+                onClick={() => {
+                  setCategories([]);
                   setShown(PAGE);
                 }}
               >
-                <SelectTrigger className="w-44 h-9">
-                  <span className="text-sm">{category === "all" ? "Toutes" : category}</span>
+                Toutes
+              </Button>
+              {(data?.categories ?? []).map((c) => (
+                <Button
+                  key={c.name}
+                  size="sm"
+                  variant={categories.includes(c.name) ? "default" : "outline"}
+                  className="h-7"
+                  onClick={() => toggleCategory(c.name)}
+                >
+                  {c.name} <span className="ml-1 opacity-70 tabular-nums">{formatNumber(c.qty)}</span>
+                </Button>
+              ))}
+            </div>
+          </div>
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="space-y-1">
+              <label className="block text-xs font-medium text-muted-foreground">Regrouper par</label>
+              <Select
+                value={group}
+                onValueChange={(v) => {
+                  setGroup((v as GroupMode) || "code");
+                  setShown(PAGE);
+                  setOpen({});
+                }}
+              >
+                <SelectTrigger className="w-64 h-9">
+                  <span className="text-sm">{GROUP_MODE_LABELS[group]}</span>
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Toutes</SelectItem>
-                  {(data?.categories ?? []).map((c) => (
-                    <SelectItem key={c.name} value={c.name}>
-                      {c.name} ({formatNumber(c.qty)})
-                    </SelectItem>
+                  {(Object.keys(GROUP_MODE_LABELS) as GroupMode[]).map((k) => (
+                    <SelectItem key={k} value={k}>{GROUP_MODE_LABELS[k]}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-1">
-              <label className="block text-xs font-medium text-muted-foreground">Nom du produit contient</label>
+              <label className="block text-xs font-medium text-muted-foreground">Afficher</label>
+              <Select value={display} onValueChange={(v) => setDisplay((v as Display) || "both")}>
+                <SelectTrigger className="w-40 h-9">
+                  <span className="text-sm">{DISPLAY_LABELS[display]}</span>
+                </SelectTrigger>
+                <SelectContent>
+                  {(Object.keys(DISPLAY_LABELS) as Display[]).map((k) => (
+                    <SelectItem key={k} value={k}>{DISPLAY_LABELS[k]}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <label className="block text-xs font-medium text-muted-foreground">Nom ou référence contient</label>
               <div className="relative">
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -256,8 +316,8 @@ export function BtocSalesHistoryTab() {
                   onChange={(e) => setSearch(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && setQ(search.trim())}
                   onBlur={() => search.trim() !== q && setQ(search.trim())}
-                  placeholder="1/2 zip, lambswool…"
-                  className="w-52 h-9 pl-8"
+                  placeholder="W001, 1/2 zip, lambswool…"
+                  className="w-56 h-9 pl-8"
                 />
               </div>
             </div>
@@ -278,80 +338,122 @@ export function BtocSalesHistoryTab() {
         </CardContent>
       </Card>
 
-      {/* Synthèse */}
+      {/* Synthèse + statistiques de tailles */}
       <Card>
-        <CardContent className="pt-6">
-          <div className="flex flex-wrap gap-6 text-sm">
-            <div>
-              <div className="text-muted-foreground text-xs">Produits</div>
-              <div className="text-xl font-semibold">{formatNumber(grids.length)}</div>
-            </div>
-            <div>
-              <div className="text-muted-foreground text-xs">Pièces vendues</div>
-              <div className="text-xl font-semibold">{formatNumber(totalQty)}</div>
-            </div>
-            {years.map((y) => (
-              <div key={y}>
-                <div className="text-muted-foreground text-xs">{y}</div>
-                <div className="text-xl font-semibold">{formatNumber(totalByYear(y))}</div>
-              </div>
-            ))}
-          </div>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Ruler className="h-4 w-4" />
+            {selectionLabel} — {formatNumber(grids.length)} modèles, {formatNumber(summary.all.total)} pièces
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="overflow-x-auto">
+          {summary.sizes.length > 0 ? (
+            <table className="text-sm border-collapse min-w-full">
+              <thead>
+                <tr className="border-b">
+                  <th className="px-2 py-1 text-left font-medium text-muted-foreground">Année</th>
+                  {summary.sizes.map((s) => (
+                    <th key={s} className="px-2 py-1 text-right font-medium text-muted-foreground">{s}</th>
+                  ))}
+                  <th className="px-2 py-1 text-right font-medium text-muted-foreground">Total</th>
+                  <th className="px-2 py-1 text-right font-medium text-muted-foreground">Taille n°1</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...summary.years.map((y) => ({ label: String(y.year), ...y, bold: false })), { label: "Toutes années", ...summary.all, bold: true }].map(
+                  (y) => (
+                    <tr key={y.label} className={`border-t ${y.bold ? "font-semibold bg-muted/50" : ""}`}>
+                      <td className="px-2 py-1">{y.label}</td>
+                      {summary.sizes.map((s) => (
+                        <SizeCell key={s} qty={y.sizes[s]} pct={y.shares[s]} display={display} />
+                      ))}
+                      <td className="px-2 py-1 text-right tabular-nums font-medium">{formatNumber(y.total)}</td>
+                      <td className="px-2 py-1 text-right">{y.top ?? "—"}</td>
+                    </tr>
+                  )
+                )}
+              </tbody>
+            </table>
+          ) : (
+            <p className="text-sm text-muted-foreground">{loading ? "Chargement…" : "Aucune vente pour ces filtres."}</p>
+          )}
         </CardContent>
       </Card>
 
-      {/* Grilles par produit */}
+      {/* Grilles par modèle */}
       <div className="space-y-3">
         {grids.slice(0, shown).map((g) => (
           <ProductCard
-            key={g.productName}
+            key={g.model}
             grid={g}
             years={years}
-            open={!!open[g.productName]}
-            onToggle={() => setOpen((o) => ({ ...o, [g.productName]: !o[g.productName] }))}
+            display={display}
+            open={!!open[g.model]}
+            onToggle={() => setOpen((o) => ({ ...o, [g.model]: !o[g.model] }))}
           />
         ))}
         {grids.length > shown && (
           <Button variant="outline" className="w-full" onClick={() => setShown((n) => n + PAGE)}>
-            Afficher {Math.min(PAGE, grids.length - shown)} produits de plus ({grids.length - shown} restants)
+            Afficher {Math.min(PAGE, grids.length - shown)} modèles de plus ({grids.length - shown} restants)
           </Button>
-        )}
-        {!loading && grids.length === 0 && (
-          <p className="text-sm text-muted-foreground text-center py-8">Aucune vente pour ces filtres.</p>
         )}
       </div>
     </div>
   );
 }
 
+function SizeCell({ qty, pct, display }: { qty: number | undefined; pct: number | undefined; display: Display }) {
+  if (!qty) return <td className="px-2 py-1 text-right tabular-nums text-muted-foreground/50">·</td>;
+  return (
+    <td className="px-2 py-1 text-right tabular-nums whitespace-nowrap">
+      {display !== "pct" && <span>{formatNumber(qty)}</span>}
+      {display === "both" && <span className="block text-[11px] leading-tight text-muted-foreground">{pctLabel(pct)}</span>}
+      {display === "pct" && <span>{pctLabel(pct)}</span>}
+    </td>
+  );
+}
+
 function ProductCard({
   grid,
   years,
+  display,
   open,
   onToggle,
 }: {
   grid: ProductGrid;
   years: number[];
+  display: Display;
   open: boolean;
   onToggle: () => void;
 }) {
-  const shares = sizeShares(grid.allColors.sizes);
+  const top = topSize(grid.allColors.sizes);
+  const otherNames = grid.names.filter((n) => n !== grid.label);
   return (
     <Card>
-      <button type="button" onClick={onToggle} className="w-full text-left px-4 py-3 flex flex-wrap items-center gap-3">
-        {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-        <span className="font-medium">{grid.productName}</span>
-        <Badge variant="secondary">{grid.category}</Badge>
-        <span className="text-sm text-muted-foreground">
-          {formatNumber(grid.total)} pièces · {grid.colors.length} couleur{grid.colors.length > 1 ? "s" : ""}
-        </span>
-        <span className="ml-auto flex gap-3 text-xs text-muted-foreground tabular-nums">
-          {years.map((y) => (
-            <span key={y}>
-              {y} : <span className="text-foreground font-medium">{formatNumber(grid.byYear[y] ?? 0)}</span>
-            </span>
-          ))}
-        </span>
+      <button type="button" onClick={onToggle} className="w-full text-left px-4 py-3 space-y-1">
+        <div className="flex flex-wrap items-center gap-3">
+          {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+          <span className="font-medium">{grid.label}</span>
+          {grid.model !== grid.label && <Badge variant="outline">{grid.model}</Badge>}
+          <Badge variant="secondary">{grid.category}</Badge>
+          <span className="text-sm text-muted-foreground">
+            {formatNumber(grid.total)} pièces · {grid.colors.length} couleur{grid.colors.length > 1 ? "s" : ""}
+            {top ? ` · taille n°1 : ${top}` : ""}
+          </span>
+          <span className="ml-auto flex gap-3 text-xs text-muted-foreground tabular-nums">
+            {years.map((y) => (
+              <span key={y}>
+                {y} : <span className="text-foreground font-medium">{formatNumber(grid.byYear[y] ?? 0)}</span>
+              </span>
+            ))}
+          </span>
+        </div>
+        {(grid.references.length > 1 || otherNames.length > 0) && (
+          <div className="pl-7 text-xs text-muted-foreground">
+            {grid.references.length > 0 && <>Réf. {grid.references.join(", ")}</>}
+            {otherNames.length > 0 && <> · aussi vendu sous : {otherNames.join(" / ")}</>}
+          </div>
+        )}
       </button>
       {open && (
         <CardContent className="pt-0 overflow-x-auto">
@@ -364,6 +466,7 @@ function ProductCard({
                   <th key={s} className="px-2 py-1 text-right font-medium text-muted-foreground">{s}</th>
                 ))}
                 <th className="px-2 py-1 text-right font-medium text-muted-foreground">Total</th>
+                <th className="px-2 py-1 text-right font-medium text-muted-foreground">Taille n°1</th>
               </tr>
             </thead>
             <tbody>
@@ -373,27 +476,24 @@ function ProductCard({
                   ...c.byYear.map((y) => ({ label: String(y.year), sizes: y.sizes, total: y.total, bold: false })),
                   ...(c.byYear.length > 1 ? [{ label: "Total", sizes: c.sizes, total: c.total, bold: true }] : []),
                 ];
-                return lines.map((l, li) => (
-                  <tr
-                    key={`${c.color}-${l.label}`}
-                    className={`${li === 0 ? "border-t" : ""} ${isAll ? "bg-muted/50" : ""} ${l.bold ? "font-semibold" : ""}`}
-                  >
-                    <td className="px-2 py-1">{li === 0 ? c.color : ""}</td>
-                    <td className="px-2 py-1 text-muted-foreground">{l.label}</td>
-                    {grid.sizes.map((s) => (
-                      <td key={s} className="px-2 py-1 text-right tabular-nums">{l.sizes[s] ? formatNumber(l.sizes[s]) : ""}</td>
-                    ))}
-                    <td className="px-2 py-1 text-right tabular-nums font-medium">{formatNumber(l.total)}</td>
-                  </tr>
-                ));
+                return lines.map((l, li) => {
+                  const sh = sizeShares(l.sizes);
+                  return (
+                    <tr
+                      key={`${c.color}-${l.label}`}
+                      className={`${li === 0 ? "border-t" : ""} ${isAll ? "bg-muted/50" : ""} ${l.bold ? "font-semibold" : ""}`}
+                    >
+                      <td className="px-2 py-1">{li === 0 ? c.color : ""}</td>
+                      <td className="px-2 py-1 text-muted-foreground">{l.label}</td>
+                      {grid.sizes.map((s) => (
+                        <SizeCell key={s} qty={l.sizes[s]} pct={sh[s]} display={display} />
+                      ))}
+                      <td className="px-2 py-1 text-right tabular-nums font-medium">{formatNumber(l.total)}</td>
+                      <td className="px-2 py-1 text-right">{topSize(l.sizes) ?? ""}</td>
+                    </tr>
+                  );
+                });
               })}
-              <tr className="border-t text-xs text-muted-foreground">
-                <td className="px-2 py-1" colSpan={2}>Part de chaque taille</td>
-                {grid.sizes.map((s) => (
-                  <td key={s} className="px-2 py-1 text-right tabular-nums">{shares[s] ?? 0} %</td>
-                ))}
-                <td />
-              </tr>
             </tbody>
           </table>
         </CardContent>
