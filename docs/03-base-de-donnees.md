@@ -32,7 +32,7 @@ Quand tu ajoutes un champ : édite `prisma/schema.prisma`, fais `npx prisma gene
 local (pour que TypeScript voie le champ), code, et le `db push` du déploiement créera la
 colonne.
 
-## Catalogue des modèles (38)
+## Catalogue des modèles (41)
 
 ### Référentiel produit
 - **`Product`** — produit = couple **(reference, color)** unique. Champs clés : `reference`,
@@ -113,6 +113,11 @@ colonne.
   taille) : `startDay` (1er jour vu en rupture), `lastSeenDay` (dernier jour vu en rupture),
   `endDay` (1er jour revu en stock, null = en cours). **`BtocStockSnapshotRun`** — un jour par
   photo du stock reçue. Alimentés chaque nuit par n8n ; voir [`07`](07-btoc-brevo.md#ruptures-de-stock-btocstockout).
+- **`TioCatalog`**, **`TioCatalogItem`**, **`CatalogSnapshotRun`** — relevé quotidien des
+  catalogues de vente TIO (`lng_catalog_product`) : un produit × coloris par catalogue, avec
+  1er / dernier jour vu et jour de retrait. TIO ne date rien : dates = nos relevés
+  (`presentAtStart` / `removedBeforeTracking` = déjà là / déjà retiré au 1er relevé). Voir
+  [`08`](08-fonctionnalites.md#suivi-des-collections-suivi-collections-menu-analyse).
 
 ### Système & auth
 - **`User`** — utilisateur. `name`, **`code`** (unique, 4 chiffres — sert d'identifiant ET

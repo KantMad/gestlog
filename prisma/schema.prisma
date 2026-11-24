@@ -786,6 +786,50 @@ model BtocStockSnapshotRun {
   updatedAt DateTime @updatedAt
 }
 
+// Suivi des collections (GESTLOG-13) : état des catalogues de vente TIO, relevé chaque
+// nuit par n8n (/api/sync/catalog-snapshot). TIO ne date NI les ajouts NI les retraits de
+// produits dans un catalogue (lng_catalog_product n'a qu'un fl_deleted) : les dates
+// viennent de nos relevés. Ce qui existait déjà au 1er relevé est marqué comme tel.
+model TioCatalog {
+  tioCatalogId     Int       @id // lng_catalog.catalog_id
+  name             String
+  status           String?   // published | draft
+  deleted          Boolean   @default(false)
+  tioCreatedAt     DateTime? // lng_catalog.date_creation (⚠️ 23/04/2026 = date de migration pour les anciens)
+  seasonName       String?   // saison lue dans le nom (W26 → AH26, S27 → PE27), null sinon
+  firstSnapshotDay DateTime  @db.Date
+  lastSnapshotDay  DateTime  @db.Date
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+}
+
+// Un produit × coloris dans un catalogue TIO (clé TIO product_id + color_id, comme
+// Product.externalId « 3119_53 »).
+model TioCatalogItem {
+  id                    String    @id @default(cuid())
+  tioCatalogId          Int
+  productId             Int
+  colorId               Int
+  externalId            String    // `${productId}_${colorId}` → Product.externalId
+  reference             String?   // lng_product.sku
+  firstSeenDay          DateTime  @db.Date // 1er relevé où on l'a vu
+  lastSeenDay           DateTime? @db.Date // dernier relevé où il était présenté
+  removedDay            DateTime? @db.Date // 1er relevé où il était retiré (null = présenté ou retrait non daté)
+  presentAtStart        Boolean   @default(false) // déjà présenté au 1er relevé du catalogue : date d'ajout inconnue
+  removedBeforeTracking Boolean   @default(false) // déjà retiré au 1er relevé : date de retrait inconnue
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@unique([tioCatalogId, productId, colorId])
+  @@index([externalId])
+}
+
+model CatalogSnapshotRun {
+  day       DateTime @id @db.Date
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 model HistOrder {
   id            String   @id @default(cuid())
   source        String   @default("woo_legacy") // identifie la boutique source

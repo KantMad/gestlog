@@ -485,6 +485,26 @@ Ticket Hub GESTLOG-12. Code : `src/lib/trends.ts` (pur, testé), `src/lib/trends
 - Mesure AH26 (24/11/2026, hors incomplètes) : MCS 66 400 pcs précommandées dans des commandes
   passées dans Texas + 2 800 pcs de commandes perdues en entier → 60 200 pcs finales ; TDH 8 500 → 8 300.
 
+### Suivi des collections (`/suivi-collections`, menu Analyse)
+
+Ticket Hub GESTLOG-13. Code : `src/lib/collections.ts` (pur, testé), `src/lib/collections-db.ts`,
+`/api/suivi-collections`, `/api/sync/catalog-snapshot`, `src/components/suivi-collections/`.
+- **Source** : relevé n8n quotidien des catalogues TIO (voir [`04`](04-sources-et-n8n.md) et
+  [`12`](12-schema-tio.md#catalogues-de-vente-lng_catalog-lng_catalog_product)). Diff
+  (`diffCatalogSnapshot`) : coloris nouveau → créé (daté sauf au 1er relevé du catalogue),
+  `fl_deleted = 1` ou coloris disparu de la liste → retiré ce jour, remis → retrait effacé.
+- **Saison** du catalogue = code lu dans son nom (`parseSeasonFromCatalog`). Catalogues retenus
+  par défaut : non supprimés, non vides, et hors `NON_COLLECTION` (stock, offre, proposition,
+  demande, actua, remise, outlet, sélection, bazar, démo, test) ; modifiables à l'écran.
+- **Comptes** (`familyCounts`) par famille = `Product.category` (ou sous-catégorie) via
+  `externalId` : **présentés** (même retirés ensuite ; un coloris dans 2 catalogues compte 1 fois),
+  **retirés** (de TOUS les catalogues retenus), **gardés**, **commandés clients** (≥ 1 pièce,
+  source active Texas sinon TIO), **commandés usine** (dans une `SupplierOrderLine` de la saison),
+  **Présenté → usine** = coloris usine ÷ coloris présentés.
+- ⚠️ **Commandes fournisseurs** : seule **AH26** en a au 24/11/2026 → taux usine « — » ailleurs.
+- ⚠️ Avant le 1er relevé, les retraits existent (`fl_deleted`) mais **sans date** ; les ajouts en
+  cours de collection ne sont connus qu'à partir du relevé.
+
 ### Écran Exports (`/export`)
 
 Hub regroupant les exports GestLog **hors BtoC** (gardé par l'écran `/export`, mapping

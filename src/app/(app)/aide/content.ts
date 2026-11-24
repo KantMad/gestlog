@@ -946,6 +946,23 @@ export const HELP_THEMES: HelpTheme[] = [
         ],
       },
       {
+        id: "suivi-collections",
+        icon: "🗂️",
+        title: "Suivi des collections : présenté vs commandé à l'usine",
+        keywords: "collection catalogue tio présenté retiré coloris produits usine fournisseur famille catégorie manuel",
+        screen: "/suivi-collections",
+        sections: [
+          {
+            lines: [
+              "Par saison et par **famille** (catégorie ou sous-catégorie) : produits et coloris **présentés** dans les catalogues TIO, **retirés**, **gardés**, **commandés par les clients** et **commandés à l'usine**.",
+              "Le taux **Présenté → usine** montre la part des coloris présentés réellement produits. Le tableau du bas compare les saisons entre elles.",
+              "Choisis les **catalogues** retenus (par défaut : ceux de collection, sans les stocks, offres et propositions). **Export Excel**.",
+            ],
+            tip: "TIO ne date pas les ajouts et retraits : GestLog relève les catalogues chaque nuit, donc les dates n'existent qu'à partir du premier relevé.",
+          },
+        ],
+      },
+      {
         id: "tendances",
         icon: "📉",
         title: "Tendances : précommandes et commandes finales",

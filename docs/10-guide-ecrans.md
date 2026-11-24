@@ -695,6 +695,16 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
 - **Accès** : écran à part (`/historique-ventes`) : un utilisateur restreint doit le recevoir
   dans `/users` — avoir « BtoC » ne suffit pas.
 
+## Suivi des collections (`/suivi-collections`, menu Analyse)
+
+- **But** : savoir si l'on présente trop ou pas assez de produits (GESTLOG-13, chefs de produit).
+- **Filtres** : saison, famille (catégorie / sous-catégorie), catalogues TIO retenus (boutons ;
+  par défaut ceux de collection). **Export Excel** (saison, comparaison, ajouts/retraits).
+- **Tableau** par famille : produits / coloris présentés, retirés, gardés, commandés clients,
+  commandés usine, et **Présenté → usine** (%). Puis **comparaison des saisons** et **ajouts et
+  retraits datés** (depuis le 1er relevé).
+- Règles : [`08-fonctionnalites.md`](08-fonctionnalites.md#suivi-des-collections-suivi-collections-menu-analyse).
+
 ## Tendances (`/tendances`, menu Analyse)
 
 - **But** : voir ce qui se perd entre la **précommande** (TIO) et la **commande finale** (Texas),

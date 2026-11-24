@@ -425,3 +425,14 @@ passer en **credential n8n** ou en variable d'environnement. **Non corrigé.**
 > transform, une route `/api/sync/*` ou un modèle Prisma concerné, **mets ce fichier à jour
 > dans le même commit**. Les deux côtés doivent rester cohérents, et c'est ici qu'on vient
 > lire la vérité.
+
+
+## Catalogues de vente (`lng_catalog`, `lng_catalog_product`)
+
+- `lng_catalog` : `catalog_id`, `label_fr` (nom, porte la saison : W26 / S27), `status`
+  (published / draft), `fl_deleted`, `date_creation`, `date_mod`. ⚠️ `date_creation` vaut
+  **2026-04-23 23:18:20** pour tous les anciens catalogues (date de migration) : inutilisable.
+- `lng_catalog_product` : `catalog_id`, `product_id`, **`colors`** = ids couleur **entre barres
+  verticales** (`|100|81|56|`, mêmes ids que `lng_product_variation.color_id`, donc
+  `Product.externalId = product_id_color_id`), `fl_deleted` (retiré du catalogue).
+  ⚠️ **Aucune date** d'ajout ni de retrait : d'où le relevé quotidien de GestLog (GESTLOG-13).
