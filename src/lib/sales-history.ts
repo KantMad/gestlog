@@ -409,6 +409,60 @@ export function sizeSummary(rows: SalesAggRow[]): SizeSummary {
   };
 }
 
+// ─── Parts des ventes ───────────────────────────────────────────────────
+
+const share = (part: number, total: number) => (total > 0 ? Math.round((1000 * part) / total) / 10 : 0);
+
+export interface ModelShare {
+  model: string;
+  label: string;
+  category: string;
+  qty: number;
+  amount: number;
+  /** % des pièces de toute la sélection (toutes périodes). */
+  shareQty: number;
+  /** % du CA de toute la sélection. */
+  shareAmount: number;
+  /** % des pièces de SA catégorie (utile quand plusieurs catégories sont choisies). */
+  shareInCategory: number;
+  /** Par période : pièces et % des pièces de la sélection sur cette période. */
+  byPeriod: Record<number, { qty: number; share: number }>;
+}
+
+/**
+ * Poids de chaque modèle dans la sélection : « le pull demi-zip = 31 % des pulls ».
+ * Par période, la part se calcule sur le total de la sélection DE CETTE PÉRIODE (le poids
+ * d'un modèle en 2024 se lit contre les pulls vendus en 2024, pas contre les 3 ans).
+ */
+export function modelShares(grids: ProductGrid[]): ModelShare[] {
+  const totalQty = grids.reduce((s, g) => s + g.total, 0);
+  const totalAmount = grids.reduce((s, g) => s + g.amount, 0);
+  const periodTotals: Record<number, number> = {};
+  const categoryTotals: Record<string, number> = {};
+  for (const g of grids) {
+    categoryTotals[g.category] = (categoryTotals[g.category] ?? 0) + g.total;
+    for (const [y, q] of Object.entries(g.byYear)) periodTotals[Number(y)] = (periodTotals[Number(y)] ?? 0) + q;
+  }
+  return grids.map((g) => ({
+    model: g.model,
+    label: g.label,
+    category: g.category,
+    qty: g.total,
+    amount: g.amount,
+    shareQty: share(g.total, totalQty),
+    shareAmount: share(g.amount, totalAmount),
+    shareInCategory: share(g.total, categoryTotals[g.category] ?? 0),
+    byPeriod: Object.fromEntries(
+      Object.entries(g.byYear).map(([y, q]) => [Number(y), { qty: q, share: share(q, periodTotals[Number(y)] ?? 0) }])
+    ),
+  }));
+}
+
+/** Part d'une couleur dans son modèle (pièces de la couleur / pièces du modèle), à une décimale. */
+export function colorShareInModel(colorQty: number, modelQty: number): number {
+  return share(colorQty, modelQty);
+}
+
 // ─── Export Excel ───────────────────────────────────────────────────────
 
 const pct = (n: number | undefined) => (n ? `${String(n).replace(".", ",")} %` : "");
@@ -426,11 +480,12 @@ export function buildSalesHistoryWorkbook(rows: SalesAggRow[], title: string): X
   for (const g of grids) {
     aoa.push([`${g.label} — ${g.model} (${g.category}) — ${g.total} pièces`]);
     aoa.push([`Références : ${g.references.join(", ") || "—"} · Noms : ${g.names.join(" / ")}`]);
-    aoa.push(["Couleur", "Période", ...g.sizes, "Total", "", ...g.sizes.map((s) => `% ${s}`), "Taille n°1"]);
+    aoa.push(["Couleur", "Période", ...g.sizes, "Total", "% du modèle", ...g.sizes.map((s) => `% ${s}`), "Taille n°1"]);
+    const modelByPeriod = new Map(g.allColors.byYear.map((y) => [y.period, y.total]));
     for (const c of [...g.colors, g.allColors]) {
       const lines = [
-        ...c.byYear.map((y) => ({ label: y.period, sizes: y.sizes, total: y.total })),
-        ...(c.byYear.length > 1 ? [{ label: "Total", sizes: c.sizes, total: c.total }] : []),
+        ...c.byYear.map((y) => ({ label: y.period, sizes: y.sizes, total: y.total, of: modelByPeriod.get(y.period) ?? 0 })),
+        ...(c.byYear.length > 1 ? [{ label: "Total", sizes: c.sizes, total: c.total, of: g.total }] : []),
       ];
       for (const l of lines) {
         const sh = sizeShares(l.sizes);
@@ -439,7 +494,7 @@ export function buildSalesHistoryWorkbook(rows: SalesAggRow[], title: string): X
           l.label,
           ...g.sizes.map((s) => l.sizes[s] || ""),
           l.total,
-          "",
+          pct(colorShareInModel(l.total, l.of)),
           ...g.sizes.map((s) => pct(sh[s])),
           topSize(l.sizes) ?? "",
         ]);
@@ -473,17 +528,23 @@ export function buildSalesHistoryWorkbook(rows: SalesAggRow[], title: string): X
     "Tailles par période"
   );
 
-  // 3. Par modèle : pièces par année + répartition des tailles.
+  // 3. Par modèle : pièces et part des ventes par période, puis répartition des tailles.
+  const shares = new Map(modelShares(grids).map((m) => [m.model, m]));
   add(
     grids.map((g): Record<string, string | number> => {
       const sh = sizeShares(g.allColors.sizes);
+      const m = shares.get(g.model)!;
       return {
         Modèle: g.model,
         Nom: g.label,
         Catégorie: g.category,
         ...Object.fromEntries(years.map((y) => [labels.get(y)!, g.byYear[y] ?? 0])),
         "Total pièces": g.total,
+        "% des pièces": m.shareQty,
+        ...Object.fromEntries(years.map((y) => [`% ${labels.get(y)}`, m.byPeriod[y]?.share ?? 0])),
         "CA (€)": Math.round(g.amount),
+        "% du CA": m.shareAmount,
+        "% de sa catégorie": m.shareInCategory,
         "Taille n°1": topSize(g.allColors.sizes) ?? "",
         ...Object.fromEntries(sum.sizes.map((s) => [`% ${s}`, sh[s] ?? 0])),
         Références: g.references.join(", "),
@@ -492,7 +553,8 @@ export function buildSalesHistoryWorkbook(rows: SalesAggRow[], title: string): X
     "Par modèle"
   );
 
-  // 4. Par couleur.
+  // 4. Par couleur (part = % des pièces de la sélection).
+  const selectionQty = rows.reduce((s, r) => s + r.qty, 0);
   const byColor = new Map<string, { y: Record<number, number>; q: number; a: number; sizes: Record<string, number> }>();
   for (const r of rows) {
     const e = byColor.get(r.color) ?? { y: {}, q: 0, a: 0, sizes: {} };
@@ -511,6 +573,7 @@ export function buildSalesHistoryWorkbook(rows: SalesAggRow[], title: string): X
           Couleur: c,
           ...Object.fromEntries(years.map((y) => [labels.get(y)!, e.y[y] ?? 0])),
           "Total pièces": e.q,
+          "% des pièces": share(e.q, selectionQty),
           "CA (€)": Math.round(e.a),
           "Taille n°1": topSize(e.sizes) ?? "",
           ...Object.fromEntries(sum.sizes.map((s) => [`% ${s}`, sh[s] ?? 0])),

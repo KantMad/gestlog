@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import * as XLSX from "xlsx";
 import {
   b2bPeriod,
+  colorShareInModel,
+  modelShares,
   buildProductGrids,
   groupSalesRows,
   modelKeyOf,
@@ -209,5 +211,33 @@ describe("b2bPeriod", () => {
     expect(r.year).toBeGreaterThan(20252);
     expect(r.year).toBeLessThan(20261);
     expect(b2bPeriod({ name: "Hors-saison", year: 0, type: "DIVERS" }, null).period).toBe("Hors-saison (sans date)");
+  });
+});
+
+describe("modelShares", () => {
+  const grids = buildProductGrids([
+    agg({ model: "PULL_W001", label: "Demi-zip", qty: 60, amount: 600 }),
+    agg({ model: "PULL_W001", label: "Demi-zip", year: 2025, qty: 10, amount: 100 }),
+    agg({ model: "PULL_W004", label: "Col rond", qty: 40, amount: 200 }),
+    agg({ model: "PULL_W004", label: "Col rond", year: 2025, qty: 30, amount: 100 }),
+    agg({ model: "GILE_W001", label: "Gilet", category: "Gilet", year: 2025, qty: 60, amount: 0 }),
+  ]);
+  const m = new Map(modelShares(grids).map((x) => [x.model, x]));
+
+  it("part des pièces et du CA dans toute la sélection", () => {
+    expect(m.get("PULL_W001")!.shareQty).toBe(35); // 70 / 200
+    expect(m.get("PULL_W001")!.shareAmount).toBe(70); // 700 / 1000
+  });
+  it("par période, contre le total de la période", () => {
+    expect(m.get("PULL_W001")!.byPeriod[2024]).toEqual({ qty: 60, share: 60 }); // 60 / 100
+    expect(m.get("PULL_W001")!.byPeriod[2025]).toEqual({ qty: 10, share: 10 }); // 10 / 100
+  });
+  it("part dans sa catégorie", () => {
+    expect(m.get("PULL_W001")!.shareInCategory).toBe(50); // 70 / 140 pulls
+    expect(m.get("GILE_W001")!.shareInCategory).toBe(100);
+  });
+  it("part d'une couleur dans son modèle", () => {
+    expect(colorShareInModel(1, 3)).toBe(33.3);
+    expect(colorShareInModel(5, 0)).toBe(0);
   });
 });

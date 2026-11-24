@@ -674,6 +674,12 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
   taille n°1 ; en tête, la répartition des tailles de toute la sélection par période.
   Filtres catégories / nom ou référence ; **export Excel** (grilles pièces + %, synthèses par
   modèle, couleur, taille).
+- **Part des ventes** (`modelShares`, testé) : tableau du **poids de chaque modèle** dans la
+  sélection — % des pièces, % du CA, % de sa catégorie (quand plusieurs catégories sont
+  choisies) et % **par période**, calculé contre les pièces de la sélection **de cette période**
+  (le demi-zip pèse 45 % des pulls du site en 2024, 33 % en 2026). Rappelé sur chaque modèle ;
+  dans les grilles, colonne **% du modèle** par couleur. Repris dans l'export (onglets Par
+  modèle, Par couleur, Grilles).
 - **Période** : BtoC = **année** ; B2B = **saison** (PE26, AH26…), les commandes « Réassort »
   et « Hors-saison » étant rangées par **année de commande** (« Réassort 2025 »).
 - **BtoC** : filtre de dates ; **couverture mois par mois** (bleu = historique importé, vert =

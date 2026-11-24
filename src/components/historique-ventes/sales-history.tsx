@@ -6,19 +6,22 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
-import { ChevronDown, ChevronRight, Download, History, Loader2, Ruler, Search, Upload } from "lucide-react";
+import { ChevronDown, ChevronRight, Download, History, Loader2, PieChart, Ruler, Search, Upload } from "lucide-react";
 import * as XLSX from "xlsx";
 import { formatNumber } from "@/lib/utils";
 import { fileStamp } from "@/lib/file-stamp";
 import {
   buildProductGrids,
   buildSalesHistoryWorkbook,
+  colorShareInModel,
+  modelShares,
   GROUP_MODE_LABELS,
   parseExportWorkbook,
   sizeShares,
   sizeSummary,
   topSize,
   type GroupMode,
+  type ModelShare,
   type ProductGrid,
   type SalesAggRow,
 } from "@/lib/sales-history";
@@ -106,6 +109,9 @@ export function SalesHistory() {
   const rows = useMemo(() => (data?.channel === channel ? data.rows : []), [data, channel]);
   const grids = useMemo(() => buildProductGrids(rows), [rows]);
   const summary = useMemo(() => sizeSummary(rows), [rows]);
+  const shares = useMemo(() => modelShares(grids), [grids]);
+  const shareByModel = useMemo(() => new Map(shares.map((m) => [m.model, m])), [shares]);
+  const [allShares, setAllShares] = useState(false);
   const years = summary.years.map((y) => y.year);
   const periodLabel = useMemo(() => new Map(summary.years.map((y) => [y.year, y.period])), [summary]);
   const isB2b = channel === "b2b";
@@ -470,6 +476,66 @@ export function SalesHistory() {
         </CardContent>
       </Card>
 
+      {/* Part des ventes par modèle */}
+      {shares.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <PieChart className="h-4 w-4" />
+              Part des ventes par modèle
+            </CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Poids de chaque modèle dans la sélection ({categories.length ? categories.join(" + ") : "toutes catégories"}).
+              Par période, la part se calcule sur les pièces de la sélection vendues sur cette période.
+            </p>
+          </CardHeader>
+          <CardContent className="overflow-x-auto">
+            <table className="text-sm border-collapse min-w-full">
+              <thead>
+                <tr className="border-b">
+                  <th className="px-2 py-1 text-left font-medium text-muted-foreground">Modèle</th>
+                  {categories.length !== 1 && <th className="px-2 py-1 text-left font-medium text-muted-foreground">Catégorie</th>}
+                  {years.map((y) => (
+                    <th key={y} className="px-2 py-1 text-right font-medium text-muted-foreground">{periodLabel.get(y)}</th>
+                  ))}
+                  <th className="px-2 py-1 text-right font-medium text-muted-foreground">Pièces</th>
+                  <th className="px-2 py-1 text-right font-medium text-muted-foreground">% des pièces</th>
+                  <th className="px-2 py-1 text-right font-medium text-muted-foreground">% du CA</th>
+                  {categories.length !== 1 && (
+                    <th className="px-2 py-1 text-right font-medium text-muted-foreground">% de sa catégorie</th>
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {(allShares ? shares : shares.slice(0, 15)).map((m) => (
+                  <tr key={m.model} className="border-t">
+                    <td className="px-2 py-1">
+                      <span className="font-medium">{m.label}</span>
+                      {m.model !== m.label && <span className="ml-2 text-xs text-muted-foreground">{m.model}</span>}
+                    </td>
+                    {categories.length !== 1 && <td className="px-2 py-1 text-muted-foreground">{m.category}</td>}
+                    {years.map((y) => (
+                      <SizeCell key={y} qty={m.byPeriod[y]?.qty} pct={m.byPeriod[y]?.share} display={display} />
+                    ))}
+                    <td className="px-2 py-1 text-right tabular-nums">{formatNumber(m.qty)}</td>
+                    <td className="px-2 py-1 text-right tabular-nums font-semibold">{pctLabel(m.shareQty)}</td>
+                    <td className="px-2 py-1 text-right tabular-nums">{pctLabel(m.shareAmount)}</td>
+                    {categories.length !== 1 && (
+                      <td className="px-2 py-1 text-right tabular-nums">{pctLabel(m.shareInCategory)}</td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {shares.length > 15 && (
+              <Button variant="ghost" size="sm" className="mt-2" onClick={() => setAllShares((v) => !v)}>
+                {allShares ? "Afficher les 15 premiers" : `Afficher les ${shares.length} modèles`}
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Grilles par modèle */}
       <div className="space-y-3">
         {grids.slice(0, shown).map((g) => (
@@ -478,6 +544,7 @@ export function SalesHistory() {
             grid={g}
             years={years}
             periodLabel={periodLabel}
+            share={shareByModel.get(g.model)}
             display={display}
             open={!!open[g.model]}
             onToggle={() => setOpen((o) => ({ ...o, [g.model]: !o[g.model] }))}
@@ -508,6 +575,7 @@ function ProductCard({
   grid,
   years,
   periodLabel,
+  share,
   display,
   open,
   onToggle,
@@ -515,6 +583,7 @@ function ProductCard({
   grid: ProductGrid;
   years: number[];
   periodLabel: Map<number, string>;
+  share: ModelShare | undefined;
   display: Display;
   open: boolean;
   onToggle: () => void;
@@ -531,6 +600,7 @@ function ProductCard({
           <Badge variant="secondary">{grid.category}</Badge>
           <span className="text-sm text-muted-foreground">
             {formatNumber(grid.total)} pièces · {grid.colors.length} couleur{grid.colors.length > 1 ? "s" : ""}
+            {share ? ` · ${pctLabel(share.shareQty)} des pièces de la sélection` : ""}
             {top ? ` · taille n°1 : ${top}` : ""}
           </span>
           <span className="ml-auto flex gap-3 text-xs text-muted-foreground tabular-nums">
@@ -559,15 +629,23 @@ function ProductCard({
                   <th key={s} className="px-2 py-1 text-right font-medium text-muted-foreground">{s}</th>
                 ))}
                 <th className="px-2 py-1 text-right font-medium text-muted-foreground">Total</th>
+                <th className="px-2 py-1 text-right font-medium text-muted-foreground">% du modèle</th>
                 <th className="px-2 py-1 text-right font-medium text-muted-foreground">Taille n°1</th>
               </tr>
             </thead>
             <tbody>
               {[...grid.colors, grid.allColors].map((c, ci) => {
+                const modelByPeriod = new Map(grid.allColors.byYear.map((y) => [y.period, y.total]));
                 const isAll = ci === grid.colors.length;
                 const lines = [
-                  ...c.byYear.map((y) => ({ label: y.period, sizes: y.sizes, total: y.total, bold: false })),
-                  ...(c.byYear.length > 1 ? [{ label: "Total", sizes: c.sizes, total: c.total, bold: true }] : []),
+                  ...c.byYear.map((y) => ({
+                    label: y.period,
+                    sizes: y.sizes,
+                    total: y.total,
+                    of: modelByPeriod.get(y.period) ?? 0,
+                    bold: false,
+                  })),
+                  ...(c.byYear.length > 1 ? [{ label: "Total", sizes: c.sizes, total: c.total, of: grid.total, bold: true }] : []),
                 ];
                 return lines.map((l, li) => {
                   const sh = sizeShares(l.sizes);
@@ -582,6 +660,9 @@ function ProductCard({
                         <SizeCell key={s} qty={l.sizes[s]} pct={sh[s]} display={display} />
                       ))}
                       <td className="px-2 py-1 text-right tabular-nums font-medium">{formatNumber(l.total)}</td>
+                      <td className="px-2 py-1 text-right tabular-nums text-muted-foreground">
+                        {pctLabel(colorShareInModel(l.total, l.of))}
+                      </td>
                       <td className="px-2 py-1 text-right">{topSize(l.sizes) ?? ""}</td>
                     </tr>
                   );
