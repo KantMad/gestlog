@@ -59,7 +59,8 @@ Tables/clés utiles :
 | **GestLog — Sync commandes clients** | `16sDefOysHJJstHE` | `lng_order` (+ `lng_shop`, `lng_catalog`, `lng_content` tailles) → `/api/sync/orders`. ⚠️ **Lignes lues dans `lng_order.product_data` (JSON)** — il n'y a pas de table de lignes. Fenêtre glissante **30 jours** sur `date_update`, `LIMIT 1000` : synchro **incrémentale**, pas un instantané. Routage saison **Réassort** inclus. | Schedule **quotidien 05 h 00** + webhook de test |
 | **Sync BL/FAC (FTP)** | — | Récupère BL & factures dépôt depuis un **FTP**, parse, POST `/api/sync/shipments`. Remplit `WarehouseDocument(+Line)`. Lien BL↔commande TIO via le **nom de fichier** (`IS-xxx`). | (schedule) |
 | **Explore** | `rph8qNuSGm7k2iWv` | Sonde TIO (debug). `curl https://centralway.pro/webhook/gestlog-explore` renvoie 1 ligne du dernier nœud. | webhook |
-| **BtoC (WooCommerce)** | `wH890xjpZS616wpW` | Voir [`07-btoc-brevo.md`](07-btoc-brevo.md). Exécution longue (**~30 min**). | (schedule) |
+| **BtoC (WooCommerce)** | `wH890xjpZS616wpW` | Voir [`07-btoc-brevo.md`](07-btoc-brevo.md). Exécution longue (**~30 min**). Commandes Woo lues sur **3 jours glissants** (`after` = maintenant − 3 j, toutes les pages) : une nuit sans synchro ne fait plus perdre de commandes (avant : 1 jour, 100 max — le 16/11/2026 entier manquait). | (schedule) |
+| **GestLog — Commandes Shopping Feed** | voir n8n | POST `/api/sync/marketplace-orders` (sans corps) : GestLog lit lui-même l'API Shopping Feed (45 derniers jours) → `MarketplaceOrder`. | Schedule **quotidien 06 h 00** (après la synchro Woo) |
 | **GestLog — Photo stock BtoC (ruptures)** | `0io1FTNFSYju0I3L` | API WooCommerce : produits variables publiés (`/products?type=variable`, paginé) puis **`/products/{id}/variations`** de chacun (lots de 5 / 400 ms) → lots de 1 000 variations → POST `/api/sync/btoc/stock-snapshot`. Remplit `BtocStockOut`. Run long (≈ 1 100 produits) : ne pas attendre la réponse du webhook. | Schedule **quotidien 05 h 40** + webhook **GET `/webhook/gestlog-stock-snapshot`** (répond tout de suite) |
 | **GestLog — Relevé catalogues TIO (suivi des collections)** | `CfPvAYDazIhp3hZ4` | MySQL `lng_catalog` + `lng_catalog_product` (+ `lng_product.sku`), TOUTES les lignes (y.c. `fl_deleted = 1`) → **un appel par catalogue** POST `/api/sync/catalog-snapshot`. Remplit `TioCatalog` / `TioCatalogItem`. | Schedule **quotidien 05 h 50** + webhook **GET `/webhook/gestlog-catalog-snapshot`** |
 | **Sync villes de livraison clients** | `cu2ce4dLZtlwvthK` | `lng_shop` (`reference`, `city`, `zipcode`) → POST `/api/sync/client-addresses`. Remplit `Client.deliveryCity/deliveryPostcode` (nom du fichier d'intégration CC). | Schedule quotidien |
@@ -99,6 +100,10 @@ middleware laisse passer `/api/sync/` sans cookie — cf. `PUBLIC_PATHS`). Princ
 - `/api/sync/shipments`, `/api/sync/shipment-pdfs`, `/api/sync/bl-order-numbers` — BL/FAC dépôt.
 - `/api/sync/catalog-snapshot` — état complet d'UN catalogue TIO → ajouts / retraits datés
   (`TioCatalogItem`). Idempotent le même jour.
+- `/api/sync/marketplace-orders` — GestLog lit l'**API Shopping Feed** (jeton
+  `SHOPPINGFEED_TOKEN`, boutique `SHOPPINGFEED_STORE_ID` = 42888 par défaut) et range les
+  commandes dans `MarketplaceOrder`. Corps facultatif `{ since, until }` (AAAA-MM-JJ, date de
+  création ; défaut 45 jours). **Lecture seule** : seul `GET /v1/store/{id}/order` est appelé.
 - `/api/sync/btoc/stock-snapshot` — photo quotidienne du stock **par variation** → périodes de
   rupture `BtocStockOut` (ouverture / prolongation / clôture, idempotent le même jour).
 - `/api/sync/btoc/*` — BtoC (customers, orders, products, stock, refunds, order-countries,

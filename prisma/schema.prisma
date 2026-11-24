@@ -791,6 +791,34 @@ model BtocStockSnapshotRun {
   updatedAt DateTime @updatedAt
 }
 
+// Commandes marketplaces (La Redoute…) lues dans l'API Shopping Feed (GESTLOG-15), pour les
+// rapprocher des commandes WooCommerce (BtocOrder.marketplaceRef / wooId). Lecture seule côté
+// Shopping Feed. AUCUNE donnée personnelle (ni nom, ni adresse, ni e-mail).
+model MarketplaceOrder {
+  sfId           String    @id // id interne Shopping Feed (dépasse un int 32 bits)
+  reference      String    // n° de commande marketplace, ex. LRFR20263273236715-A = BtocOrder.marketplaceRef
+  storeReference String?   // id de la commande WooCommerce créée par Shopping Feed = BtocOrder.wooId
+  channelId      Int
+  channel        String    // ex. laredoutemirakl
+  status         String    // created, waiting_store_acceptance, refused, waiting_shipment, shipped, cancelled, refunded, partially_refunded, partially_shipped
+  isTest         Boolean   @default(false)
+  orderCreatedAt DateTime  // date de la commande sur la marketplace
+  acknowledgedAt DateTime? // importée dans WooCommerce
+  sfUpdatedAt    DateTime?
+  totalAmount    Float
+  productAmount  Float
+  shippingAmount Float
+  currency       String    @default("EUR")
+  itemCount      Int       @default(0)
+  items          Json      // [{ reference, name, quantity, price, status }]
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([reference])
+  @@index([storeReference])
+  @@index([orderCreatedAt])
+}
+
 // Suivi des collections (GESTLOG-13) : état des catalogues de vente TIO, relevé chaque
 // nuit par n8n (/api/sync/catalog-snapshot). TIO ne date NI les ajouts NI les retraits de
 // produits dans un catalogue (lng_catalog_product n'a qu'un fl_deleted) : les dates

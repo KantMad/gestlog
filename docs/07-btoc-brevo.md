@@ -322,6 +322,32 @@ lecture des exports, tri des tailles, grilles, classeur Excel), `src/lib/sales-h
   `orders-2025-02-17-18-03-57`, `orders-2025-07-25-09-19-40`, `orders-2026-02-10-08-50-21`
   (2025). Trous connus : **17-28/02/2025** et **25/07-31/08/2025**.
 
+## Contrôle marketplaces (La Redoute ↔ WooCommerce)
+
+GESTLOG-15, écran **Commandes → Contrôle marketplaces** (`/controle-marketplaces`).
+
+- **Côté marketplace** : chaque nuit (n8n, 06 h 00) `/api/sync/marketplace-orders` lit l'API
+  Shopping Feed (`src/lib/shoppingfeed.ts`, **lecture seule**, 200 commandes par page) sur les
+  45 derniers jours (date de **création** : un remboursement sur une commande plus ancienne n'est
+  plus suivi) → `MarketplaceOrder`. Reprise d'historique : POST `{ "since": "2025-12-01" }`.
+- **Jeton** : `SHOPPINGFEED_TOKEN` dans `/var/www/gestlog/.env` (posé le 24/11/2026). Il s'obtient
+  avec le nom de compte + mot de passe Shopping Feed (`POST https://api.shopping-feed.com/v1/auth`,
+  `grant_type=password`, réponse `access_token`) ; la page « tools/infos » citée par leur doc
+  n'existe pas sur notre compte. Boutique **42888** (= méta Woo `sf_store_id`).
+- **Rapprochement** (`src/lib/marketplace-reconcile.ts`, testé) : par n° marketplace
+  (`MarketplaceOrder.reference` = `BtocOrder.marketplaceRef`), à défaut par id Woo
+  (`storeReference` = `wooId`). Résultats : `ok`, `ecart` (montant, articles, statut),
+  `absente_woo`, `absente_sf`, et deux cas **normaux** : `en_attente` (pas encore acceptée, ou
+  passée après la dernière synchro Woo) et `annulee` (annulée / refusée avant import).
+- **Écart de prix habituel** : La Redoute facture **0,30 € de plus par article** que le site
+  (83,30 vs 83,00) — constaté sur 201 des 225 commandes d'octobre-novembre 2026. Toléré
+  (`USUAL_GAP_PER_ITEM`), pas compté comme anomalie.
+- **Statuts** : on ne signale que les contradictions nettes (annulée / remboursée d'un côté
+  seulement, remboursement Woo = `refunded` ou `totalRefunded` ≥ total). « Expédiée » vs
+  « en cours » n'est pas une anomalie.
+- **Fenêtre** : rapprochement sur la période ± 3 jours, puis filtre sur la période, pour qu'une
+  commande à cheval sur minuit ne passe pas pour absente.
+
 ## Ruptures de stock (`BtocStockOut`)
 
 > Écran **Analyse → Ruptures de stock** (`/ruptures`). Ticket Hub GESTLOG-14.

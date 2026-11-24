@@ -1013,6 +1013,23 @@ export const HELP_THEMES: HelpTheme[] = [
         ],
       },
       {
+        id: "controle-marketplaces",
+        icon: "⚖️",
+        title: "Contrôle marketplaces (La Redoute ↔ WooCommerce)",
+        keywords: "la redoute shopping feed marketplace commande absente manquante écart montant woocommerce contrôle",
+        screen: "/controle-marketplaces",
+        sections: [
+          {
+            lines: [
+              "Chaque nuit, GestLog lit les commandes **La Redoute** dans **Shopping Feed** et les rapproche des commandes **WooCommerce** par le **n° de commande La Redoute** (à défaut, le n° de commande Woo).",
+              "Par défaut l'écran montre les **anomalies** : commandes **absentes de Woo**, **absentes de Shopping Feed**, et **écarts** de montant, de nombre d'articles ou de statut (ex. remboursée sur La Redoute mais pas dans Woo).",
+              "« **En attente** » et « **Annulée avant import** » sont normales : commande pas encore acceptée, passée après la dernière synchro, ou refusée avant d'arriver dans Woo. **Export Excel** de la liste affichée.",
+            ],
+            tip: "Le prix La Redoute est en général 0,30 € plus cher par article que sur le site : cet écart habituel n'est pas compté comme une anomalie.",
+          },
+        ],
+      },
+      {
         id: "controle-commandes",
         icon: "🔎",
         title: "Contrôle commandes (les « sélections »)",
