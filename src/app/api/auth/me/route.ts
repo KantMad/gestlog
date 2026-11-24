@@ -28,10 +28,10 @@ export async function GET() {
 
   const screenAccess = parseScreenAccess(user.screenAccess);
 
-  const response = NextResponse.json(
-    { user: { id: user.id, name: user.name, role: user.role, screenAccess } },
-    { headers: NO_STORE }
-  );
+  const body: { user: object; sessionRefreshed?: boolean } = {
+    user: { id: user.id, name: user.name, role: user.role, screenAccess },
+  };
+  const response = NextResponse.json(body, { headers: NO_STORE });
 
   // ⚠️ Les droits sont figés dans le JETON à la connexion, alors que cette route (et donc
   // le menu) les relit en BASE. Quand un admin modifie les accès de quelqu'un déjà
@@ -40,11 +40,18 @@ export async function GET() {
   // autorisé. Symptôme vécu : « je clique sur À vendre, je retombe sur le dashboard ».
   // On réémet donc le cookie dès que le jeton est en retard : plus besoin de se
   // reconnecter, un simple chargement de page suffit.
+  // ⚠️ Mais le navigateur a pu PRÉCHARGER les liens du menu avec l'ancien jeton, dans la
+  // même seconde : il garde alors en mémoire la redirection vers l'accueil, et le clic
+  // y renvoie encore (vécu : Nathalie et « Historique des ventes »). On signale donc le
+  // rafraîchissement (`sessionRefreshed`) : le client recharge la page une fois pour
+  // vider ce cache de navigation.
   try {
     const token = (await cookies()).get(SESSION_COOKIE)?.value;
     const payload = await verifySession(token);
     if (payload && (payload.role !== user.role || !sameAccess(payload.scr, screenAccess))) {
-      response.cookies.set(await setSessionCookie(user.id, user.role, screenAccess));
+      const fresh = NextResponse.json({ ...body, sessionRefreshed: true }, { headers: NO_STORE });
+      fresh.cookies.set(await setSessionCookie(user.id, user.role, screenAccess));
+      return fresh;
     }
   } catch {
     /* le rafraîchissement est un confort : en cas d'échec, la session reste valable */

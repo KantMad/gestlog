@@ -23,7 +23,13 @@
   **Anti-brute-force** : `LoginAttempt` compte les échecs par IP, **max 10 / 5 min** → 429.
 - **`POST /api/auth/logout`** : efface le cookie.
 - **`GET /api/auth/me`** : renvoie l'utilisateur courant (`id, name, role, screenAccess`) —
-  **jamais le code**.
+  **jamais le code**. Les droits (`role`, `screenAccess`) sont figés dans le jeton à la
+  connexion, alors que cette route les relit **en base** : si un admin a changé les accès
+  entre-temps, elle **réémet le cookie** et renvoie `sessionRefreshed: true`. Le client
+  (`auth-context.tsx`) recharge alors la page **une fois** (garde-fou : 1 rechargement/min
+  via `sessionStorage`), car les liens du menu ont pu être **préchargés avec l'ancien
+  jeton** dans la même seconde — le navigateur garderait sinon la redirection vers
+  l'accueil (vécu : nouvel écran visible au menu, mais le clic ramène au dashboard).
 - **`GET /api/auth/users`** : **public** — liste des utilisateurs actifs `{id, name}`
   (noms uniquement, **pas de code ni rôle**) pour alimenter le menu déroulant du login.
 - **`POST /api/auth/seed`** : amorçage initial d'utilisateurs.

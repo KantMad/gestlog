@@ -45,6 +45,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const res = await fetch("/api/auth/me");
       if (res.ok) {
         const data = await res.json();
+        // Droits modifiés depuis la connexion : le jeton vient d'être réémis, mais le
+        // navigateur a pu garder des liens préchargés avec l'ANCIEN jeton (redirection
+        // vers l'accueil). Un rechargement complet, une seule fois, vide ce cache.
+        // Garde-fou anti-boucle : pas plus d'un rechargement par minute.
+        if (data.sessionRefreshed) {
+          let last = 0;
+          try {
+            last = Number(sessionStorage.getItem("gestlog_access_reload") || 0);
+          } catch {}
+          if (Date.now() - last > 60_000) {
+            try {
+              sessionStorage.setItem("gestlog_access_reload", String(Date.now()));
+            } catch {}
+            window.location.reload();
+            return;
+          }
+        }
         setUser(data.user);
       } else {
         setUser(null);
