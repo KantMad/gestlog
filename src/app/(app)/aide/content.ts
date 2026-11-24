@@ -946,6 +946,23 @@ export const HELP_THEMES: HelpTheme[] = [
         ],
       },
       {
+        id: "tendances",
+        icon: "📉",
+        title: "Tendances : précommandes et commandes finales",
+        keywords: "tendances précommande commande finale perte annulation tio texas mcs tdh catégorie coloris",
+        screen: "/tendances",
+        sections: [
+          {
+            lines: [
+              "Compare, pour une saison, les **précommandes** (TIO) aux **commandes finales** (Texas), en pièces et en €, **MCS et TDH séparés**.",
+              "Détail par **catégorie**, **sous-catégorie**, **produit** ou **produit × coloris**, trié par pièces perdues, avec un **verdict** face à la moyenne de la marque.",
+              "En bas : la **part de chaque catégorie** dans les précommandes, saison après saison, et sa tendance. **Export Excel** (à envoyer à Sylvain).",
+            ],
+            tip: "Une saison sans export Texas n'a que ses précommandes : importe l'export Texas (Import → Commandes clients Texas) pour voir les pertes.",
+          },
+        ],
+      },
+      {
         id: "ruptures",
         icon: "🚫",
         title: "Ruptures de stock et ventes manquées (site)",

@@ -695,6 +695,19 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
 - **Accès** : écran à part (`/historique-ventes`) : un utilisateur restreint doit le recevoir
   dans `/users` — avoir « BtoC » ne suffit pas.
 
+## Tendances (`/tendances`, menu Analyse)
+
+- **But** : voir ce qui se perd entre la **précommande** (TIO) et la **commande finale** (Texas),
+  MCS et TDH **séparés**, pour construire une offre plus courte (GESTLOG-12).
+- **Filtres** : saison (marquée « précommande + finale » si un export Texas existe), marque (MCS
+  par défaut / TDH / les deux), détail par catégorie / sous-catégorie / produit / produit × coloris,
+  recherche. **Export Excel** (comparaison, synthèse marques, évolution).
+- **Synthèse** par marque : pièces et € précommandés, finaux, % de perte, commandes perdues en
+  entier. **Détail** trié par pièces perdues avec verdict (tient bien / dans la moyenne / perd plus).
+- **Évolution** : part de chaque catégorie dans les précommandes, saison après saison (même type).
+- ⚠️ Saison sans export Texas = précommandes seules. Commandes TIO incomplètes écartées et signalées.
+- Règles : [`08-fonctionnalites.md`](08-fonctionnalites.md#tendances--précommandes-vs-commandes-finales-tendances-menu-analyse).
+
 ## Ruptures de stock (`/ruptures`, menu Analyse)
 
 - **But** : voir quelles **couleurs × tailles** du site ont manqué, combien de jours, et les

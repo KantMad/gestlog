@@ -462,6 +462,29 @@ Les commandes B2B ont un champ **`ClientOrder.source`** (`TIO` par défaut | `TE
   Au **ré-import**, un catalogue déjà rattaché n'est **jamais effacé** si la jumelle TIO est
   introuvable (synchro TIO en retard) — le champ n'est écrit que si la jumelle existe.
 
+### Tendances : précommandes vs commandes finales (`/tendances`, menu Analyse)
+
+Ticket Hub GESTLOG-12. Code : `src/lib/trends.ts` (pur, testé), `src/lib/trends-db.ts`,
+`/api/tendances`, `src/components/tendances/trends.tsx`.
+- **Précommande** = commandes **TIO** de la saison ; **commande finale** = la **même commande dans
+  Texas**, reliée par `ClientOrder.tioOrderNumber` (seul lien, cf. ci-dessus). Commande TIO sans
+  jumelle Texas = **perdue en entier** ; avec jumelle = écart ligne à ligne. Commandes Texas sans
+  jumelle TIO (réassorts `IS-…`) : **hors comparaison**, comptées à part (`unpaired`).
+- Périmètre : `orderType = COMMANDE`, statut ≠ ANNULEE, **PLV exclue**, pièces soldées
+  (`cancelledBySize`) déduites côté Texas. CA Texas des lignes au prorata des pièces retenues.
+- **Marque** (`brandOfCatalog`) : **TDH** = catalogue « Territoire d'homme… », **MCS** = le reste
+  (côté Texas, catalogue de la jumelle TIO). Verdict d'une ligne (`verdictOf`) : face au taux de
+  perte moyen **de sa marque**, ±5 points, au-delà de 50 pièces précommandées.
+- **Évolution** (`categoryEvolution`) : précommandes TIO par catégorie, part dans la marque,
+  saisons du **même type** (AH ou PE) ; tendance = écart de part première → dernière saison (±2 pts).
+- ⚠️ **Seule AH26 a un export Texas** au 24/11/2026 : les autres saisons n'affichent que les
+  précommandes. Pour PE26 (les « 2,2 M€ → 1,8 M€ » de la réunion), importer l'export Texas.
+- ⚠️ **Commandes TIO incomplètes** écartées (`INCOMPLETE_TIO` : sans catalogue, NI date, NI
+  montant) : 14 commandes AH26, ≈ 10 000 pièces, créées le 23/06/2026 hors synchro n8n, sans
+  jumelle Texas. Elles gonflaient la perte MCS de 24 % à ~13 % réels. Comptées à l'écran (`incomplete`).
+- Mesure AH26 (24/11/2026, hors incomplètes) : MCS 66 400 pcs précommandées dans des commandes
+  passées dans Texas + 2 800 pcs de commandes perdues en entier → 60 200 pcs finales ; TDH 8 500 → 8 300.
+
 ### Écran Exports (`/export`)
 
 Hub regroupant les exports GestLog **hors BtoC** (gardé par l'écran `/export`, mapping
