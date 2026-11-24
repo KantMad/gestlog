@@ -105,3 +105,25 @@ describe("mapSfOrder", () => {
     expect(JSON.stringify(o)).not.toMatch(/Doe|x@y/);
   });
 });
+
+describe("anomalies traitées", () => {
+  const res = { note: "recréée à la main, Woo 87123", by: "Géraldine", at: "2026-11-24T16:00:00.000Z" };
+  it("passe une anomalie traitée en « traitee », garde le motif d'origine", () => {
+    const [r] = reconcile([sf({ reference: "A", storeReference: "555" })], [], null, new Map([["A", res]]));
+    expect(r.kind).toBe("traitee");
+    expect(r.issues).toEqual(["commande Woo n°555 introuvable"]);
+    expect(r.resolution).toEqual(res);
+  });
+  it("ne touche pas une commande cohérente ou en attente", () => {
+    const rows = reconcile(
+      [sf({}), sf({ reference: "B", storeReference: null, status: "waiting_store_acceptance" })],
+      [woo({})],
+      null,
+      new Map([["LR-1", res], ["B", res]])
+    );
+    expect(rows.map((r) => [r.reference, r.kind])).toEqual([
+      ["B", "en_attente"],
+      ["LR-1", "ok"],
+    ]);
+  });
+});

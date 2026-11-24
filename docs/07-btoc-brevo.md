@@ -354,7 +354,21 @@ GESTLOG-15, onglet **Marketplaces** de l'écran **BtoC** (`/btoc?tab=marketplace
   seulement, remboursement Woo = `refunded` ou `totalRefunded` ≥ total). « Expédiée » vs
   « en cours » n'est pas une anomalie.
 - **Fenêtre** : rapprochement sur la période ± 3 jours, puis filtre sur la période, pour qu'une
-  commande à cheval sur minuit ne passe pas pour absente.
+  commande à cheval sur minuit ne passe pas pour absente. Les commandes Woo créées **après** la
+  fenêtre mais portant le n° marketplace d'une commande de la période (import Shopping Feed réussi
+  après coup) sont aussi rapprochées.
+- **Actualiser maintenant** (bouton de l'onglet, `POST /api/btoc/marketplaces/refresh`) : relance
+  sans attendre la nuit (1) la synchro des commandes Woo des **3 derniers jours** via le workflow
+  n8n *GestLog — Commandes Woo à la demande* (`cvzTLYHpTAw6Zuqy`, webhook
+  `gestlog-woo-orders-now`, protégé par la clé de synchro en en-tête `x-api-key` ; URL
+  surchargeable par `N8N_WOO_ORDERS_WEBHOOK`) et (2) la lecture Shopping Feed des 45 derniers
+  jours (`lib/marketplace-sync.ts`, partagé avec la synchro de nuit). Une seule actualisation à la
+  fois (409 sinon). ≈ 10 s.
+- **Traitée à la main** (`MarketplaceResolution`, clé = n° marketplace) : une anomalie que GestLog
+  ne peut pas résoudre seul (ex. commande La Redoute **recréée à la main** dans Woo, donc sans
+  n° marketplace) se marque « traitée » avec une **note obligatoire** (qui, quand, pourquoi) ;
+  elle sort des anomalies (filtre « Traitées à la main ») et reste annulable.
+  `POST/DELETE /api/btoc/marketplaces/resolutions`. Une commande redevenue cohérente reste « ok ».
 
 ## Ruptures de stock (`BtocStockOut`)
 

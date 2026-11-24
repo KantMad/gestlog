@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { handleApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { parisDayExpr } from "@/lib/btoc-dates";
-import { ANOMALY_KINDS, reconcile, type SfSide, type WooSide } from "@/lib/marketplace-reconcile";
+import { ANOMALY_KINDS, reconcile, type Resolution, type SfSide, type WooSide } from "@/lib/marketplace-reconcile";
 
 // GET — contrôle des commandes marketplaces (La Redoute via Shopping Feed) face à WooCommerce
 // (GESTLOG-15). Paramètres : dateFrom / dateTo (AAAA-MM-JJ, jour de commande, heure de Paris ;
@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
     const from = DAY.test(p.get("dateFrom") || "") ? (p.get("dateFrom") as string) : shift(to, -29);
     const [wFrom, wTo] = [shift(from, -3), shift(to, 3)];
 
-    const [sfRows, wooRows, syncs, span] = await Promise.all([
+    const [sfRows, syncs, span, resolved] = await Promise.all([
       prisma.$queryRawUnsafe<(Omit<SfSide, "createdAt"> & { createdAt: Date })[]>(
         `SELECT "sfId", reference, "storeReference", channel, status, "isTest",
                 ("orderCreatedAt" AT TIME ZONE 'UTC') AS "createdAt",
@@ -34,16 +34,6 @@ export async function GET(request: NextRequest) {
                 "totalAmount" AS total, "itemCount" AS qty
            FROM "MarketplaceOrder"
           WHERE (${parisDayExpr('"orderCreatedAt"')})::date BETWEEN $1::date AND $2::date`,
-        wFrom,
-        wTo
-      ),
-      prisma.$queryRawUnsafe<WooSide[]>(
-        `SELECT "wooId", "orderNumber", "marketplaceRef", marketplace, status, total,
-                COALESCE("totalRefunded", 0) AS "totalRefunded", "itemCount" AS qty,
-                to_char(${parisDayExpr('"orderDate"')}, 'YYYY-MM-DD') AS day
-           FROM "BtocOrder"
-          WHERE (${parisDayExpr('"orderDate"')})::date BETWEEN $1::date AND $2::date
-            AND (marketplace IS NOT NULL OR "paymentMethod" = 'shopping-feed')`,
         wFrom,
         wTo
       ),
@@ -56,7 +46,24 @@ export async function GET(request: NextRequest) {
       prisma.$queryRawUnsafe<{ first: Date | null; last: Date | null }[]>(
         `SELECT MIN("orderDate" AT TIME ZONE 'UTC') AS first, MAX("orderDate" AT TIME ZONE 'UTC') AS last FROM "BtocOrder"`
       ),
+      prisma.marketplaceResolution.findMany(),
     ]);
+    // Commandes Woo de la fenêtre, plus celles créées PLUS TARD pour une commande marketplace de
+    // la période (ex. import Shopping Feed réussi après coup) : rapprochées par leur n° marketplace.
+    const wooRows = await prisma.$queryRawUnsafe<WooSide[]>(
+      `SELECT "wooId", "orderNumber", "marketplaceRef", marketplace, status, total,
+              COALESCE("totalRefunded", 0) AS "totalRefunded", "itemCount" AS qty,
+              to_char(${parisDayExpr('"orderDate"')}, 'YYYY-MM-DD') AS day
+         FROM "BtocOrder"
+        WHERE (marketplace IS NOT NULL OR "paymentMethod" = 'shopping-feed')
+          AND ((${parisDayExpr('"orderDate"')})::date BETWEEN $1::date AND $2::date OR "marketplaceRef" = ANY($3::text[]))`,
+      wFrom,
+      wTo,
+      sfRows.map((r) => r.reference)
+    );
+    const resolutions = new Map<string, Resolution>(
+      resolved.map((r) => [r.reference, { note: r.note, by: r.resolvedBy, at: r.resolvedAt.toISOString() }])
+    );
     const wooFirst = span[0]?.first ? new Date(span[0].first).toISOString() : null;
     const wooLast = span[0]?.last ? new Date(span[0].last).toISOString() : null;
 
@@ -68,7 +75,8 @@ export async function GET(request: NextRequest) {
         .map((r) => ({ ...r, createdAt: new Date(r.createdAt).toISOString(), total: Number(r.total), qty: Number(r.qty) }))
         .filter((r) => !wooFirst || r.createdAt >= wooFirst),
       wooRows.map((r) => ({ ...r, wooId: Number(r.wooId), total: Number(r.total), totalRefunded: Number(r.totalRefunded), qty: Number(r.qty) })),
-      wooLast
+      wooLast,
+      resolutions
     ).filter((r) => r.day >= from && r.day <= to);
 
     const counts: Record<string, number> = {};

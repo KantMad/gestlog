@@ -32,7 +32,7 @@ Quand tu ajoutes un champ : édite `prisma/schema.prisma`, fais `npx prisma gene
 local (pour que TypeScript voie le champ), code, et le `db push` du déploiement créera la
 colonne.
 
-## Catalogue des modèles (42)
+## Catalogue des modèles (43)
 
 ### Référentiel produit
 - **`Product`** — produit = couple **(reference, color)** unique. Champs clés : `reference`,
@@ -121,6 +121,8 @@ colonne.
   `BtocOrder.marketplaceRef`), `storeReference` (= `BtocOrder.wooId`), `channel`, `status`,
   montants, `itemCount`, `items` (JSON : référence, nom, quantité, prix, statut). **Aucune donnée
   personnelle** (ni nom, ni adresse, ni e-mail). Voir [`07`](07-btoc-brevo.md#contrôle-marketplaces-la-redoute--woocommerce).
+- **`MarketplaceResolution`** — anomalies du contrôle marketplaces marquées « traitées » à la main :
+  `reference` (n° marketplace, clé), `note`, `resolvedBy` (nom de l'utilisateur), `resolvedAt`.
 - **`TioCatalog`**, **`TioCatalogItem`**, **`CatalogSnapshotRun`** — relevé quotidien des
   catalogues de vente TIO (`lng_catalog_product`) : un produit × coloris par catalogue, avec
   1er / dernier jour vu et jour de retrait. TIO ne date rien : dates = nos relevés

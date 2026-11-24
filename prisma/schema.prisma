@@ -11,7 +11,7 @@ model Season {
   id         String   @id @default(cuid())
   name       String
   year       Int
-  type       String   // "AH" or "PE"
+  type       String // "AH" or "PE"
   isActive   Boolean  @default(true)
   isArchived Boolean  @default(false)
   createdAt  DateTime @default(now())
@@ -28,26 +28,26 @@ model Season {
 }
 
 model Client {
-  id        String   @id @default(cuid())
-  code      String   @unique
-  name      String
-  email     String?
+  id                   String   @id @default(cuid())
+  code                 String   @unique
+  name                 String
+  email                String?
   // Adresse de LIVRAISON (source TIO `lng_shop.city`/`zipcode` — PAS l'adresse de
   // facturation `billing_*`). Sert notamment à nommer le fichier d'intégration CC
   // (« Fichier intégration TALANGE 142426 »). Synchronisée par n8n.
-  deliveryCity     String?
-  deliveryPostcode String?
+  deliveryCity         String?
+  deliveryPostcode     String?
   // Tailles que la boutique ne reçoit PAS en surplus (CSV, ex. "3XL,4XL"). Réglage GLOBAL
   // (pas par saison) : « cette boutique ne prend jamais de 4XL en trop ». Cf.
   // src/lib/allocation/surplus.ts pour les deux garde-fous (ne bloque que le surplus
   // au-delà du commandé ; levée si aucune autre boutique n'a commandé la taille).
   surplusExcludedSizes String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 
-  seasons      ClientSeason[]
-  clientOrders ClientOrder[]
-  deliveries   Delivery[]
+  seasons          ClientSeason[]
+  clientOrders     ClientOrder[]
+  deliveries       Delivery[]
   conditionalDeals ConditionalDeal[]
 }
 
@@ -79,35 +79,35 @@ model Supplier {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  supplierOrders     SupplierOrder[]
-  receptions         SupplierReception[]
+  supplierOrders      SupplierOrder[]
+  receptions          SupplierReception[]
   supplierProductRefs SupplierProductRef[]
 }
 
 model Product {
-  id          String   @id @default(cuid())
-  reference   String
-  color       String
-  colorCode   String?
-  colorLabel  String?  // nom/libellé de la couleur (TIO lng_content.text2, ex. "Chocolat") — pour la caisse
-  externalId  String?  @unique // B2B product_id + color_id (e.g. "3119_53")
-  sizeScale   String   // "XS,S,M,L,XL,XXL"
-  category    String?  // catégorie BtoB (ex: "Pantalon")
-  subCategory String?  // sous-catégorie BtoB (ex: "Pantalon 5 poches")
-  label       String?  // désignation produit (TIO label_fr) — pour la création caisse
+  id            String   @id @default(cuid())
+  reference     String
+  color         String
+  colorCode     String?
+  colorLabel    String? // nom/libellé de la couleur (TIO lng_content.text2, ex. "Chocolat") — pour la caisse
+  externalId    String?  @unique // B2B product_id + color_id (e.g. "3119_53")
+  sizeScale     String // "XS,S,M,L,XL,XXL"
+  category      String? // catégorie BtoB (ex: "Pantalon")
+  subCategory   String? // sous-catégorie BtoB (ex: "Pantalon 5 poches")
+  label         String? // désignation produit (TIO label_fr) — pour la création caisse
   // Descriptif commercial (TIO lng_product.description_fr). Stocké BRUT : il contient du
   // HTML léger (<br />, <strong>, <li>) que les exports aplatissent à la lecture. Garder
   // la source telle quelle laisse la porte ouverte à un autre rendu (fiche, site, PDF).
-  description String?  @db.Text
+  description   String?  @db.Text
   // Pays d'origine (TIO lng_product.country), code ISO-2 BRUT : « TR », « IN »…
   // ⚠️ TIO y écrit aussi « 000 » quand ce n'est pas renseigné (280 produits au
   // 28/09/2026). On stocke le code tel quel ; c'est la lecture qui sait que « 000 »
   // n'est pas un pays — cf. lib/export-tio-descriptions.ts.
   originCountry String?
-  salePrice   Float?   // prix de vente public (TIO prices[catalogue 209].min_retail_price)
-  costPrice   Float?   // prix de gros / coût (TIO prices[catalogue 209].min_price)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  salePrice     Float? // prix de vente public (TIO prices[catalogue 209].min_retail_price)
+  costPrice     Float? // prix de gros / coût (TIO prices[catalogue 209].min_price)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   supplierOrderLines SupplierOrderLine[]
   clientOrderLines   ClientOrderLine[]
@@ -132,9 +132,9 @@ model Product {
 // `sourceCode` à l'import basculent.
 model ColorEquivalence {
   id         String   @id @default(cuid())
-  sourceCode String   // code présent dans les fichiers = code AFFICHÉ (ex. "SSS")
-  targetCode String   // code du référentiel TIO à aller chercher (ex. "000")
-  label      String?  // libellé couleur à appliquer lors de la bascule (ex. "Sans")
+  sourceCode String // code présent dans les fichiers = code AFFICHÉ (ex. "SSS")
+  targetCode String // code du référentiel TIO à aller chercher (ex. "000")
+  label      String? // libellé couleur à appliquer lors de la bascule (ex. "Sans")
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -157,7 +157,7 @@ model ProductSizeEan {
 model SizeType {
   id        String   @id @default(cuid())
   code      String   @unique // ex: "A", "B", "C"
-  label     String?  // ex: "Standard Femme"
+  label     String? // ex: "Standard Femme"
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -167,10 +167,10 @@ model SizeType {
 // Mapping : type de taille → numéro de taille → valeur taille
 // Ex: type "A", position 1 → "XS" ; type "A", position 2 → "S" ; etc.
 model SizeTypeMapping {
-  id           String @id @default(cuid())
-  sizeTypeId   String
-  position     Int    // numéro de taille (1, 2, 3, 4...)
-  sizeName     String // valeur taille ("XS", "S", "M", "L"...)
+  id         String @id @default(cuid())
+  sizeTypeId String
+  position   Int // numéro de taille (1, 2, 3, 4...)
+  sizeName   String // valeur taille ("XS", "S", "M", "L"...)
 
   sizeType SizeType @relation(fields: [sizeTypeId], references: [id], onDelete: Cascade)
 
@@ -181,10 +181,10 @@ model SizeTypeMapping {
 
 // Correspondance fournisseur ↔ référence produit
 model SupplierProductRef {
-  id           String   @id @default(cuid())
-  supplierId   String
-  reference    String
-  createdAt    DateTime @default(now())
+  id         String   @id @default(cuid())
+  supplierId String
+  reference  String
+  createdAt  DateTime @default(now())
 
   supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
 
@@ -199,8 +199,8 @@ model SupplierOrder {
   supplierId  String
   orderDate   DateTime?
   status      String    @default("EN_ATTENTE") // EN_ATTENTE, PARTIEL, COMPLET, SOLDE
-  tioSeason   String?   // code saison LU DANS LE FICHIER commande fournisseur (colonne « Saison » : W26, S27…), distinct de seasonId GestLog — sert à l'export réceptions
-  importLogId String?   // import ayant (dernier) créé/mis à jour cette commande → suppression
+  tioSeason   String? // code saison LU DANS LE FICHIER commande fournisseur (colonne « Saison » : W26, S27…), distinct de seasonId GestLog — sert à l'export réceptions
+  importLogId String? // import ayant (dernier) créé/mis à jour cette commande → suppression
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
@@ -219,7 +219,7 @@ model SupplierOrderLine {
   id               String   @id @default(cuid())
   supplierOrderId  String
   productId        String
-  quantitiesBySize String   // JSON: {"S":10,"M":20}
+  quantitiesBySize String // JSON: {"S":10,"M":20}
   totalQuantity    Int
   createdAt        DateTime @default(now())
 
@@ -230,19 +230,19 @@ model SupplierOrderLine {
 }
 
 model SupplierReception {
-  id              String   @id @default(cuid())
+  id              String    @id @default(cuid())
   receptionNumber String
   supplierOrderId String
   supplierId      String
-  importLogId     String?  // import ayant créé cette réception → suppression d'import
-  lastEditedBy    String?  // nom de l'utilisateur ayant corrigé la réception (audit)
+  importLogId     String? // import ayant créé cette réception → suppression d'import
+  lastEditedBy    String? // nom de l'utilisateur ayant corrigé la réception (audit)
   lastEditedAt    DateTime? // date de la dernière correction manuelle
-  receptionDate   DateTime @default(now())
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  receptionDate   DateTime  @default(now())
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
-  supplierOrder SupplierOrder @relation(fields: [supplierOrderId], references: [id], onDelete: Cascade)
-  supplier      Supplier      @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  supplierOrder SupplierOrder    @relation(fields: [supplierOrderId], references: [id], onDelete: Cascade)
+  supplier      Supplier         @relation(fields: [supplierId], references: [id], onDelete: Cascade)
   lines         ReceptionLine[]
   samples       ShipmentSample[]
 
@@ -254,7 +254,7 @@ model ReceptionLine {
   id                  String   @id @default(cuid())
   supplierReceptionId String
   productId           String
-  quantitiesBySize    String   // JSON
+  quantitiesBySize    String // JSON
   totalQuantity       Int
   createdAt           DateTime @default(now())
 
@@ -301,28 +301,28 @@ model Catalog {
 }
 
 model ClientOrder {
-  id              String    @id @default(cuid())
-  orderNumber     String
-  seasonId        String
-  clientId        String
-  catalogId       String?
-  orderDate       DateTime?
-  source          String    @default("TIO") // TIO (prise de commande, archive) | TEXAS (ERP, vérité)
-  orderType       String    @default("COMMANDE") // COMMANDE or VSS
-  status          String    @default("EN_COURS") // EN_COURS, VALIDEE, SOLDEE, ANNULEE
-  deliveryWindow  String?   // ex: "S22-S26", fenêtre de livraison
-  paymentStatus   String    @default("EN_ATTENTE") // EN_ATTENTE, VALIDE, REFUSE
-  tioOrderNumber  String?   // Take In Order reference number
+  id                String    @id @default(cuid())
+  orderNumber       String
+  seasonId          String
+  clientId          String
+  catalogId         String?
+  orderDate         DateTime?
+  source            String    @default("TIO") // TIO (prise de commande, archive) | TEXAS (ERP, vérité)
+  orderType         String    @default("COMMANDE") // COMMANDE or VSS
+  status            String    @default("EN_COURS") // EN_COURS, VALIDEE, SOLDEE, ANNULEE
+  deliveryWindow    String? // ex: "S22-S26", fenêtre de livraison
+  paymentStatus     String    @default("EN_ATTENTE") // EN_ATTENTE, VALIDE, REFUSE
+  tioOrderNumber    String? // Take In Order reference number
   deliveryDateStart DateTime?
   deliveryDateEnd   DateTime?
-  totalAmount     Float?    // montant total commande
-  importLogId     String?   // import ayant (dernier) créé/mis à jour cette commande → suppression
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  totalAmount       Float? // montant total commande
+  importLogId       String? // import ayant (dernier) créé/mis à jour cette commande → suppression
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
-  season  Season          @relation(fields: [seasonId], references: [id], onDelete: Cascade)
-  client  Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  catalog Catalog?        @relation(fields: [catalogId], references: [id])
+  season  Season            @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  client  Client            @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  catalog Catalog?          @relation(fields: [catalogId], references: [id])
   lines   ClientOrderLine[]
 
   @@unique([orderNumber, seasonId])
@@ -335,21 +335,21 @@ model ClientOrder {
 }
 
 model ClientOrderLine {
-  id               String   @id @default(cuid())
+  id               String    @id @default(cuid())
   clientOrderId    String
   productId        String
-  quantitiesBySize String   // JSON
+  quantitiesBySize String // JSON
   totalQuantity    Int
-  amount           Float    @default(0) // CA NET de la ligne (€), réparti depuis le total commande TIO
-  category         String?  // catégorie produit
-  sizeTypeCode     String?  // code du type de taille (lien vers SizeType)
+  amount           Float     @default(0) // CA NET de la ligne (€), réparti depuis le total commande TIO
+  category         String? // catégorie produit
+  sizeTypeCode     String? // code du type de taille (lien vers SizeType)
   // Pièces SOLDÉES (ne seront jamais livrées) : retirées du compte "à livrer".
   // JSON { taille: qté annulée }. Trace conservée (qui/quand).
-  cancelledBySize  String   @default("{}")
-  cancelledTotal   Int      @default(0)
+  cancelledBySize  String    @default("{}")
+  cancelledTotal   Int       @default(0)
   cancelledAt      DateTime?
   cancelledBy      String?
-  createdAt        DateTime @default(now())
+  createdAt        DateTime  @default(now())
 
   clientOrder ClientOrder @relation(fields: [clientOrderId], references: [id], onDelete: Cascade)
   product     Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
@@ -360,9 +360,9 @@ model ClientOrderLine {
 model StockEntry {
   id               String   @id @default(cuid())
   productId        String
-  quantitiesBySize String   // JSON
+  quantitiesBySize String // JSON
   totalQuantity    Int
-  importLogId      String?  // import ayant créé cette entrée de stock → suppression d'import
+  importLogId      String? // import ayant créé cette entrée de stock → suppression d'import
   importDate       DateTime @default(now())
   createdAt        DateTime @default(now())
 
@@ -395,9 +395,9 @@ model AllocationLine {
   clientOrderId       String?
   productId           String
   clientId            String?
-  originalBySize      String   // JSON
-  allocatedBySize     String   // JSON
-  reducedBySize       String   // JSON
+  originalBySize      String // JSON
+  allocatedBySize     String // JSON
+  reducedBySize       String // JSON
   reductionReason     String
   status              String   @default("LIVRABLE") // LIVRABLE, EN_ATTENTE, ANNULE
   isManualAdjustment  Boolean  @default(false)
@@ -411,11 +411,11 @@ model AllocationLine {
 }
 
 model ShipmentGroup {
-  id          String   @id @default(cuid())
-  name        String   // ex: "PAMAZO S22"
-  carrier     String?  // transporteur
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String   @id @default(cuid())
+  name      String // ex: "PAMAZO S22"
+  carrier   String? // transporteur
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   deliveries Delivery[]
 }
@@ -433,24 +433,24 @@ model Delivery {
   // Depot workflow fields
   nbColis             Int?
   nbPieces            Int?
-  blNumber            String?   // numéro BL
-  carrier             String?   // transporteur
-  depotStatus         String?   // EN_ATTENTE, RECU, VALIDE, ANOMALIE
-  comment             String?   // commentaire libre
+  blNumber            String? // numéro BL
+  carrier             String? // transporteur
+  depotStatus         String? // EN_ATTENTE, RECU, VALIDE, ANOMALIE
+  comment             String? // commentaire libre
   sentToDepotAt       DateTime?
   validatedAt         DateTime?
   shippedAt           DateTime?
   // Intégration CaissePro : envoi de la livraison validée → réception de stock caisse.
-  caisseSyncStatus    String?   // SENT, ALREADY, FAILED, SKIPPED (null = pas encore envoyé)
+  caisseSyncStatus    String? // SENT, ALREADY, FAILED, SKIPPED (null = pas encore envoyé)
   caisseSyncAt        DateTime?
-  caisseSyncMatched   Int?      // nb d'EAN reconnus par le catalogue caisse
-  caisseSyncInfo      String?   // EAN inconnus (JSON) ou message d'erreur
+  caisseSyncMatched   Int? // nb d'EAN reconnus par le catalogue caisse
+  caisseSyncInfo      String? // EAN inconnus (JSON) ou message d'erreur
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
-  client            Client              @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  allocationSession AllocationSession?  @relation(fields: [allocationSessionId], references: [id])
-  shipmentGroup     ShipmentGroup?      @relation(fields: [shipmentGroupId], references: [id])
+  client            Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  allocationSession AllocationSession? @relation(fields: [allocationSessionId], references: [id])
+  shipmentGroup     ShipmentGroup?     @relation(fields: [shipmentGroupId], references: [id])
   lines             DeliveryLine[]
   eanExports        EanExport[]
 
@@ -463,7 +463,7 @@ model DeliveryLine {
   id               String   @id @default(cuid())
   deliveryId       String
   productId        String
-  quantitiesBySize String   // JSON
+  quantitiesBySize String // JSON
   totalQuantity    Int
   createdAt        DateTime @default(now())
 
@@ -475,7 +475,7 @@ model EanExport {
   id          String   @id @default(cuid())
   deliveryId  String
   fileName    String
-  exportData  String   // JSON array
+  exportData  String // JSON array
   generatedAt DateTime @default(now())
 
   delivery Delivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
@@ -484,11 +484,11 @@ model EanExport {
 model ImportLog {
   id         String   @id @default(cuid())
   seasonId   String
-  importType String   // CLIENT_ORDER, SUPPLIER_ORDER, RECEPTION, STOCK, SIZE_TYPE, SUPPLIER_REF, EAN
+  importType String // CLIENT_ORDER, SUPPLIER_ORDER, RECEPTION, STOCK, SIZE_TYPE, SUPPLIER_REF, EAN
   fileName   String
   rowCount   Int
   errorCount Int      @default(0)
-  errors     String?  // JSON
+  errors     String? // JSON
   importedAt DateTime @default(now())
 
   season Season @relation(fields: [seasonId], references: [id], onDelete: Cascade)
@@ -509,7 +509,7 @@ model User {
   code         String   @unique
   role         String   @default("USER") // ADMIN or USER
   isActive     Boolean  @default(true)
-  screenAccess String?  // JSON array of allowed screen keys; null = all screens
+  screenAccess String? // JSON array of allowed screen keys; null = all screens
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }
@@ -527,28 +527,28 @@ model LoginAttempt {
 // ─── BtoC (WooCommerce) — Données séparées du BtoB ──────────
 
 model BtocCustomer {
-  id            String   @id @default(cuid())
-  wooId         Int      @unique  // WooCommerce customer ID
-  email         String
-  firstName     String
-  lastName      String
-  company       String?
-  phone         String?
+  id              String    @id @default(cuid())
+  wooId           Int       @unique // WooCommerce customer ID
+  email           String
+  firstName       String
+  lastName        String
+  company         String?
+  phone           String?
   billingPostcode String?
-  billingCity   String?
-  billingCountry String?
-  shippingCity  String?
+  billingCity     String?
+  billingCountry  String?
+  shippingCity    String?
   shippingCountry String?
-  totalSpent    Float    @default(0)
-  ordersCount   Int      @default(0)
+  totalSpent      Float     @default(0)
+  ordersCount     Int       @default(0)
   // Statut VIP persistant : sert de garde anti-doublon pour ne déclencher le
   // scénario Brevo "client_vip" qu'UNE fois, au franchissement du seuil.
   // Recalculé par /api/sync/btoc/vip-recompute (jamais par la sync customers,
   // dont les total_spent/orders_count de l'API WooCommerce REST valent 0).
-  isVip         Boolean  @default(false)
-  vipSince      DateTime?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  isVip           Boolean   @default(false)
+  vipSince        DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   orders BtocOrder[]
 
@@ -557,18 +557,18 @@ model BtocCustomer {
 
 model BtocProduct {
   id            String   @id @default(cuid())
-  wooId         Int      @unique  // WooCommerce product ID
+  wooId         Int      @unique // WooCommerce product ID
   sku           String?
   name          String
   type          String   @default("simple") // simple, variable, variation
-  parentId      Int?     // parent product ID for variations
+  parentId      Int? // parent product ID for variations
   status        String   @default("publish")
   price         Float?
   regularPrice  Float?
   salePrice     Float?
   stockQuantity Int?
-  stockStatus   String?  // instock, outofstock, onbackorder
-  category      String?  // main category name
+  stockStatus   String? // instock, outofstock, onbackorder
+  category      String? // main category name
   imageUrl      String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -580,49 +580,49 @@ model BtocProduct {
 }
 
 model BtocOrder {
-  id              String    @id @default(cuid())
-  wooId           Int       @unique  // WooCommerce order ID
-  orderNumber     String
-  status          String    // pending, processing, on-hold, completed, cancelled, refunded, failed
-  customerId      String?
-  customerEmail   String?
-  customerName    String?
+  id                String    @id @default(cuid())
+  wooId             Int       @unique // WooCommerce order ID
+  orderNumber       String
+  status            String // pending, processing, on-hold, completed, cancelled, refunded, failed
+  customerId        String?
+  customerEmail     String?
+  customerName      String?
   // Facturation (billing) — nom/prénom/adresse depuis WooCommerce billing.*
-  billingFirstName String?
-  billingLastName  String?
-  billingAddress1  String?
-  billingPostcode  String?
-  billingCity     String?
-  billingCountry  String?   // code pays ISO (FR, BE…) depuis WooCommerce billing.country
+  billingFirstName  String?
+  billingLastName   String?
+  billingAddress1   String?
+  billingPostcode   String?
+  billingCity       String?
+  billingCountry    String? // code pays ISO (FR, BE…) depuis WooCommerce billing.country
   // Livraison (shipping) — nom/prénom/adresse depuis WooCommerce shipping.*
   shippingFirstName String?
   shippingLastName  String?
   shippingAddress1  String?
   shippingPostcode  String?
-  shippingCity    String?
-  shippingCountry String?   // code pays ISO depuis WooCommerce shipping.country
-  total           Float
-  totalRefunded   Float    @default(0) // montant remboursé (partiel ou total) — déduit du CA
-  subtotal        Float?
-  totalTax        Float?
-  shippingTotal   Float?
-  discountTotal   Float?
-  paymentMethod   String?
-  paymentTitle    String?
-  currency        String   @default("EUR")
-  itemCount       Int      @default(0)
-  couponCodes     String?  // JSON array of coupon codes
-  customerNote    String?
+  shippingCity      String?
+  shippingCountry   String? // code pays ISO depuis WooCommerce shipping.country
+  total             Float
+  totalRefunded     Float     @default(0) // montant remboursé (partiel ou total) — déduit du CA
+  subtotal          Float?
+  totalTax          Float?
+  shippingTotal     Float?
+  discountTotal     Float?
+  paymentMethod     String?
+  paymentTitle      String?
+  currency          String    @default("EUR")
+  itemCount         Int       @default(0)
+  couponCodes       String? // JSON array of coupon codes
+  customerNote      String?
   // Commandes venues d'une marketplace via Shopping Feed (GESTLOG-15) : méta WooCommerce
   // sf_marketplace (ex. « laredoutemirakl ») et sf_reference (n° de commande côté marketplace).
-  marketplace     String?
-  marketplaceRef  String?
-  orderDate       DateTime
-  completedAt     DateTime?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  marketplace       String?
+  marketplaceRef    String?
+  orderDate         DateTime
+  completedAt       DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
-  customer BtocCustomer? @relation(fields: [customerId], references: [id])
+  customer BtocCustomer?   @relation(fields: [customerId], references: [id])
   lines    BtocOrderLine[]
 
   @@index([status])
@@ -632,18 +632,18 @@ model BtocOrder {
 }
 
 model BtocOrderLine {
-  id            String  @id @default(cuid())
-  orderId       String
-  productId     String?
-  wooProductId  Int     // WooCommerce product or variation ID
-  name          String
-  sku           String?
-  quantity      Int
-  price         Float   // unit price
-  total         Float   // line total
-  size          String? // extracted from variation attributes
-  color         String? // extracted from variation attributes
-  createdAt     DateTime @default(now())
+  id           String   @id @default(cuid())
+  orderId      String
+  productId    String?
+  wooProductId Int // WooCommerce product or variation ID
+  name         String
+  sku          String?
+  quantity     Int
+  price        Float // unit price
+  total        Float // line total
+  size         String? // extracted from variation attributes
+  color        String? // extracted from variation attributes
+  createdAt    DateTime @default(now())
 
   order   BtocOrder    @relation(fields: [orderId], references: [id], onDelete: Cascade)
   product BtocProduct? @relation(fields: [productId], references: [id])
@@ -663,10 +663,10 @@ model BtocOrderLine {
 // Rattaché à la commande par son wooId.
 model BtocRefundLine {
   id         String   @id @default(cuid())
-  orderWooId Int      // BtocOrder.wooId
-  refundId   Int      // id du remboursement WC
-  lineId     Int      // id de la ligne de remboursement
-  sku        String?  // sku de la variation (réf-couleur-taille)
+  orderWooId Int // BtocOrder.wooId
+  refundId   Int // id du remboursement WC
+  lineId     Int // id de la ligne de remboursement
+  sku        String? // sku de la variation (réf-couleur-taille)
   name       String?
   quantity   Int      @default(0) // quantité remboursée (positive)
   total      Float    @default(0) // montant remboursé (positif)
@@ -685,24 +685,24 @@ model BtocRefundLine {
 // Les contacts ne sont JAMAIS supprimés : un contact disparu de Brevo passe
 // subscribed=false + removedAt, pour garder l'historique.
 model BtocNewsletterContact {
-  id              String    @id
-  email           String    @unique // normalisé LOWER(TRIM())
-  brevoId         Int?
-  firstName       String?
-  lastName        String?
-  phone           String?
-  listIds         Int[]     @default([])
-  unsubscribedListIds Int[] @default([]) // listUnsubscribed Brevo
-  blacklisted     Boolean   @default(false) // emailBlacklisted Brevo (désinscrit de tout)
-  inNewsletterList Boolean  @default(false) // a été (ou est) dans une liste newsletter
-  subscribed      Boolean   @default(false)
-  subscribedAt    DateTime? // createdAt Brevo
-  unsubscribedAt  DateTime? // 1re synchro où on l'a vu désinscrit (≈ modifiedAt Brevo)
-  brevoModifiedAt DateTime?
-  removedAt       DateTime? // disparu de Brevo (supprimé côté Brevo)
-  lastSeenAt      DateTime
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id                  String    @id
+  email               String    @unique // normalisé LOWER(TRIM())
+  brevoId             Int?
+  firstName           String?
+  lastName            String?
+  phone               String?
+  listIds             Int[]     @default([])
+  unsubscribedListIds Int[]     @default([]) // listUnsubscribed Brevo
+  blacklisted         Boolean   @default(false) // emailBlacklisted Brevo (désinscrit de tout)
+  inNewsletterList    Boolean   @default(false) // a été (ou est) dans une liste newsletter
+  subscribed          Boolean   @default(false)
+  subscribedAt        DateTime? // createdAt Brevo
+  unsubscribedAt      DateTime? // 1re synchro où on l'a vu désinscrit (≈ modifiedAt Brevo)
+  brevoModifiedAt     DateTime?
+  removedAt           DateTime? // disparu de Brevo (supprimé côté Brevo)
+  lastSeenAt          DateTime
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   @@index([subscribed])
   @@index([subscribedAt])
@@ -710,11 +710,11 @@ model BtocNewsletterContact {
 
 model BtocSyncLog {
   id         String   @id @default(cuid())
-  syncType   String   // CUSTOMERS, PRODUCTS, ORDERS, STOCK
+  syncType   String // CUSTOMERS, PRODUCTS, ORDERS, STOCK
   itemCount  Int
   errorCount Int      @default(0)
-  errors     String?  // JSON
-  duration   Int?     // ms
+  errors     String? // JSON
+  duration   Int? // ms
   syncedAt   DateTime @default(now())
 }
 
@@ -732,17 +732,17 @@ model SalesHistoryLine {
   id          String   @id @default(cuid())
   channel     String   @default("BTOC")
   orderNumber String
-  lineKey     String   // UGS complet, ou nom du produit si l'UGS est vide
+  lineKey     String // UGS complet, ou nom du produit si l'UGS est vide
   orderDay    DateTime @db.Date // jour de commande (heure de Paris, telle qu'exportée)
   productName String
-  sku         String?  // UGS complet RÉF-COULEUR-TAILLE
-  reference   String?  // 1er segment de l'UGS (ex. NMPULL_W001)
-  colorCode   String?  // 2e segment (ex. 740)
-  size        String?  // 3e segment, en majuscules (ex. XL)
+  sku         String? // UGS complet RÉF-COULEUR-TAILLE
+  reference   String? // 1er segment de l'UGS (ex. NMPULL_W001)
+  colorCode   String? // 2e segment (ex. 740)
+  size        String? // 3e segment, en majuscules (ex. XL)
   quantity    Int
   unitPrice   Float    @default(0)
   lineTotal   Float    @default(0) // prix × quantité (avant remise de commande)
-  importFile  String?  // nom du fichier d'origine (dernier import ayant écrit la ligne)
+  importFile  String? // nom du fichier d'origine (dernier import ayant écrit la ligne)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -796,13 +796,13 @@ model BtocStockSnapshotRun {
 // Shopping Feed. AUCUNE donnée personnelle (ni nom, ni adresse, ni e-mail).
 model MarketplaceOrder {
   sfId           String    @id // id interne Shopping Feed (dépasse un int 32 bits)
-  reference      String    // n° de commande marketplace, ex. LRFR20263273236715-A = BtocOrder.marketplaceRef
-  storeReference String?   // id de la commande WooCommerce créée par Shopping Feed = BtocOrder.wooId
+  reference      String // n° de commande marketplace, ex. LRFR20263273236715-A = BtocOrder.marketplaceRef
+  storeReference String? // id de la commande WooCommerce créée par Shopping Feed = BtocOrder.wooId
   channelId      Int
-  channel        String    // ex. laredoutemirakl
-  status         String    // created, waiting_store_acceptance, refused, waiting_shipment, shipped, cancelled, refunded, partially_refunded, partially_shipped
+  channel        String // ex. laredoutemirakl
+  status         String // created, waiting_store_acceptance, refused, waiting_shipment, shipped, cancelled, refunded, partially_refunded, partially_shipped
   isTest         Boolean   @default(false)
-  orderCreatedAt DateTime  // date de la commande sur la marketplace
+  orderCreatedAt DateTime // date de la commande sur la marketplace
   acknowledgedAt DateTime? // importée dans WooCommerce
   sfUpdatedAt    DateTime?
   totalAmount    Float
@@ -810,13 +810,23 @@ model MarketplaceOrder {
   shippingAmount Float
   currency       String    @default("EUR")
   itemCount      Int       @default(0)
-  items          Json      // [{ reference, name, quantity, price, status }]
+  items          Json // [{ reference, name, quantity, price, status }]
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
   @@index([reference])
   @@index([storeReference])
   @@index([orderCreatedAt])
+}
+
+// Anomalie du contrôle marketplaces marquée « traitée » à la main (GESTLOG-15) : ex. commande
+// La Redoute recréée à la main dans Woo, que GestLog ne peut pas rapprocher seul. Clé = n° de
+// commande marketplace (MarketplaceOrder.reference / BtocOrder.marketplaceRef). Annulable.
+model MarketplaceResolution {
+  reference  String   @id
+  note       String
+  resolvedBy String
+  resolvedAt DateTime @default(now())
 }
 
 // Suivi des collections (GESTLOG-13) : état des catalogues de vente TIO, relevé chaque
@@ -826,10 +836,10 @@ model MarketplaceOrder {
 model TioCatalog {
   tioCatalogId     Int       @id // lng_catalog.catalog_id
   name             String
-  status           String?   // published | draft
+  status           String? // published | draft
   deleted          Boolean   @default(false)
   tioCreatedAt     DateTime? // lng_catalog.date_creation (⚠️ 23/04/2026 = date de migration pour les anciens)
-  seasonName       String?   // saison lue dans le nom (W26 → AH26, S27 → PE27), null sinon
+  seasonName       String? // saison lue dans le nom (W26 → AH26, S27 → PE27), null sinon
   firstSnapshotDay DateTime  @db.Date
   lastSnapshotDay  DateTime  @db.Date
   createdAt        DateTime  @default(now())
@@ -843,8 +853,8 @@ model TioCatalogItem {
   tioCatalogId          Int
   productId             Int
   colorId               Int
-  externalId            String    // `${productId}_${colorId}` → Product.externalId
-  reference             String?   // lng_product.sku
+  externalId            String // `${productId}_${colorId}` → Product.externalId
+  reference             String? // lng_product.sku
   firstSeenDay          DateTime  @db.Date // 1er relevé où on l'a vu
   lastSeenDay           DateTime? @db.Date // dernier relevé où il était présenté
   removedDay            DateTime? @db.Date // 1er relevé où il était retiré (null = présenté ou retrait non daté)
@@ -872,7 +882,7 @@ model HistOrder {
   firstName     String?
   lastName      String?
   phone         String?
-  country       String?  // code pays livraison (pas de ville/CP dans l'export)
+  country       String? // code pays livraison (pas de ville/CP dans l'export)
   total         Float    @default(0) // montant total de la commande
   createdAt     DateTime @default(now())
 
@@ -886,8 +896,8 @@ model HistOrder {
 model HistOrderLine {
   id          String   @id @default(cuid())
   histOrderId String
-  reference   String?  // UGS parent (ou dérivé du UGS) — null si produit sans SKU
-  sku         String?  // UGS complet
+  reference   String? // UGS parent (ou dérivé du UGS) — null si produit sans SKU
+  sku         String? // UGS complet
   productName String?
   category    String?
   quantity    Int      @default(0)
@@ -908,24 +918,24 @@ model HistOrderLine {
 // Clés de jointure outil : reference→Product.reference, ean→ProductSizeEan,
 // clientCode→Client.code.
 model WarehouseDocument {
-  id             String   @id @default(cuid())
-  source         String   @default("warehouse_ftp")
-  docType        String   // "BL" (bon de livraison) ou "FAC" (facture)
-  documentNumber String   // "N° Document" (ex: 137391)
-  tioOrderNumber String?  // n° commande TIO extrait du nom de fichier (IS-xxx) — lien vers ClientOrder.orderNumber
-  season         String?  // "Saison Document" (ex: W25)
-  clientCode     String?  // "Code Client" → Client.code
-  clientName     String?  // "Raison sociale Client"
-  brandLabel     String?  // "Libellé marque" (ex: MCS)
+  id             String    @id @default(cuid())
+  source         String    @default("warehouse_ftp")
+  docType        String // "BL" (bon de livraison) ou "FAC" (facture)
+  documentNumber String // "N° Document" (ex: 137391)
+  tioOrderNumber String? // n° commande TIO extrait du nom de fichier (IS-xxx) — lien vers ClientOrder.orderNumber
+  season         String? // "Saison Document" (ex: W25)
+  clientCode     String? // "Code Client" → Client.code
+  clientName     String? // "Raison sociale Client"
+  brandLabel     String? // "Libellé marque" (ex: MCS)
   documentDate   DateTime? // BL: Date livraison — FAC: Date facture
   secondaryDate  DateTime? // BL: Date préparation — FAC: Date valeur
-  documentTotal  Float?   // "Prix du Document"
-  fileName       String   // nom du xlsx source (/in/EAN) — "" si document connu uniquement par son PDF
-  pdfFileName    String?  // nom du PDF correspondant dans /in/PDF (consultable)
-  hasLines       Boolean  @default(true) // false = document de référence (PDF seul, sans lignes détaillées)
-  totalQuantity  Int      @default(0)
-  importedAt     DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  documentTotal  Float? // "Prix du Document"
+  fileName       String // nom du xlsx source (/in/EAN) — "" si document connu uniquement par son PDF
+  pdfFileName    String? // nom du PDF correspondant dans /in/PDF (consultable)
+  hasLines       Boolean   @default(true) // false = document de référence (PDF seul, sans lignes détaillées)
+  totalQuantity  Int       @default(0)
+  importedAt     DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   lines WarehouseDocumentLine[]
 
@@ -937,25 +947,25 @@ model WarehouseDocument {
 }
 
 model WarehouseDocumentLine {
-  id           String  @id @default(cuid())
-  documentId   String
-  lineNo       String? // "N° Ligne"
-  reference    String? // "Code Produit Fini" → Product.reference
-  productLabel String? // "Libellé 1 Produit Fini"
-  colorCode    String? // "Code Coloris"
-  colorLabel   String? // "Libellé Coloris"
-  size         String? // "Taille"
-  ean          String? // "Code Barre" → ProductSizeEan.ean
-  quantity     Int     @default(0) // "Qté"
-  unitPrice    Float   @default(0) // "Prix Unitaire" (Pu) — renseigné pour les FAC
-  amount       Float   @default(0) // "Montant HT" de la ligne — renseigné pour les FAC
-  parcelNo     String? // "N° Colis"
-  location     String? // "Code Emplacement"
-  statFamily   String? // "Libellé famille statistique"
+  id            String   @id @default(cuid())
+  documentId    String
+  lineNo        String? // "N° Ligne"
+  reference     String? // "Code Produit Fini" → Product.reference
+  productLabel  String? // "Libellé 1 Produit Fini"
+  colorCode     String? // "Code Coloris"
+  colorLabel    String? // "Libellé Coloris"
+  size          String? // "Taille"
+  ean           String? // "Code Barre" → ProductSizeEan.ean
+  quantity      Int      @default(0) // "Qté"
+  unitPrice     Float    @default(0) // "Prix Unitaire" (Pu) — renseigné pour les FAC
+  amount        Float    @default(0) // "Montant HT" de la ligne — renseigné pour les FAC
+  parcelNo      String? // "N° Colis"
+  location      String? // "Code Emplacement"
+  statFamily    String? // "Libellé famille statistique"
   statSubFamily String? // "Libellé sous famille statistique"
-  orderRef     String? // "Référence Commande"
-  rawData      String? // ligne brute complète (JSON) — on garde tout
-  createdAt    DateTime @default(now())
+  orderRef      String? // "Référence Commande"
+  rawData       String? // ligne brute complète (JSON) — on garde tout
+  createdAt     DateTime @default(now())
 
   document WarehouseDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
 
@@ -972,7 +982,7 @@ model WarehouseDocumentLine {
 model ConditionalDeal {
   id        String   @id @default(cuid())
   clientId  String
-  label     String   // libellé libre saisi à la création (ex. « TALANGE été 2026 »)
+  label     String // libellé libre saisi à la création (ex. « TALANGE été 2026 »)
   status    String   @default("EN_COURS") // EN_COURS, CLOTUREE
   notes     String?
   createdAt DateTime @default(now())
@@ -987,16 +997,16 @@ model ConditionalDeal {
 }
 
 model ConditionalMovement {
-  id       String   @id @default(cuid())
-  dealId   String
-  type     String   // LIVRAISON (+), VENTE (−), RETOUR (−)
-  fileName String?
+  id           String   @id @default(cuid())
+  dealId       String
+  type         String // LIVRAISON (+), VENTE (−), RETOUR (−)
+  fileName     String?
   // Nom de l'utilisateur ayant importé (audit) + date de l'opération déclarée.
-  importedBy String?
+  importedBy   String?
   movementDate DateTime @default(now())
   createdAt    DateTime @default(now())
 
-  deal  ConditionalDeal          @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  deal  ConditionalDeal           @relation(fields: [dealId], references: [id], onDelete: Cascade)
   lines ConditionalMovementLine[]
 
   @@index([dealId])

@@ -704,6 +704,9 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
   En attente / Annulées avant import / Toutes. **Export Excel** de la liste affichée.
 - **Synthèse** : commandes marketplace, cohérentes, anomalies, montants des deux côtés, heures de
   la dernière lecture Shopping Feed et de la dernière synchro Woo.
+- **Boutons** : **Actualiser maintenant** (relit tout de suite les commandes Woo des 3 derniers
+  jours et Shopping Feed, ≈ 10 s) ; sur chaque anomalie, **Marquer comme traitée** avec une note
+  (ex. commande recréée à la main dans Woo) → filtre « Traitées à la main », annulable.
 - **Accès** : toute personne qui a l'écran « BtoC » (pas de permission séparée). L'ancienne
   adresse `/controle-marketplaces` redirige vers l'onglet.
 - Règles : [`07-btoc-brevo.md`](07-btoc-brevo.md#contrôle-marketplaces-la-redoute--woocommerce).

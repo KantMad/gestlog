@@ -33,7 +33,14 @@ export type Kind =
   | "absente_woo" // sur la marketplace, introuvable dans WooCommerce / GestLog
   | "absente_sf" // dans WooCommerce (marquée marketplace), introuvable dans Shopping Feed
   | "en_attente" // pas encore acceptée, ou passée après la dernière synchro Woo : normal
-  | "annulee"; // annulée / refusée avant import : normal qu'elle ne soit pas dans Woo
+  | "annulee" // annulée / refusée avant import : normal qu'elle ne soit pas dans Woo
+  | "traitee"; // anomalie marquée traitée à la main (ex. commande recréée à la main dans Woo)
+
+export interface Resolution {
+  note: string;
+  by: string;
+  at: string; // ISO
+}
 
 export interface ReconRow {
   kind: Kind;
@@ -50,6 +57,8 @@ export interface ReconRow {
   wooTotal: number | null;
   wooRefunded: number | null;
   wooQty: number | null;
+  /** Renseigné quand l'anomalie a été marquée traitée (kind = "traitee"). */
+  resolution?: Resolution;
 }
 
 /**
@@ -87,8 +96,15 @@ export function statusIssue(sf: SfSide, woo: WooSide): string | null {
 /**
  * @param lastWooSync ISO de la commande Woo la plus récente connue de GestLog : une commande
  *   marketplace plus récente ne peut pas encore y être (« en attente », pas une anomalie).
+ * @param resolutions anomalies marquées traitées, par n° marketplace : une anomalie traitée
+ *   passe en « traitee » ; une commande redevenue cohérente reste « ok ».
  */
-export function reconcile(sf: SfSide[], woo: WooSide[], lastWooSync: string | null): ReconRow[] {
+export function reconcile(
+  sf: SfSide[],
+  woo: WooSide[],
+  lastWooSync: string | null,
+  resolutions: Map<string, Resolution> = new Map()
+): ReconRow[] {
   const byRef = new Map<string, WooSide>();
   const byId = new Map<string, WooSide>();
   for (const w of woo) {
@@ -160,6 +176,14 @@ export function reconcile(sf: SfSide[], woo: WooSide[], lastWooSync: string | nu
     });
   }
 
+  for (const r of rows) {
+    const res = r.reference ? resolutions.get(r.reference) : undefined;
+    if (res && ANOMALY_KINDS.includes(r.kind)) {
+      r.kind = "traitee";
+      r.resolution = res;
+    }
+  }
+
   return rows.sort((a, b) => b.day.localeCompare(a.day) || String(a.reference).localeCompare(String(b.reference)));
 }
 
@@ -170,6 +194,7 @@ export const KIND_LABELS: Record<Kind, string> = {
   absente_sf: "Absente de Shopping Feed",
   en_attente: "En attente (normal)",
   annulee: "Annulée avant import (normal)",
+  traitee: "Traitée à la main",
 };
 
 export const ANOMALY_KINDS: Kind[] = ["ecart", "absente_woo", "absente_sf"];

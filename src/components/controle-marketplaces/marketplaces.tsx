@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
-import { AlertTriangle, Download, Loader2, Search, ShoppingBag } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Download, Loader2, RefreshCw, Search, ShoppingBag, Undo2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -64,6 +64,7 @@ const KIND_STYLE: Record<Kind, string> = {
   absente_sf: "text-red-600 dark:text-red-400",
   en_attente: "text-muted-foreground",
   annulee: "text-muted-foreground",
+  traitee: "text-emerald-600 dark:text-emerald-400",
 };
 
 type Filter = "anomalies" | "all" | Kind;
@@ -76,6 +77,12 @@ export function MarketplaceControl() {
   const [filter, setFilter] = useState<Filter>("anomalies");
   const [search, setSearch] = useState("");
   const [shown, setShown] = useState(PAGE);
+  const [tick, setTick] = useState(0); // force le rechargement (actualisation, commande traitée)
+  const [refreshing, setRefreshing] = useState(false);
+  const [message, setMessage] = useState<{ text: string; error?: boolean } | null>(null);
+  const [editing, setEditing] = useState<string | null>(null); // n° marketplace en cours de marquage
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
 
   const queryKey = (() => {
     const p = new URLSearchParams();
@@ -83,7 +90,8 @@ export function MarketplaceControl() {
     if (dateTo) p.set("dateTo", dateTo);
     return p.toString();
   })();
-  const loading = loadedKey !== queryKey;
+  const loadKey = `${queryKey}#${tick}`;
+  const loading = loadedKey !== loadKey;
 
   useEffect(() => {
     let cancelled = false;
@@ -97,12 +105,60 @@ export function MarketplaceControl() {
       })
       .catch((e) => console.error("Erreur chargement contrôle marketplaces:", e))
       .finally(() => {
-        if (!cancelled) setLoadedKey(queryKey);
+        if (!cancelled) setLoadedKey(loadKey);
       });
     return () => {
       cancelled = true;
     };
-  }, [queryKey]);
+  }, [queryKey, loadKey]);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/btoc/marketplaces/refresh", { method: "POST" });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || `HTTP ${res.status}`);
+      const failed = [!d.woo && "WooCommerce", !d.shoppingFeed && "Shopping Feed"].filter(Boolean);
+      setMessage(
+        failed.length
+          ? { text: `Actualisation incomplète : ${failed.join(" et ")} n'a pas répondu. Réessayez dans quelques minutes.`, error: true }
+          : { text: "Commandes WooCommerce (3 derniers jours) et Shopping Feed relues." }
+      );
+    } catch (e) {
+      setMessage({ text: `Actualisation impossible : ${(e as Error).message}`, error: true });
+    } finally {
+      setRefreshing(false);
+      setTick((t) => t + 1);
+    }
+  };
+
+  const saveResolution = async (reference: string) => {
+    setSaving(true);
+    try {
+      const res = await fetch("/api/btoc/marketplaces/resolutions", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ reference, note }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || `HTTP ${res.status}`);
+      setEditing(null);
+      setNote("");
+      setTick((t) => t + 1);
+    } catch (e) {
+      setMessage({ text: `Enregistrement impossible : ${(e as Error).message}`, error: true });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const undoResolution = async (reference: string) => {
+    if (!confirm(`Remettre la commande ${reference} dans les anomalies ?`)) return;
+    const res = await fetch(`/api/btoc/marketplaces/resolutions?reference=${encodeURIComponent(reference)}`, { method: "DELETE" });
+    if (!res.ok) setMessage({ text: "Annulation impossible.", error: true });
+    setTick((t) => t + 1);
+  };
 
   const rows = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -131,6 +187,9 @@ export function MarketplaceControl() {
         "Remboursé Woo": r.wooRefunded ?? "",
         "Articles marketplace": r.sfQty ?? "",
         "Articles Woo": r.wooQty ?? "",
+        "Traitée : note": r.resolution?.note ?? "",
+        "Traitée par": r.resolution?.by ?? "",
+        "Traitée le": r.resolution ? frTime(r.resolution.at) : "",
       }))
     );
     const wb = XLSX.utils.book_new();
@@ -144,6 +203,7 @@ export function MarketplaceControl() {
     { key: "absente_woo", label: KIND_LABELS.absente_woo, n: c.absente_woo ?? 0 },
     { key: "ecart", label: "Écarts", n: c.ecart ?? 0 },
     { key: "absente_sf", label: KIND_LABELS.absente_sf, n: c.absente_sf ?? 0 },
+    { key: "traitee", label: "Traitées à la main", n: c.traitee ?? 0 },
     { key: "ok", label: "Cohérentes", n: c.ok ?? 0 },
     { key: "en_attente", label: "En attente", n: c.en_attente ?? 0 },
     { key: "annulee", label: "Annulées avant import", n: c.annulee ?? 0 },
@@ -182,8 +242,17 @@ export function MarketplaceControl() {
               <Download className="h-4 w-4 mr-2" />
               Export Excel
             </Button>
+            <Button variant="outline" onClick={handleRefresh} disabled={refreshing}>
+              {refreshing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+              {refreshing ? "Actualisation… (1 à 2 min)" : "Actualiser maintenant"}
+            </Button>
             {loading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
           </div>
+          {message && (
+            <p className={`text-sm mt-3 ${message.error ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"}`}>
+              {message.text}
+            </p>
+          )}
           <div className="flex flex-wrap gap-2 mt-3">
             {chips.map((ch) => (
               <Button
@@ -220,7 +289,8 @@ export function MarketplaceControl() {
           <p className="text-sm text-muted-foreground">
             Commandes lues dans Shopping Feed (dernière lecture : {frTime(data?.lastSfSync ?? null)}) et rapprochées des
             commandes WooCommerce (dernière synchro : {frTime(data?.lastWooSync ?? null)}) par le n° de commande La Redoute,
-            à défaut par le n° de commande Woo. La Redoute vend chaque article un peu plus cher que le site (jusqu&apos;à{" "}
+            à défaut par le n° de commande Woo. « Actualiser maintenant » relit tout de suite les deux côtés, sans attendre la
+            nuit. Une anomalie réglée à la main (ex. commande recréée dans Woo) peut être marquée « traitée » avec une note. La Redoute vend chaque article un peu plus cher que le site (jusqu&apos;à{" "}
             {USUAL_GAP_PER_ITEM.toLocaleString("fr-FR")} € par article) : cet écart habituel n&apos;est pas compté comme anomalie.
             {data?.wooFirstOrder
               ? ` Les commandes d'avant le ${frTime(data.wooFirstOrder).split(" ")[0]} (début de l'historique Woo dans GestLog) ne sont pas contrôlées.`
@@ -261,6 +331,58 @@ export function MarketplaceControl() {
                         {KIND_LABELS[r.kind]}
                       </div>
                       {r.issues.length > 0 && <div className="text-xs">{r.issues.join(" ; ")}</div>}
+                      {r.resolution && (
+                        <div className="text-xs text-foreground mt-1">
+                          <CheckCircle2 className="inline h-3 w-3 mr-1 text-emerald-600" />
+                          {r.resolution.note}
+                          <span className="text-muted-foreground">
+                            {" "}
+                            — {r.resolution.by}, {frTime(r.resolution.at)}
+                          </span>
+                          <button
+                            type="button"
+                            className="ml-2 inline-flex items-center gap-0.5 text-muted-foreground underline hover:text-foreground"
+                            onClick={() => r.reference && undoResolution(r.reference)}
+                          >
+                            <Undo2 className="h-3 w-3" />
+                            annuler
+                          </button>
+                        </div>
+                      )}
+                      {ANOMALY_KINDS.includes(r.kind) && r.reference && editing !== r.reference && (
+                        <button
+                          type="button"
+                          className="mt-1 text-xs text-muted-foreground underline hover:text-foreground"
+                          onClick={() => {
+                            setEditing(r.reference);
+                            setNote("");
+                          }}
+                        >
+                          Marquer comme traitée
+                        </button>
+                      )}
+                      {editing === r.reference && r.reference && (
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                          <Input
+                            autoFocus
+                            value={note}
+                            onChange={(e) => setNote(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" && note.trim()) saveResolution(r.reference as string);
+                              if (e.key === "Escape") setEditing(null);
+                            }}
+                            placeholder="Ex. recréée à la main, commande Woo 87123"
+                            className="h-8 w-72 text-xs"
+                            maxLength={500}
+                          />
+                          <Button size="sm" disabled={!note.trim() || saving} onClick={() => saveResolution(r.reference as string)}>
+                            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Valider"}
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={() => setEditing(null)}>
+                            Annuler
+                          </Button>
+                        </div>
+                      )}
                     </td>
                     <td className="py-2 pr-3">
                       {r.sfStatus ? <Badge variant="secondary">{SF_STATUS[r.sfStatus] ?? r.sfStatus}</Badge> : "—"}

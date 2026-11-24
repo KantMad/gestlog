@@ -1024,6 +1024,8 @@ export const HELP_THEMES: HelpTheme[] = [
               "Onglet **Marketplaces** de l'écran **BtoC** (ouvert à toute personne qui a BtoC). Chaque nuit, GestLog lit les commandes **La Redoute** dans **Shopping Feed** et les rapproche des commandes **WooCommerce** par le **n° de commande La Redoute** (à défaut, le n° de commande Woo).",
               "Par défaut l'écran montre les **anomalies** : commandes **absentes de Woo**, **absentes de Shopping Feed**, et **écarts** de montant, de nombre d'articles ou de statut (ex. remboursée sur La Redoute mais pas dans Woo).",
               "« **En attente** » et « **Annulée avant import** » sont normales : commande pas encore acceptée, passée après la dernière synchro, ou refusée avant d'arriver dans Woo. **Export Excel** de la liste affichée.",
+              "**Actualiser maintenant** relit tout de suite les commandes WooCommerce des 3 derniers jours et Shopping Feed, sans attendre la nuit : utile quand une commande vient d'être importée.",
+              "Une commande réglée à la main (ex. **recréée à la main dans WooCommerce** : GestLog ne peut pas la rapprocher seul) : cliquez **Marquer comme traitée** et notez ce qui a été fait. Elle passe dans « **Traitées à la main** » ; « annuler » la remet dans les anomalies.",
             ],
             tip: "Le prix La Redoute est en général un peu plus élevé que sur le site (de 0,30 à 0,80 € par article) : un écart jusqu'à 1 € par article n'est pas compté comme une anomalie.",
           },
