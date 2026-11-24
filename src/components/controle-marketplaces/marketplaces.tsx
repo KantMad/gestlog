@@ -87,7 +87,7 @@ export function MarketplaceControl() {
 
   useEffect(() => {
     let cancelled = false;
-    fetch(`/api/controle-marketplaces?${queryKey}`)
+    fetch(`/api/btoc/marketplaces?${queryKey}`)
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json();

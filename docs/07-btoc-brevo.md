@@ -324,7 +324,7 @@ lecture des exports, tri des tailles, grilles, classeur Excel), `src/lib/sales-h
 
 ## Contrôle marketplaces (La Redoute ↔ WooCommerce)
 
-GESTLOG-15, écran **Commandes → Contrôle marketplaces** (`/controle-marketplaces`).
+GESTLOG-15, onglet **Marketplaces** de l'écran **BtoC** (`/btoc?tab=marketplaces` ; l'ancienne adresse `/controle-marketplaces` y redirige). API `GET /api/btoc/marketplaces` : même permission que BtoC, pas d'écran à cocher séparément.
 
 - **Côté marketplace** : chaque nuit (n8n, 06 h 00) `/api/sync/marketplace-orders` lit l'API
   Shopping Feed (`src/lib/shoppingfeed.ts`, **lecture seule**, 200 commandes par page) sur les

@@ -90,6 +90,6 @@ export async function GET(request: NextRequest) {
       rows,
     });
   } catch (e) {
-    return handleApiError(e, "api/controle-marketplaces");
+    return handleApiError(e, "api/btoc/marketplaces");
   }
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { use, useState } from "react";
 import { Topbar } from "@/components/layout/topbar";
 import { PageHeader } from "@/components/layout/page-header";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -10,10 +10,19 @@ import { BtocExportTab } from "@/components/btoc/export-tab";
 import { BtocSegmentationTab } from "@/components/btoc/segmentation-tab";
 import { BtocSettingsTab } from "@/components/btoc/settings-tab";
 import { BtocNewsletterTab } from "@/components/btoc/newsletter-tab";
-import { BarChart3, Users, Download, Settings, PieChart, Mail } from "lucide-react";
+import { MarketplaceControl } from "@/components/controle-marketplaces/marketplaces";
+import { BarChart3, Users, Download, Settings, PieChart, Mail, Scale } from "lucide-react";
 
-export default function BtocPage() {
-  const [activeTab, setActiveTab] = useState("stats");
+const TABS = ["stats", "export", "segmentation", "clients", "marketplaces", "newsletter", "settings"];
+
+export default function BtocPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
+  // Ouverture directe d'un onglet : /btoc?tab=marketplaces (ancienne adresse /controle-marketplaces).
+  const tab = use(searchParams).tab;
+  const [activeTab, setActiveTab] = useState(typeof tab === "string" && TABS.includes(tab) ? tab : "stats");
 
   return (
     <div>
@@ -21,7 +30,7 @@ export default function BtocPage() {
       <div className="p-4 sm:p-6 lg:p-8 space-y-6">
         <PageHeader
           title="BtoC — WooCommerce"
-          description="Statistiques, exports, clients, newsletter et paramètres de votre boutique en ligne"
+          description="Statistiques, exports, clients, contrôle des marketplaces, newsletter et paramètres de votre boutique en ligne"
         />
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -41,6 +50,10 @@ export default function BtocPage() {
             <TabsTrigger value="clients" className="gap-2">
               <Users className="h-4 w-4" />
               Clients
+            </TabsTrigger>
+            <TabsTrigger value="marketplaces" className="gap-2">
+              <Scale className="h-4 w-4" />
+              Marketplaces
             </TabsTrigger>
             <TabsTrigger value="newsletter" className="gap-2">
               <Mail className="h-4 w-4" />
@@ -66,6 +79,10 @@ export default function BtocPage() {
 
           <TabsContent value="clients">
             <BtocClientsTab />
+          </TabsContent>
+
+          <TabsContent value="marketplaces">
+            <MarketplaceControl />
           </TabsContent>
 
           <TabsContent value="newsletter">

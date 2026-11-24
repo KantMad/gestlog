@@ -695,7 +695,7 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
 - **Accès** : écran à part (`/historique-ventes`) : un utilisateur restreint doit le recevoir
   dans `/users` — avoir « BtoC » ne suffit pas.
 
-## Contrôle marketplaces (`/controle-marketplaces`, menu Commandes)
+## Contrôle marketplaces (onglet Marketplaces de `/btoc`)
 
 - **But** : vérifier que chaque commande **La Redoute** (lue dans Shopping Feed) est bien dans
   **WooCommerce**, et repérer les écarts (GESTLOG-15).
@@ -704,6 +704,8 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
   En attente / Annulées avant import / Toutes. **Export Excel** de la liste affichée.
 - **Synthèse** : commandes marketplace, cohérentes, anomalies, montants des deux côtés, heures de
   la dernière lecture Shopping Feed et de la dernière synchro Woo.
+- **Accès** : toute personne qui a l'écran « BtoC » (pas de permission séparée). L'ancienne
+  adresse `/controle-marketplaces` redirige vers l'onglet.
 - Règles : [`07-btoc-brevo.md`](07-btoc-brevo.md#contrôle-marketplaces-la-redoute--woocommerce).
 
 ## Suivi des collections (`/suivi-collections`, menu Analyse)

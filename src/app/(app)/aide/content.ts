@@ -1017,11 +1017,11 @@ export const HELP_THEMES: HelpTheme[] = [
         icon: "⚖️",
         title: "Contrôle marketplaces (La Redoute ↔ WooCommerce)",
         keywords: "la redoute shopping feed marketplace commande absente manquante écart montant woocommerce contrôle",
-        screen: "/controle-marketplaces",
+        screen: "/btoc",
         sections: [
           {
             lines: [
-              "Chaque nuit, GestLog lit les commandes **La Redoute** dans **Shopping Feed** et les rapproche des commandes **WooCommerce** par le **n° de commande La Redoute** (à défaut, le n° de commande Woo).",
+              "Onglet **Marketplaces** de l'écran **BtoC** (ouvert à toute personne qui a BtoC). Chaque nuit, GestLog lit les commandes **La Redoute** dans **Shopping Feed** et les rapproche des commandes **WooCommerce** par le **n° de commande La Redoute** (à défaut, le n° de commande Woo).",
               "Par défaut l'écran montre les **anomalies** : commandes **absentes de Woo**, **absentes de Shopping Feed**, et **écarts** de montant, de nombre d'articles ou de statut (ex. remboursée sur La Redoute mais pas dans Woo).",
               "« **En attente** » et « **Annulée avant import** » sont normales : commande pas encore acceptée, passée après la dernière synchro, ou refusée avant d'arriver dans Woo. **Export Excel** de la liste affichée.",
             ],
