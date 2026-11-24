@@ -11,9 +11,9 @@ produits, commandes, stock, remboursements) + **gestion VIP via Brevo**.
 - Synchro poussée via n8n vers **`/api/sync/btoc/*`** :
   `customers`, `orders`, `products`, `stock`, `refunds`, `order-countries`,
   `vip-recompute`, **`newsletter`** (lit Brevo lui-même, sans corps). (Auth `x-api-key=SYNC_API_KEY` comme les autres `/api/sync`.)
-- Écran : **`/btoc`** (onglets Statistiques, Export, **Segmentation**, Clients, **Newsletter**, Paramètres).
+- Écran : **`/btoc`** (onglets Statistiques, Export, **Historique ventes**, **Segmentation**, Clients, **Newsletter**, Paramètres).
   API de lecture/exports sous `/api/btoc/*` : `customers`, `stats`, `size-distribution`,
-  **`segmentation`**, **`newsletter`**, `export/{orders,products,best-sellers,top-clients,contacts,sales-details,parents}`,
+  **`segmentation`**, **`newsletter`**, **`sales-history`** (+ `sales-history/import`), `export/{orders,products,best-sellers,top-clients,contacts,sales-details,parents}`,
   `settings`.
 
 ## Stats BtoC — Top 15 produits
@@ -249,6 +249,46 @@ aussi à dater les comptes Woo dans l'export Clients & prospects.
   inscriptions-désinscriptions, inscrits par liste, liste filtrable (statut, a commandé,
   liste, date d'inscription, recherche) et export Excel (`export=1`). « A commandé » =
   commande aboutie live **ou** historique (même règle que l'export ci-dessous).
+
+## Historique des ventes (`SalesHistoryLine`, onglet Historique ventes)
+
+Analyse **produit × couleur × taille sur plusieurs années**, toutes catégories (demande de la
+réunion du 24/11/2026, réunion pulls). Code : `src/lib/sales-history.ts` (pur, testé :
+lecture des exports, tri des tailles, grilles, classeur Excel), `src/lib/sales-history-db.ts`
+(requêtes), `src/app/api/btoc/sales-history/route.ts` (lecture) et `…/import/route.ts`
+(écriture), `src/components/btoc/sales-history-tab.tsx`.
+
+- **Deux sources, sans recouvrement** : `SalesHistoryLine` (importé) est lu **avant** le jour
+  de la 1re `BtocOrder` (heure de Paris, aujourd'hui le 01/01/2026) ; `BtocOrderLine` (live) à
+  partir de ce jour, hors `cancelled/refunded/failed`, **remboursements partiels déduits**
+  (`BtocRefundLine`, même règle que `size-distribution`). L'import **ignore** les lignes
+  datées à partir de la frontière (elles sont déjà en live).
+- **Pourquoi une nouvelle table et pas `HistOrder`** : `HistOrder` ne contient qu'environ
+  3 300 commandes 2019-2025 (ex. 208 en 2024 contre ~5 600 en live 2026) et sert les exports
+  clients ; le compléter changerait silencieusement ces exports. `SalesHistoryLine` ne stocke
+  **aucune donnée personnelle** (ni e-mail ni nom), seulement ce que l'analyse produit utilise.
+- **Import** : depuis l'écran, fichiers xlsx « Commandes » WooCommerce (colonnes *Numéro de
+  commande, Date de commande, Nom du produit, UGS, Quantité, Prix du produit*). Le
+  **navigateur** lit le fichier et envoie les lignes par lots de 2 000 (pas de gros upload via
+  nginx). La 1re feuille qui a ces colonnes est prise (les classeurs retravaillés ont souvent
+  des tableaux croisés avant). Un même UGS répété dans une commande est **cumulé**.
+  **Idempotent** : clé `(channel, orderNumber, lineKey)`, `lineKey` = UGS (ou nom du produit
+  si UGS vide) → réimporter ou importer deux exports qui se chevauchent ne double rien.
+- Les lignes **sans article** (lignes de commande seules : frais, coupons) sont ignorées.
+  ⚠️ L'export 2019-2022 livre les commandes de **mars 2019 à mi-août 2020 sans leurs
+  articles** : ces mois restent vides, ce n'est pas un bug d'import.
+- **Couleur / taille** = segments 2 et 3 de l'UGS `RÉF-COULEUR-TAILLE` (le nom du produit ne
+  les porte pas). Libellé couleur : couleur la plus fréquente de ce code dans les ventes live,
+  sinon `Product.colorLabel`, sinon « Code 123 ». UGS sans code couleur → « Non précisée »,
+  taille « ? » (ex. lambswool 2024).
+- **Catégorie** = catégorie globale déduite du nom (`btoc-global-category`), en TypeScript.
+- **CA** = prix × quantité de la ligne, **avant remise de commande** : indicatif, l'analyse se
+  lit en **pièces**.
+- `channel` vaut toujours `BTOC` : il prépare l'ajout des ventes B2B dans la même table.
+- **Fichiers importés au départ** (Téléchargements de Quentin) : `orders-2025-06-23-11-42-29`
+  (2019-2022), `orders-2024-09-16-18-08-22` (2023), `orders-2025-06-23-12-14-49` (2024),
+  `orders-2025-02-17-18-03-57`, `orders-2025-07-25-09-19-40`, `orders-2026-02-10-08-50-21`
+  (2025). Trous connus : **17-28/02/2025** et **25/07-31/08/2025**.
 
 ## Export « Clients & prospects » (`/api/btoc/export/contacts`)
 

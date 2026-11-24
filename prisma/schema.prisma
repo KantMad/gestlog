@@ -713,6 +713,39 @@ model BtocSyncLog {
   syncedAt   DateTime @default(now())
 }
 
+// ─── Historique des ventes par ligne (écran BtoC → Historique ventes) ───
+// Lignes de vente ANTÉRIEURES à la synchro live (BtocOrder commence au 01/01/2026),
+// importées depuis les exports « Commandes » WooCommerce (xlsx, une ligne par article).
+// Sert l'analyse par produit × couleur × taille sur plusieurs années, toutes catégories.
+// Volontairement SANS donnée personnelle (ni e-mail ni nom) : seulement ce que l'analyse
+// produit utilise. `HistOrder` (incomplet, ≈ 3 300 commandes) reste tel quel pour les
+// exports clients.
+// Idempotent : un même article d'une même commande présent dans deux exports qui se
+// chevauchent = une seule ligne (clé channel + orderNumber + lineKey).
+// `channel` prévoit l'ajout du B2B plus tard (aujourd'hui toujours "BTOC").
+model SalesHistoryLine {
+  id          String   @id @default(cuid())
+  channel     String   @default("BTOC")
+  orderNumber String
+  lineKey     String   // UGS complet, ou nom du produit si l'UGS est vide
+  orderDay    DateTime @db.Date // jour de commande (heure de Paris, telle qu'exportée)
+  productName String
+  sku         String?  // UGS complet RÉF-COULEUR-TAILLE
+  reference   String?  // 1er segment de l'UGS (ex. NMPULL_W001)
+  colorCode   String?  // 2e segment (ex. 740)
+  size        String?  // 3e segment, en majuscules (ex. XL)
+  quantity    Int
+  unitPrice   Float    @default(0)
+  lineTotal   Float    @default(0) // prix × quantité (avant remise de commande)
+  importFile  String?  // nom du fichier d'origine (dernier import ayant écrit la ligne)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([channel, orderNumber, lineKey])
+  @@index([orderDay])
+  @@index([reference])
+}
+
 // ─── Historique BtoC (import depuis un autre WooCommerce) ───────────────
 // Données legacy importées par fichier (export xlsx ligne-à-ligne). Stockées
 // à part de BtocOrder pour ne pas perturber la sync live ; les exports
