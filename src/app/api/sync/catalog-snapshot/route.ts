@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
           `INSERT INTO "TioCatalogItem" (id, "tioCatalogId", "productId", "colorId", "externalId", reference,
                                          "firstSeenDay", "lastSeenDay", "removedDay", "presentAtStart",
                                          "removedBeforeTracking", "createdAt", "updatedAt")
-           SELECT 'tci_' || md5($2::text || '_' || r."productId" || '_' || r."colorId"), $2, r."productId", r."colorId",
+           SELECT 'tci_' || md5($2::int::text || '_' || r."productId" || '_' || r."colorId"), $2::int, r."productId", r."colorId",
                   r."productId" || '_' || r."colorId", r.reference, $3::date,
                   CASE WHEN r.present THEN $3::date END, r."removedDay"::date, r."presentAtStart",
                   r."removedBeforeTracking", NOW(), NOW()
