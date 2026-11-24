@@ -16,6 +16,11 @@ produits, commandes, stock, remboursements) + **gestion VIP via Brevo**.
   `/api/sync/btoc/orders` les range dans `BtocOrder.marketplace` / `marketplaceRef`
   (`src/lib/marketplace.ts`, testé ; jamais effacés une fois connus). C'est la **clé de
   rapprochement** avec les exports Shopping Feed / La Redoute (GESTLOG-15).
+  ⚠️ Ne pas se fier à `paymentMethod = 'shopping-feed'` seul : les **1 505 commandes du
+  01/01 au 13/03/2026** portent ce moyen de paiement mais ont été **migrées de l'ancien site**
+  (méta `old_order_id`, payées Monetico, `sf_*` vides) — ce ne sont pas des commandes
+  marketplace. Repris le 24/11/2026 : **660 commandes La Redoute** (`laredoutemirakl`), toutes
+  avec leur n°, sans doublon. Filtrer sur `marketplace IS NOT NULL`.
 - Écran : **`/btoc`** (onglets Statistiques, Export, **Segmentation**, Clients, **Newsletter**, Paramètres).
   API de lecture/exports sous `/api/btoc/*` : `customers`, `stats`, `size-distribution`,
   **`segmentation`**, **`newsletter`**, `export/{orders,products,best-sellers,top-clients,contacts,sales-details,parents}`,
