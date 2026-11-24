@@ -153,19 +153,63 @@ export interface RawB2bAgg {
  *  - pièces soldées (`cancelledBySize`, jamais livrées) déduites, taille par taille ;
  *  - CA = CA net de la ligne au prorata des pièces retenues.
  * scope : collection = saisons PE/AH ; reassort = saisons Réassort / Hors-saison.
+ * from / to (AAAA-MM-JJ, inclus) : bornage sur la date de commande. Les commandes TEXAS
+ * n'ont PAS de date : on reprend celle de la commande TIO d'origine (`tioOrderNumber`),
+ * sinon la 1re commande TIO du même client sur la même saison. Une commande restée sans
+ * date est écartée quand un bornage est demandé (ses pièces sont comptées dans
+ * `b2bUndatedPieces` pour le signaler à l'écran).
  */
-export async function b2bAggregates(scope: B2bScope): Promise<RawB2bAgg[]> {
-  const scopeCond =
-    scope === "collection"
-      ? `AND s.type IN ('PE', 'AH')`
-      : scope === "reassort"
-        ? `AND s.type NOT IN ('PE', 'AH')`
-        : "";
+const B2B_DAY = `COALESCE(
+  co."orderDate",
+  (SELECT MIN(t."orderDate") FROM "ClientOrder" t
+    WHERE t.source = 'TIO' AND t."orderDate" IS NOT NULL AND co."tioOrderNumber" IS NOT NULL
+      AND (t."orderNumber" = co."tioOrderNumber" OR t."tioOrderNumber" = co."tioOrderNumber")),
+  (SELECT MIN(t."orderDate") FROM "ClientOrder" t
+    WHERE t.source = 'TIO' AND t."orderDate" IS NOT NULL
+      AND t."clientId" = co."clientId" AND t."seasonId" = co."seasonId")
+)`;
+
+const B2B_BASE_WHERE = `co.status <> 'ANNULEE'
+        AND co."source" = (CASE WHEN EXISTS (
+              SELECT 1 FROM "ClientOrder" c2 WHERE c2."seasonId" = co."seasonId" AND c2."source" = 'TEXAS'
+            ) THEN 'TEXAS' ELSE 'TIO' END)`;
+
+function scopeCondition(scope: B2bScope): string {
+  return scope === "collection"
+    ? `AND s.type IN ('PE', 'AH')`
+    : scope === "reassort"
+      ? `AND s.type NOT IN ('PE', 'AH')`
+      : "";
+}
+
+/** Pièces B2B (hors PLV, soldées déduites) de commandes sans aucune date retrouvée. */
+export async function b2bUndatedPieces(scope: B2bScope): Promise<number> {
+  const r = await prisma.$queryRawUnsafe<{ n: bigint | null }[]>(
+    `SELECT SUM(col."totalQuantity" - COALESCE(
+              (SELECT SUM(v::int) FROM jsonb_each_text(col."cancelledBySize"::jsonb) AS x(k, v) WHERE v ~ '^-?[0-9]+$'), 0))::bigint AS n
+       FROM "ClientOrder" co
+       JOIN "Season" s ON s.id = co."seasonId"
+       JOIN "ClientOrderLine" col ON col."clientOrderId" = co.id
+       JOIN "Product" p ON p.id = col."productId"
+      WHERE ${B2B_BASE_WHERE}
+        AND p.category IS DISTINCT FROM 'PLV'
+        AND ${B2B_DAY} IS NULL
+        ${scopeCondition(scope)}`
+  );
+  return Number(r[0]?.n ?? 0);
+}
+
+export async function b2bAggregates(scope: B2bScope, from: string | null = null, to: string | null = null): Promise<RawB2bAgg[]> {
+  const scopeCond = scopeCondition(scope);
+  const dated = from || to;
+  const dateCond = dated
+    ? `AND d.day IS NOT NULL AND ($1::date IS NULL OR d.day >= $1::date) AND ($2::date IS NULL OR d.day <= $2::date)`
+    : "";
   const rows = await prisma.$queryRawUnsafe<
     (Omit<RawB2bAgg, "qty" | "amount"> & { qty: bigint; amount: number })[]
   >(
     `SELECT s.name AS "seasonName", s.year AS "seasonYear", s.type AS "seasonType",
-            EXTRACT(YEAR FROM co."orderDate")::int AS "orderYear",
+            EXTRACT(YEAR FROM d.day)::int AS "orderYear",
             p.reference, COALESCE(NULLIF(p.label, ''), p.reference) AS "productName",
             NULLIF(COALESCE(NULLIF(p."colorCode", ''), p.color), '') AS "colorCode",
             NULLIF(p."colorLabel", '') AS "colorLabel",
@@ -177,16 +221,16 @@ export async function b2bAggregates(scope: B2bScope): Promise<RawB2bAgg[]> {
        JOIN "Season" s ON s.id = co."seasonId"
        JOIN "ClientOrderLine" col ON col."clientOrderId" = co.id
        JOIN "Product" p ON p.id = col."productId"
+       CROSS JOIN LATERAL (SELECT (${parisDayExpr(B2B_DAY)})::date AS day) d
        CROSS JOIN LATERAL jsonb_each_text(col."quantitiesBySize"::jsonb) q
-      WHERE co.status <> 'ANNULEE'
+      WHERE ${B2B_BASE_WHERE}
         AND p.category IS DISTINCT FROM 'PLV'
-        AND co."source" = (CASE WHEN EXISTS (
-              SELECT 1 FROM "ClientOrder" c2 WHERE c2."seasonId" = co."seasonId" AND c2."source" = 'TEXAS'
-            ) THEN 'TEXAS' ELSE 'TIO' END)
         AND q.value ~ '^-?[0-9]+$'
         ${scopeCond}
+        ${dateCond}
       GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9
-     HAVING SUM(q.value::int - COALESCE((col."cancelledBySize"::jsonb ->> q.key)::int, 0)) != 0`
+     HAVING SUM(q.value::int - COALESCE((col."cancelledBySize"::jsonb ->> q.key)::int, 0)) != 0`,
+    ...(dated ? [from, to] : [])
   );
   return rows.map((r) => ({ ...r, qty: Number(r.qty), amount: Number(r.amount) }));
 }

@@ -685,8 +685,10 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
 - **BtoC** : filtre de dates ; **couverture mois par mois** (bleu = historique importé, vert =
   synchro live, rouge = trou) et bouton **Importer des exports WooCommerce**. ⚠️ Mois sans
   donnée = ventes absentes, pas ventes nulles.
-- **B2B** : filtre *Tout / Saisons de collection / Réassort et hors-saison* ; pas de filtre de
-  date (les commandes TEXAS d'AH26 n'en ont pas). Pièces par période en tête.
+- **B2B** : filtre *Tout / Saisons de collection / Réassort et hors-saison* et dates
+  **Commandé du / au** (les commandes Texas, sans date, prennent celle de leur commande TIO
+  d'origine ; un avertissement chiffre les pièces écartées faute de date). Pièces par
+  période en tête.
 - **Source** : `/api/historique-ventes` (+ `/import`). Règles détaillées : BtoC dans
   [`07-btoc-brevo.md`](07-btoc-brevo.md#historique-des-ventes-saleshistoryline), B2B dans
   [`08-fonctionnalites.md`](08-fonctionnalites.md#historique-des-ventes-b2b-historique-ventes).

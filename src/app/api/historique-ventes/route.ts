@@ -3,6 +3,7 @@ import { handleApiError } from "@/lib/api";
 import { globalCategoryLabel, normalizeTitle, UNCLASSIFIED } from "@/lib/btoc-global-category";
 import {
   b2bAggregates,
+  b2bUndatedPieces,
   colorLabels,
   liveStartDay,
   monthlyCoverage,
@@ -26,8 +27,9 @@ import {
 //   group      : code (défaut, PULL_W001) | ref (MPULL_W001) | name (nom du produit)
 //   categories : catégories globales séparées par des virgules (vide = toutes)
 //   q          : texte cherché dans le nom du produit ou la référence
-//   dateFrom / dateTo : AAAA-MM-JJ, inclus — BtoC seulement (en B2B, des commandes TEXAS
-//                n'ont pas de date : un filtre de date les écarterait en silence)
+//   dateFrom / dateTo : AAAA-MM-JJ, inclus. En B2B, date de commande ; les commandes
+//                TEXAS (sans date) reprennent celle de leur commande TIO d'origine, et les
+//                pièces restées sans date sont renvoyées dans `undatedPieces` (signalées).
 //   scope      : B2B seulement — all | collection (saisons PE/AH) | reassort
 // La catégorie est déduite du NOM (lib/btoc-global-category, testée), en TypeScript, et
 // attribuée au MODÈLE entier : un modèle n'est jamais coupé en deux par le filtre.
@@ -57,6 +59,7 @@ export async function GET(request: NextRequest) {
     let base: RawSalesRow[];
     let liveStart: string | null = null;
     let coverage: { month: string; history: number; live: number }[] = [];
+    let undatedPieces = 0;
     if (channel === "btoc") {
       liveStart = await liveStartDay();
       const [raw, cov] = await Promise.all([salesAggregates(liveStart, dateFrom, dateTo), monthlyCoverage(liveStart)]);
@@ -72,7 +75,12 @@ export async function GET(request: NextRequest) {
         amount: Math.round(r.amount * 100) / 100,
       }));
     } else {
-      const raw = await b2bAggregates(scope);
+      const dated = Boolean(dateFrom || dateTo);
+      const [raw, undated] = await Promise.all([
+        b2bAggregates(scope, dateFrom, dateTo),
+        dated ? b2bUndatedPieces(scope) : Promise.resolve(0),
+      ]);
+      undatedPieces = undated;
       base = raw.map((r) => ({
         ...b2bPeriod({ name: r.seasonName, year: r.seasonYear, type: r.seasonType }, r.orderYear),
         reference: r.reference,
@@ -113,6 +121,7 @@ export async function GET(request: NextRequest) {
       rows,
       liveStart,
       coverage,
+      undatedPieces,
       periods: [...periodTotals.entries()].sort((a, b) => a[0] - b[0]).map(([, v]) => v),
       categories: [...categoryCounts.entries()]
         .map(([name, qty]) => ({ name, qty }))

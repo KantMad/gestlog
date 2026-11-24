@@ -40,6 +40,7 @@ interface HistoryData {
   rows: SalesAggRow[];
   liveStart: string | null;
   coverage: { month: string; history: number; live: number }[];
+  undatedPieces?: number;
   periods: { period: string; qty: number }[];
   categories: { name: string; qty: number }[];
 }
@@ -76,12 +77,9 @@ export function SalesHistory() {
     const p = new URLSearchParams({ channel, group });
     if (categories.length) p.set("categories", categories.join(","));
     if (q) p.set("q", q);
-    if (channel === "btoc") {
-      if (dateFrom) p.set("dateFrom", dateFrom);
-      if (dateTo) p.set("dateTo", dateTo);
-    } else {
-      p.set("scope", scope);
-    }
+    if (dateFrom) p.set("dateFrom", dateFrom);
+    if (dateTo) p.set("dateTo", dateTo);
+    if (channel === "b2b") p.set("scope", scope);
     return `${p.toString()}#${reload}`;
   })();
   const loading = loadedKey !== queryKey;
@@ -184,7 +182,7 @@ export function SalesHistory() {
     if (!rows.length) return;
     const wb = buildSalesHistoryWorkbook(
       rows,
-      `${selectionLabel}${isB2b ? ` — ${SCOPE_LABELS[scope]}` : ""}${q ? ` — « ${q} »` : ""} — regroupement : ${GROUP_MODE_LABELS[group]} — pièces`
+      `${selectionLabel}${isB2b ? ` — ${SCOPE_LABELS[scope]}` : ""}${dateFrom || dateTo ? ` — du ${dateFrom || "début"} au ${dateTo || "aujourd'hui"}` : ""}${q ? ` — « ${q} »` : ""} — regroupement : ${GROUP_MODE_LABELS[group]} — pièces`
     );
     const slug = selectionLabel.toLowerCase().normalize("NFD").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
     XLSX.writeFile(wb, `historique-ventes-${slug}-${fileStamp()}.xlsx`);
@@ -221,8 +219,15 @@ export function SalesHistory() {
             <p className="text-sm text-muted-foreground">
               Pièces commandées par les clients professionnels, toutes catégories. Une source par saison : Texas dès qu&apos;il
               existe, sinon TIO. Commandes annulées, pièces soldées et PLV exclues. Les commandes « Réassort » et
-              « Hors-saison » sont rangées par année de commande.
+              « Hors-saison » sont rangées par année de commande. Les commandes Texas n&apos;ont pas de date : elles
+              prennent celle de leur commande TIO d&apos;origine (dates « Commandé du / au »).
             </p>
+            {data?.channel === "b2b" && (dateFrom || dateTo) && (data.undatedPieces ?? 0) > 0 && (
+              <p className="text-sm text-amber-700 dark:text-amber-400">
+                {formatNumber(data.undatedPieces ?? 0)} pièces de commandes sans aucune date retrouvée sont écartées par le
+                bornage.
+              </p>
+            )}
             <div className="flex flex-wrap gap-2">
               {(data?.channel === "b2b" ? data.periods : []).map((p) => (
                 <div key={p.period} className="rounded-md border px-3 py-1.5 text-sm">
@@ -393,7 +398,7 @@ export function SalesHistory() {
                 />
               </div>
             </div>
-            {isB2b ? (
+            {isB2b && (
               <div className="space-y-1">
                 <label className="block text-xs font-medium text-muted-foreground">Commandes</label>
                 <Select
@@ -413,18 +418,15 @@ export function SalesHistory() {
                   </SelectContent>
                 </Select>
               </div>
-            ) : (
-              <>
-                <div className="space-y-1">
-                  <label className="block text-xs font-medium text-muted-foreground">Vendu du</label>
-                  <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="w-40 h-9" />
-                </div>
-                <div className="space-y-1">
-                  <label className="block text-xs font-medium text-muted-foreground">au</label>
-                  <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="w-40 h-9" />
-                </div>
-              </>
             )}
+            <div className="space-y-1">
+              <label className="block text-xs font-medium text-muted-foreground">{isB2b ? "Commandé du" : "Vendu du"}</label>
+              <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="w-40 h-9" />
+            </div>
+            <div className="space-y-1">
+              <label className="block text-xs font-medium text-muted-foreground">au</label>
+              <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="w-40 h-9" />
+            </div>
             <Button onClick={handleExport} disabled={loading || !rows.length}>
               <Download className="h-4 w-4 mr-2" />
               Export Excel

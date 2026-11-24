@@ -686,7 +686,12 @@ export Excel. Requête : `b2bAggregates` dans `src/lib/sales-history-db.ts`.
   saisons techniques **Réassort** / **Hors-saison** (année 0) rangées par **année de commande**
   (« Réassort 2025 », entre AH25 et PE26 ; « (sans date) » à la fin). Filtre *scope* :
   `all` / `collection` (PE/AH) / `reassort`.
-- ⚠️ **Pas de filtre de date en B2B** : les 282 commandes TEXAS d'AH26 n'ont pas de date, un
-  filtre les écarterait en silence.
+- **Bornage par date** (`dateFrom` / `dateTo`, inclus, jour de Paris) sur la date de
+  commande. ⚠️ Les commandes TEXAS n'ont **pas de date** (les 282 d'AH26) : on reprend celle
+  de la commande TIO d'origine (`tioOrderNumber` = `orderNumber` ou `tioOrderNumber` TIO),
+  sinon la 1re commande TIO du même client sur la même saison (`B2B_DAY` dans
+  `sales-history-db.ts`). Au 24/11/2026 toutes les commandes retrouvent une date. Celles qui
+  n'en auraient aucune sont écartées par le bornage et comptées dans `undatedPieces`
+  (avertissement à l'écran). Cette même date sert à ranger Réassort / Hors-saison par année.
 - Volume de contrôle au 24/11/2026 : ≈ 702 000 pièces toutes saisons (hors PLV).
 
