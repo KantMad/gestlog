@@ -695,6 +695,18 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
 - **Accès** : écran à part (`/historique-ventes`) : un utilisateur restreint doit le recevoir
   dans `/users` — avoir « BtoC » ne suffit pas.
 
+## Ruptures de stock (`/ruptures`, menu Analyse)
+
+- **But** : voir quelles **couleurs × tailles** du site ont manqué, combien de jours, et les
+  **ventes manquées estimées** (pièces et €), pour ajuster les quantités des saisons suivantes.
+- **Filtres** : dates (défaut : 1er janvier → dernière photo), recherche nom / référence,
+  **En rupture aujourd'hui**, **20 meilleures ventes**, catégorie. **Export Excel** de la liste.
+- **Synthèse** : nombre de variations en rupture, dont en cours, pièces et € manqués, date de
+  début du suivi. Tri par € manqués décroissants.
+- ⚠️ Estimation : un client a pu prendre une autre taille ou couleur. Historique seulement
+  depuis la mise en place du suivi (pas de reconstitution du passé).
+- **Source** : `/api/ruptures`. Règles : [`07-btoc-brevo.md`](07-btoc-brevo.md#ruptures-de-stock-btocstockout).
+
 ## Infos produits (`/product-info`)
 - **Rôle** : gérer le **référentiel trans-saison** : Types de taille, Correspondances
   Fournisseur→Réf, base **EAN**, **Équivalences couleur**.

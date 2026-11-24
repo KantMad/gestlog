@@ -32,7 +32,7 @@ Quand tu ajoutes un champ : édite `prisma/schema.prisma`, fais `npx prisma gene
 local (pour que TypeScript voie le champ), code, et le `db push` du déploiement créera la
 colonne.
 
-## Catalogue des modèles (36)
+## Catalogue des modèles (38)
 
 ### Référentiel produit
 - **`Product`** — produit = couple **(reference, color)** unique. Champs clés : `reference`,
@@ -109,6 +109,10 @@ colonne.
 - **`SalesHistoryLine`** — historique des ventes **par ligne d'article** (produit, UGS, couleur, taille,
   quantité, prix) importé des exports « Commandes » WooCommerce, **sans donnée personnelle** ;
   unique sur `(channel, orderNumber, lineKey)`. Voir [`07`](07-btoc-brevo.md#historique-des-ventes-saleshistoryline).
+- **`BtocStockOut`** — **périodes de rupture** du site par **variation** WooCommerce (couleur ×
+  taille) : `startDay` (1er jour vu en rupture), `lastSeenDay` (dernier jour vu en rupture),
+  `endDay` (1er jour revu en stock, null = en cours). **`BtocStockSnapshotRun`** — un jour par
+  photo du stock reçue. Alimentés chaque nuit par n8n ; voir [`07`](07-btoc-brevo.md#ruptures-de-stock-btocstockout).
 
 ### Système & auth
 - **`User`** — utilisateur. `name`, **`code`** (unique, 4 chiffres — sert d'identifiant ET

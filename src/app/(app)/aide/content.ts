@@ -946,6 +946,23 @@ export const HELP_THEMES: HelpTheme[] = [
         ],
       },
       {
+        id: "ruptures",
+        icon: "🚫",
+        title: "Ruptures de stock et ventes manquées (site)",
+        keywords: "rupture stock manqué ventes perdues taille couleur site woocommerce meilleures ventes",
+        screen: "/ruptures",
+        sections: [
+          {
+            lines: [
+              "Chaque nuit, GestLog photographie le stock du site **taille par taille** et garde les **périodes de rupture** (début, fin).",
+              "Pour chaque couleur × taille en rupture : **jours de rupture**, rupture **en cours** ou non, et **ventes manquées estimées** (pièces et €).",
+              "Estimation = rythme de vente **quand l'article était en stock** (sur les 12 derniers mois) × jours de rupture. Filtre **Meilleures ventes** pour voir d'abord ce qui coûte le plus. **Export Excel**.",
+            ],
+            tip: "L'historique commence au premier jour de photo : on ne peut pas reconstituer les ruptures passées. Plus on attend, plus les chiffres sont parlants.",
+          },
+        ],
+      },
+      {
         id: "reassort",
         icon: "📿",
         title: "Suivi & réassort (Commandes client)",

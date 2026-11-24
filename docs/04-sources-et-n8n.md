@@ -60,6 +60,7 @@ Tables/clés utiles :
 | **Sync BL/FAC (FTP)** | — | Récupère BL & factures dépôt depuis un **FTP**, parse, POST `/api/sync/shipments`. Remplit `WarehouseDocument(+Line)`. Lien BL↔commande TIO via le **nom de fichier** (`IS-xxx`). | (schedule) |
 | **Explore** | `rph8qNuSGm7k2iWv` | Sonde TIO (debug). `curl https://centralway.pro/webhook/gestlog-explore` renvoie 1 ligne du dernier nœud. | webhook |
 | **BtoC (WooCommerce)** | `wH890xjpZS616wpW` | Voir [`07-btoc-brevo.md`](07-btoc-brevo.md). Exécution longue (**~30 min**). | (schedule) |
+| **GestLog — Photo stock BtoC (ruptures)** | `0io1FTNFSYju0I3L` | API WooCommerce : produits variables publiés (`/products?type=variable`, paginé) puis **`/products/{id}/variations`** de chacun (lots de 5 / 400 ms) → lots de 1 000 variations → POST `/api/sync/btoc/stock-snapshot`. Remplit `BtocStockOut`. Run long (≈ 1 100 produits) : ne pas attendre la réponse du webhook. | Schedule **quotidien 05 h 40** + webhook **GET `/webhook/gestlog-stock-snapshot`** (répond tout de suite) |
 | **Sync villes de livraison clients** | `cu2ce4dLZtlwvthK` | `lng_shop` (`reference`, `city`, `zipcode`) → POST `/api/sync/client-addresses`. Remplit `Client.deliveryCity/deliveryPostcode` (nom du fichier d'intégration CC). | Schedule quotidien |
 | **Backfill pays commandes (ponctuel)** | `MKP2SUCOmqmHycSj` | WC `getAll` → POST `/api/sync/btoc/order-countries`. **Inactif** entre deux usages. | webhook GET `/webhook/gestlog-backfill-pays` |
 | **Backfill adresses commandes BtoC (ponctuel)** | `QU6rYeHrlIJJ3rpz` | WC `getAll` (`after`) → POST `/api/sync/btoc/order-addresses` (adresses facturation/livraison). **Inactif** entre deux usages. | **Schedule** (toutes les 15 min) — **pas de webhook** (cf. gotcha 504) |
@@ -95,6 +96,8 @@ middleware laisse passer `/api/sync/` sans cookie — cf. `PUBLIC_PATHS`). Princ
   `billing_city`) → `Client.deliveryCity/deliveryPostcode`. Ne crée jamais de client ; une
   valeur vide n'écrase pas l'existant.
 - `/api/sync/shipments`, `/api/sync/shipment-pdfs`, `/api/sync/bl-order-numbers` — BL/FAC dépôt.
+- `/api/sync/btoc/stock-snapshot` — photo quotidienne du stock **par variation** → périodes de
+  rupture `BtocStockOut` (ouverture / prolongation / clôture, idempotent le même jour).
 - `/api/sync/btoc/*` — BtoC (customers, orders, products, stock, refunds, order-countries,
   vip-recompute, **newsletter** = contacts Brevo, dernier nœud du workflow BtoC). Voir [`07`](07-btoc-brevo.md).
 - `/api/sync/caisse-retry` — relance des envois caisse en échec (voir [`06`](06-integration-caisse.md)).

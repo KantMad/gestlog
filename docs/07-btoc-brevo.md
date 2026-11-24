@@ -312,6 +312,35 @@ lecture des exports, tri des tailles, grilles, classeur Excel), `src/lib/sales-h
   `orders-2025-02-17-18-03-57`, `orders-2025-07-25-09-19-40`, `orders-2026-02-10-08-50-21`
   (2025). Trous connus : **17-28/02/2025** et **25/07-31/08/2025**.
 
+## Ruptures de stock (`BtocStockOut`)
+
+> Écran **Analyse → Ruptures de stock** (`/ruptures`). Ticket Hub GESTLOG-14.
+
+- **Pourquoi une table à part** : `BtocProduct` ne garde que le **produit parent** et son stock
+  est **écrasé** à chaque synchro ; on ne savait ni quelle taille manquait, ni depuis quand.
+- **Source** : workflow n8n *Photo stock BtoC* (`0io1FTNFSYju0I3L`, 05 h 40) → API WooCommerce
+  `/products/{id}/variations` de chaque produit variable **publié** → POST
+  `/api/sync/btoc/stock-snapshot` (lots ≤ 5 000).
+- **Rupture** (`isOutOfStock`, `lib/stock-outs.ts`) : `stock_status = outofstock`, ou stock géré ≤ 0
+  sans réassort autorisé ; `onbackorder` = encore vendable.
+- **Périodes** : rupture vue sans période ouverte → nouvelle ligne (`startDay = lastSeenDay = jour`) ;
+  encore en rupture → `lastSeenDay = jour` ; revue en stock → `endDay = jour`. Un 2e envoi le même
+  jour ne change rien. `BtocStockSnapshotRun` garde les jours photographiés.
+- **Jours de rupture** (`outDaysInRange`) : de `startDay` à `endDay` (exclu). Rupture encore vue à
+  la dernière photo → court jusqu'à la fin de la période demandée ; variation **disparue** du site
+  (plus envoyée) → arrêt au lendemain de `lastSeenDay`.
+- **Ventes manquées** (`estimateMissed`) : rythme = pièces vendues de l'UGS sur la **fenêtre**
+  (365 j avant la fin de période) ÷ **jours en stock** de cette fenêtre (jours − jours de rupture
+  observés) ; manque = rythme × jours de rupture ; € = manque × prix moyen de vente de l'UGS.
+  Ventes = mêmes règles que l'Historique des ventes (historique importé avant la synchro live,
+  puis commandes live, remboursements déduits), rapprochées **par UGS** (`RÉF-COULEUR-TAILLE`).
+- **Meilleures ventes** : modèles (code `PULL_W001`, toutes saisons) classés par pièces vendues
+  sur la fenêtre ; les 20 premiers sont marqués.
+- ⚠️ **Pas de passé** : l'historique commence au **premier envoi** (le 24/11/2026 au plus tôt). Un
+  jour sans photo n'est **pas** compté « en stock » pour la rupture en cours, mais la fenêtre de
+  rythme suppose en stock les jours d'avant le suivi (sous-estime légèrement le rythme au début).
+- Stock suivi : **site uniquement** (pas magasin ni entrepôt) à ce stade.
+
 ## Export « Clients & prospects » (`/api/btoc/export/contacts`)
 
 Carte **Export Clients & prospects** de l'onglet Export de `/btoc` → **1 classeur, 2 onglets**.

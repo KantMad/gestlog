@@ -750,6 +750,42 @@ model SalesHistoryLine {
 // Données legacy importées par fichier (export xlsx ligne-à-ligne). Stockées
 // à part de BtocOrder pour ne pas perturber la sync live ; les exports
 // Top Clients / Best Sellers font l'UNION des deux sources.
+// Ruptures de stock du site BtoC (WooCommerce), par VARIATION (couleur × taille).
+// Alimenté par la photo quotidienne du stock envoyée par n8n
+// (/api/sync/btoc/stock-snapshot). Une ligne = une période de rupture continue :
+//   startDay    = 1er jour vu en rupture ;
+//   lastSeenDay = dernier jour vu en rupture ;
+//   endDay      = 1er jour vu de nouveau en stock (null = rupture en cours).
+// Le passé ne peut PAS être reconstitué : l'historique commence au 1er envoi.
+model BtocStockOut {
+  id             String    @id @default(cuid())
+  variationWooId Int
+  parentWooId    Int?
+  sku            String?
+  reference      String?
+  colorCode      String?
+  color          String?
+  size           String?
+  productName    String
+  startDay       DateTime  @db.Date
+  lastSeenDay    DateTime  @db.Date
+  endDay         DateTime? @db.Date
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([variationWooId, endDay])
+  @@index([startDay])
+  @@index([sku])
+}
+
+// Une ligne par jour de photo du stock BtoC : sert à savoir quels jours ont été
+// réellement observés (un jour sans photo n'est pas un jour « en stock »).
+model BtocStockSnapshotRun {
+  day       DateTime @id @db.Date
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 model HistOrder {
   id            String   @id @default(cuid())
   source        String   @default("woo_legacy") // identifie la boutique source
