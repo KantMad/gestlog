@@ -29,11 +29,14 @@ const woo = (o: Partial<WooSide>): WooSide => ({
 });
 
 describe("amountIssue", () => {
-  it("accepte l'égalité et l'écart habituel de 0,30 € par article", () => {
+  it("accepte l'égalité et le petit surcoût La Redoute (jusqu'à 1 € par article)", () => {
     expect(amountIssue(83, 83, 1)).toBeNull();
     expect(amountIssue(83.3, 83, 1)).toBeNull();
+    expect(amountIssue(86.8, 86, 1)).toBeNull();
     expect(amountIssue(347.2, 346, 4)).toBeNull();
     expect(amountIssue(90, 83, 1)).toMatch(/montant/);
+    expect(amountIssue(241.5, 200, 5)).toMatch(/montant/);
+    expect(amountIssue(82, 83, 1)).toMatch(/montant/);
   });
 });
 

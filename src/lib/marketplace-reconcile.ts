@@ -52,8 +52,11 @@ export interface ReconRow {
   wooQty: number | null;
 }
 
-/** Écart de prix habituel constaté : La Redoute facture 0,30 € de plus par article que le site. */
-export const USUAL_GAP_PER_ITEM = 0.3;
+/**
+ * Écart de prix habituel : La Redoute vend chaque article un peu plus cher que le site (règle de
+ * prix Shopping Feed : 83 → 83,30, 86 → 86,80, 80 → 80,50…). Toléré jusqu'à 1 € par article.
+ */
+export const USUAL_GAP_PER_ITEM = 1;
 const EPS = 0.05;
 
 const SF_NOT_IMPORTED = new Set(["created", "waiting_store_acceptance"]);
@@ -63,7 +66,7 @@ const WOO_CANCELLED = new Set(["cancelled", "failed", "trash"]);
 
 export function amountIssue(sfTotal: number, wooTotal: number, qty: number): string | null {
   const gap = sfTotal - wooTotal;
-  if (Math.abs(gap) <= EPS || Math.abs(gap - USUAL_GAP_PER_ITEM * qty) <= EPS) return null;
+  if (gap >= -EPS && gap <= USUAL_GAP_PER_ITEM * Math.max(qty, 1) + EPS) return null;
   return `montant : ${fmt(sfTotal)} sur la marketplace, ${fmt(wooTotal)} dans Woo`;
 }
 
@@ -82,8 +85,8 @@ export function statusIssue(sf: SfSide, woo: WooSide): string | null {
 }
 
 /**
- * @param lastWooSync ISO de la dernière synchro des commandes Woo : une commande marketplace plus
- *   récente ne peut pas encore être dans GestLog (« en attente », pas une anomalie).
+ * @param lastWooSync ISO de la commande Woo la plus récente connue de GestLog : une commande
+ *   marketplace plus récente ne peut pas encore y être (« en attente », pas une anomalie).
  */
 export function reconcile(sf: SfSide[], woo: WooSide[], lastWooSync: string | null): ReconRow[] {
   const byRef = new Map<string, WooSide>();

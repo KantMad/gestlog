@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
     const from = DAY.test(p.get("dateFrom") || "") ? (p.get("dateFrom") as string) : shift(to, -29);
     const [wFrom, wTo] = [shift(from, -3), shift(to, 3)];
 
-    const [sfRows, wooRows, syncs] = await Promise.all([
+    const [sfRows, wooRows, syncs, span] = await Promise.all([
       prisma.$queryRawUnsafe<(Omit<SfSide, "createdAt"> & { createdAt: Date })[]>(
         `SELECT "sfId", reference, "storeReference", channel, status, "isTest",
                 ("orderCreatedAt" AT TIME ZONE 'UTC') AS "createdAt",
@@ -51,15 +51,24 @@ export async function GET(request: NextRequest) {
         `SELECT "syncType", MAX("syncedAt" AT TIME ZONE 'UTC') AS last FROM "BtocSyncLog"
           WHERE "syncType" IN ('ORDERS', 'MARKETPLACE_ORDERS') GROUP BY 1`
       ),
+      // Historique Woo connu de GestLog : avant le début, une commande marketplace ne peut pas
+      // être contrôlée ; après la plus récente, elle n'est pas encore synchronisée.
+      prisma.$queryRawUnsafe<{ first: Date | null; last: Date | null }[]>(
+        `SELECT MIN("orderDate" AT TIME ZONE 'UTC') AS first, MAX("orderDate" AT TIME ZONE 'UTC') AS last FROM "BtocOrder"`
+      ),
     ]);
+    const wooFirst = span[0]?.first ? new Date(span[0].first).toISOString() : null;
+    const wooLast = span[0]?.last ? new Date(span[0].last).toISOString() : null;
 
     const lastOf = (t: string) => syncs.find((s) => s.syncType === t)?.last ?? null;
     const lastWoo = lastOf("ORDERS");
     const lastSf = lastOf("MARKETPLACE_ORDERS");
     const rows = reconcile(
-      sfRows.map((r) => ({ ...r, createdAt: new Date(r.createdAt).toISOString(), total: Number(r.total), qty: Number(r.qty) })),
+      sfRows
+        .map((r) => ({ ...r, createdAt: new Date(r.createdAt).toISOString(), total: Number(r.total), qty: Number(r.qty) }))
+        .filter((r) => !wooFirst || r.createdAt >= wooFirst),
       wooRows.map((r) => ({ ...r, wooId: Number(r.wooId), total: Number(r.total), totalRefunded: Number(r.totalRefunded), qty: Number(r.qty) })),
-      lastWoo ? new Date(lastWoo).toISOString() : null
+      wooLast
     ).filter((r) => r.day >= from && r.day <= to);
 
     const counts: Record<string, number> = {};
@@ -72,6 +81,7 @@ export async function GET(request: NextRequest) {
       to,
       lastWooSync: lastWoo ? new Date(lastWoo).toISOString() : null,
       lastSfSync: lastSf ? new Date(lastSf).toISOString() : null,
+      wooFirstOrder: wooFirst,
       counts,
       anomalies: rows.filter((r) => ANOMALY_KINDS.includes(r.kind)).length,
       sfOrders: rows.filter((r) => r.sfStatus !== null).length,

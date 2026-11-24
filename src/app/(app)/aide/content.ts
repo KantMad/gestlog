@@ -1025,7 +1025,7 @@ export const HELP_THEMES: HelpTheme[] = [
               "Par défaut l'écran montre les **anomalies** : commandes **absentes de Woo**, **absentes de Shopping Feed**, et **écarts** de montant, de nombre d'articles ou de statut (ex. remboursée sur La Redoute mais pas dans Woo).",
               "« **En attente** » et « **Annulée avant import** » sont normales : commande pas encore acceptée, passée après la dernière synchro, ou refusée avant d'arriver dans Woo. **Export Excel** de la liste affichée.",
             ],
-            tip: "Le prix La Redoute est en général 0,30 € plus cher par article que sur le site : cet écart habituel n'est pas compté comme une anomalie.",
+            tip: "Le prix La Redoute est en général un peu plus élevé que sur le site (de 0,30 à 0,80 € par article) : un écart jusqu'à 1 € par article n'est pas compté comme une anomalie.",
           },
         ],
       },

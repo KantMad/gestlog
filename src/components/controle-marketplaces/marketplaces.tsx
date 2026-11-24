@@ -17,6 +17,7 @@ interface Data {
   to: string;
   lastWooSync: string | null;
   lastSfSync: string | null;
+  wooFirstOrder: string | null;
   counts: Partial<Record<Kind, number>>;
   anomalies: number;
   sfOrders: number;
@@ -219,8 +220,11 @@ export function MarketplaceControl() {
           <p className="text-sm text-muted-foreground">
             Commandes lues dans Shopping Feed (dernière lecture : {frTime(data?.lastSfSync ?? null)}) et rapprochées des
             commandes WooCommerce (dernière synchro : {frTime(data?.lastWooSync ?? null)}) par le n° de commande La Redoute,
-            à défaut par le n° de commande Woo. Un écart de {USUAL_GAP_PER_ITEM.toLocaleString("fr-FR")} € par article
-            (prix La Redoute un peu plus élevé) est habituel et n&apos;est pas compté comme anomalie.
+            à défaut par le n° de commande Woo. La Redoute vend chaque article un peu plus cher que le site (jusqu&apos;à{" "}
+            {USUAL_GAP_PER_ITEM.toLocaleString("fr-FR")} € par article) : cet écart habituel n&apos;est pas compté comme anomalie.
+            {data?.wooFirstOrder
+              ? ` Les commandes d'avant le ${frTime(data.wooFirstOrder).split(" ")[0]} (début de l'historique Woo dans GestLog) ne sont pas contrôlées.`
+              : ""}
           </p>
         </CardContent>
       </Card>

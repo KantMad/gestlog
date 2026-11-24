@@ -339,9 +339,17 @@ GESTLOG-15, écran **Commandes → Contrôle marketplaces** (`/controle-marketpl
   (`storeReference` = `wooId`). Résultats : `ok`, `ecart` (montant, articles, statut),
   `absente_woo`, `absente_sf`, et deux cas **normaux** : `en_attente` (pas encore acceptée, ou
   passée après la dernière synchro Woo) et `annulee` (annulée / refusée avant import).
-- **Écart de prix habituel** : La Redoute facture **0,30 € de plus par article** que le site
-  (83,30 vs 83,00) — constaté sur 201 des 225 commandes d'octobre-novembre 2026. Toléré
-  (`USUAL_GAP_PER_ITEM`), pas compté comme anomalie.
+- **Écart de prix habituel** : La Redoute vend chaque article **0,30 à 0,80 € plus cher** que le
+  site (83 → 83,30, 86 → 86,80, 80 → 80,50 : règle de prix Shopping Feed). Toléré jusqu'à
+  **1 € par article** (`USUAL_GAP_PER_ITEM`) ; un montant Woo **plus élevé** est toujours signalé.
+- **Bornes** : « en attente » = commande marketplace plus récente que la dernière commande Woo
+  connue de GestLog (pas l'heure du dernier log de synchro : un rattrapage le fausserait) ; les
+  commandes marketplace d'**avant le début de l'historique Woo** (1er janvier 2026) ne sont pas
+  contrôlées (décembre 2025 = ids de l'ancien site).
+- **Constats du 24/11/2026** : ≈ 10 commandes La Redoute (sept.–nov.) que Shopping Feed dit
+  importées sous un id Woo **inexistant** (139 xxx) ou **appartenant à une commande du site**
+  (139241 = commande CB du 22/08) → jamais arrivées dans Woo. Et la journée du **16/11** manquait
+  dans GestLog (synchro du 17/11 non lancée) : rattrapée, fenêtre Woo passée à 3 jours.
 - **Statuts** : on ne signale que les contradictions nettes (annulée / remboursée d'un côté
   seulement, remboursement Woo = `refunded` ou `totalRefunded` ≥ total). « Expédiée » vs
   « en cours » n'est pas une anomalie.
