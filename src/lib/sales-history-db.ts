@@ -1,4 +1,4 @@
-// Accès base de l'historique des ventes (écran BtoC → Historique ventes).
+// Accès base de l'historique des ventes (écran Analyse → Historique des ventes, canal BtoC).
 // Réunit DEUX sources sans recouvrement :
 //   - SalesHistoryLine : lignes importées des exports WooCommerce, AVANT la synchro live ;
 //   - BtocOrderLine    : ventes synchronisées en direct (à partir de la 1re BtocOrder),
@@ -125,4 +125,68 @@ export async function monthlyCoverage(cutoff: string | null): Promise<{ month: s
     cutoff
   );
   return rows.map((r) => ({ month: r.month, history: Number(r.history), live: Number(r.live) }));
+}
+
+// ─── B2B ────────────────────────────────────────────────────────────────
+
+export type B2bScope = "all" | "collection" | "reassort";
+
+export interface RawB2bAgg {
+  seasonName: string;
+  seasonYear: number;
+  seasonType: string;
+  orderYear: number | null;
+  reference: string | null;
+  productName: string;
+  colorCode: string | null;
+  colorLabel: string | null;
+  size: string;
+  qty: number;
+  amount: number;
+}
+
+/**
+ * Commandes clients B2B agrégées par saison × année de commande × produit × couleur × taille.
+ * Règles (mêmes que les écrans B2B) :
+ *  - UNE source par saison : TEXAS dès qu'il en existe, sinon TIO (pas de double comptage) ;
+ *  - PLV exclue (pas du produit vendu) ; commandes ANNULEE exclues ;
+ *  - pièces soldées (`cancelledBySize`, jamais livrées) déduites, taille par taille ;
+ *  - CA = CA net de la ligne au prorata des pièces retenues.
+ * scope : collection = saisons PE/AH ; reassort = saisons Réassort / Hors-saison.
+ */
+export async function b2bAggregates(scope: B2bScope): Promise<RawB2bAgg[]> {
+  const scopeCond =
+    scope === "collection"
+      ? `AND s.type IN ('PE', 'AH')`
+      : scope === "reassort"
+        ? `AND s.type NOT IN ('PE', 'AH')`
+        : "";
+  const rows = await prisma.$queryRawUnsafe<
+    (Omit<RawB2bAgg, "qty" | "amount"> & { qty: bigint; amount: number })[]
+  >(
+    `SELECT s.name AS "seasonName", s.year AS "seasonYear", s.type AS "seasonType",
+            EXTRACT(YEAR FROM co."orderDate")::int AS "orderYear",
+            p.reference, COALESCE(NULLIF(p.label, ''), p.reference) AS "productName",
+            NULLIF(COALESCE(NULLIF(p."colorCode", ''), p.color), '') AS "colorCode",
+            NULLIF(p."colorLabel", '') AS "colorLabel",
+            UPPER(q.key) AS size,
+            SUM(q.value::int - COALESCE((col."cancelledBySize"::jsonb ->> q.key)::int, 0))::bigint AS qty,
+            COALESCE(SUM(col.amount * (q.value::int - COALESCE((col."cancelledBySize"::jsonb ->> q.key)::int, 0))
+                         / NULLIF(col."totalQuantity", 0)), 0)::float8 AS amount
+       FROM "ClientOrder" co
+       JOIN "Season" s ON s.id = co."seasonId"
+       JOIN "ClientOrderLine" col ON col."clientOrderId" = co.id
+       JOIN "Product" p ON p.id = col."productId"
+       CROSS JOIN LATERAL jsonb_each_text(col."quantitiesBySize"::jsonb) q
+      WHERE co.status <> 'ANNULEE'
+        AND p.category IS DISTINCT FROM 'PLV'
+        AND co."source" = (CASE WHEN EXISTS (
+              SELECT 1 FROM "ClientOrder" c2 WHERE c2."seasonId" = co."seasonId" AND c2."source" = 'TEXAS'
+            ) THEN 'TEXAS' ELSE 'TIO' END)
+        AND q.value ~ '^-?[0-9]+$'
+        ${scopeCond}
+      GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9
+     HAVING SUM(q.value::int - COALESCE((col."cancelledBySize"::jsonb ->> q.key)::int, 0)) != 0`
+  );
+  return rows.map((r) => ({ ...r, qty: Number(r.qty), amount: Number(r.amount) }));
 }

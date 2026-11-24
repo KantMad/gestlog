@@ -18,6 +18,7 @@ export const APP_SCREENS: { key: string; label: string }[] = [
   { key: "/statistics", label: "Statistiques" },
   { key: "/season-comparison", label: "Comparaison saisons / catalogues" },
   { key: "/client-comparison", label: "Comparaison clients" },
+  { key: "/historique-ventes", label: "Historique des ventes" },
   { key: "/repartition", label: "Répartition magasin" },
   { key: "/integration-cc", label: "Fichier d'intégration CC" },
   { key: "/lancement-commande", label: "Lancement de commande" },
@@ -63,6 +64,7 @@ const API_SCREEN_MAP: [string, string[]][] = [
   // gère la répartition, sans devoir cocher deux écrans.
   ["/api/samples", ["/samples", "/allocation"]],
   ["/api/btoc", ["/btoc"]],
+  ["/api/historique-ventes", ["/historique-ventes"]],
   ["/api/controle-commandes", ["/controle-commandes"]],
   ["/api/controle-tio-texas", ["/controle-tio-texas"]],
   ["/api/comparison", ["/comparison"]],

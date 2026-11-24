@@ -10,8 +10,7 @@ import { BtocExportTab } from "@/components/btoc/export-tab";
 import { BtocSegmentationTab } from "@/components/btoc/segmentation-tab";
 import { BtocSettingsTab } from "@/components/btoc/settings-tab";
 import { BtocNewsletterTab } from "@/components/btoc/newsletter-tab";
-import { BtocSalesHistoryTab } from "@/components/btoc/sales-history-tab";
-import { BarChart3, Users, Download, Settings, PieChart, Mail, History } from "lucide-react";
+import { BarChart3, Users, Download, Settings, PieChart, Mail } from "lucide-react";
 
 export default function BtocPage() {
   const [activeTab, setActiveTab] = useState("stats");
@@ -22,7 +21,7 @@ export default function BtocPage() {
       <div className="p-4 sm:p-6 lg:p-8 space-y-6">
         <PageHeader
           title="BtoC — WooCommerce"
-          description="Statistiques, historique des ventes, exports, clients, newsletter et paramètres de votre boutique en ligne"
+          description="Statistiques, exports, clients, newsletter et paramètres de votre boutique en ligne"
         />
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -34,10 +33,6 @@ export default function BtocPage() {
             <TabsTrigger value="export" className="gap-2">
               <Download className="h-4 w-4" />
               Export
-            </TabsTrigger>
-            <TabsTrigger value="history" className="gap-2">
-              <History className="h-4 w-4" />
-              Historique ventes
             </TabsTrigger>
             <TabsTrigger value="segmentation" className="gap-2">
               <PieChart className="h-4 w-4" />
@@ -63,10 +58,6 @@ export default function BtocPage() {
 
           <TabsContent value="export">
             <BtocExportTab />
-          </TabsContent>
-
-          <TabsContent value="history">
-            <BtocSalesHistoryTab />
           </TabsContent>
 
           <TabsContent value="segmentation">

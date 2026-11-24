@@ -1,5 +1,5 @@
 // Historique des ventes par ligne — logique PURE (testée) partagée par l'import,
-// l'API et l'écran BtoC → Historique ventes.
+// l'API et l'écran Analyse → Historique des ventes (BtoC et B2B).
 //
 // Source : exports « Commandes » de WooCommerce (xlsx), une ligne par article, avec au
 // minimum les colonnes « Numéro de commande », « Date de commande », « Nom du produit »,
@@ -223,7 +223,10 @@ export function modelKeyOf(reference: string | null, productName: string, mode: 
 
 /** Vente agrégée telle que lue en base (une par année × référence × nom × couleur × taille). */
 export interface RawSalesRow {
+  /** Clé de TRI de la période (BtoC : l'année ; B2B : voir `b2bPeriod`). */
   year: number;
+  /** Libellé affiché de la période (« 2024 », « AH26 », « Réassort 2025 »). */
+  period: string;
   reference: string | null;
   productName: string;
   color: string;
@@ -277,7 +280,7 @@ export function groupSalesRows(
 export interface ColorGrid {
   color: string;
   total: number;
-  byYear: { year: number; sizes: Record<string, number>; total: number }[];
+  byYear: { year: number; period: string; sizes: Record<string, number>; total: number }[];
   sizes: Record<string, number>; // toutes années
 }
 
@@ -296,11 +299,11 @@ export interface ProductGrid {
 }
 
 function colorGrid(color: string, rs: SalesAggRow[]): ColorGrid {
-  const years = new Map<number, { sizes: Record<string, number>; total: number }>();
+  const years = new Map<number, { period: string; sizes: Record<string, number>; total: number }>();
   const sizes: Record<string, number> = {};
   let total = 0;
   for (const r of rs) {
-    const y = years.get(r.year) ?? { sizes: {}, total: 0 };
+    const y = years.get(r.year) ?? { period: r.period, sizes: {}, total: 0 };
     y.sizes[r.size] = (y.sizes[r.size] ?? 0) + r.qty;
     y.total += r.qty;
     years.set(r.year, y);
@@ -347,6 +350,31 @@ export function buildProductGrids(rows: SalesAggRow[]): ProductGrid[] {
     .sort((a, b) => b.total - a.total || a.label.localeCompare(b.label, "fr"));
 }
 
+/** Clé de tri → libellé de période. */
+export function periodLabels(rows: { year: number; period: string }[]): Map<number, string> {
+  const m = new Map<number, string>();
+  for (const r of rows) if (!m.has(r.year)) m.set(r.year, r.period);
+  return m;
+}
+
+/**
+ * Période d'une commande B2B. Les saisons de collection se lisent telles quelles (PE avant
+ * AH dans une même année) ; les commandes hors collection (saisons « Réassort » et
+ * « Hors-saison », année 0) sont rangées par ANNÉE DE COMMANDE, entre l'AH de l'année et
+ * le PE suivant. Clé = année × 10 + rang (PE 1, AH 2, Réassort 5, Hors-saison 6).
+ */
+export function b2bPeriod(
+  season: { name: string; year: number; type: string },
+  orderYear: number | null
+): { year: number; period: string } {
+  if (season.year > 0 && (season.type === "PE" || season.type === "AH")) {
+    return { year: season.year * 10 + (season.type === "PE" ? 1 : 2), period: season.name };
+  }
+  const rank = season.type === "REASSORT" ? 5 : 6;
+  if (!orderYear) return { year: 99990 + rank, period: `${season.name} (sans date)` };
+  return { year: orderYear * 10 + rank, period: `${season.name} ${orderYear}` };
+}
+
 // ─── Statistiques de tailles ────────────────────────────────────────────
 
 /** Part de chaque taille (en %), à une décimale. Total nul → 0 partout. */
@@ -367,7 +395,7 @@ export function topSize(sizes: Record<string, number>): string | null {
 
 export interface SizeSummary {
   sizes: string[];
-  years: { year: number; sizes: Record<string, number>; shares: Record<string, number>; total: number; top: string | null }[];
+  years: { year: number; period: string; sizes: Record<string, number>; shares: Record<string, number>; total: number; top: string | null }[];
   all: { sizes: Record<string, number>; shares: Record<string, number>; total: number; top: string | null };
 }
 
@@ -389,6 +417,7 @@ const pct = (n: number | undefined) => (n ? `${String(n).replace(".", ",")} %` :
 export function buildSalesHistoryWorkbook(rows: SalesAggRow[], title: string): XLSX.WorkBook {
   const grids = buildProductGrids(rows);
   const years = [...new Set(rows.map((r) => r.year))].sort((a, b) => a - b);
+  const labels = periodLabels(rows);
   const wb = XLSX.utils.book_new();
 
   // 1. Grilles : un bloc par modèle, une ligne par couleur et par année ; tailles en pièces
@@ -397,10 +426,10 @@ export function buildSalesHistoryWorkbook(rows: SalesAggRow[], title: string): X
   for (const g of grids) {
     aoa.push([`${g.label} — ${g.model} (${g.category}) — ${g.total} pièces`]);
     aoa.push([`Références : ${g.references.join(", ") || "—"} · Noms : ${g.names.join(" / ")}`]);
-    aoa.push(["Couleur", "Année", ...g.sizes, "Total", "", ...g.sizes.map((s) => `% ${s}`), "Taille n°1"]);
+    aoa.push(["Couleur", "Période", ...g.sizes, "Total", "", ...g.sizes.map((s) => `% ${s}`), "Taille n°1"]);
     for (const c of [...g.colors, g.allColors]) {
       const lines = [
-        ...c.byYear.map((y) => ({ label: y.year as string | number, sizes: y.sizes, total: y.total })),
+        ...c.byYear.map((y) => ({ label: y.period, sizes: y.sizes, total: y.total })),
         ...(c.byYear.length > 1 ? [{ label: "Total", sizes: c.sizes, total: c.total }] : []),
       ];
       for (const l of lines) {
@@ -432,16 +461,16 @@ export function buildSalesHistoryWorkbook(rows: SalesAggRow[], title: string): X
   // 2. Tailles de toute la sélection, par année.
   const sum = sizeSummary(rows);
   add(
-    [...sum.years.map((y) => ({ label: String(y.year), ...y })), { label: "Toutes années", year: 0, ...sum.all }].map(
+    [...sum.years.map((y) => ({ label: y.period, ...y })), { label: "Toutes périodes", year: 0, ...sum.all }].map(
       (y): Record<string, string | number> => ({
-        Année: y.label,
+        Période: y.label,
         ...Object.fromEntries(sum.sizes.map((s) => [s, y.sizes[s] ?? 0])),
         Total: y.total,
         ...Object.fromEntries(sum.sizes.map((s) => [`% ${s}`, y.shares[s] ?? 0])),
         "Taille n°1": y.top ?? "",
       })
     ),
-    "Tailles par année"
+    "Tailles par période"
   );
 
   // 3. Par modèle : pièces par année + répartition des tailles.
@@ -452,7 +481,7 @@ export function buildSalesHistoryWorkbook(rows: SalesAggRow[], title: string): X
         Modèle: g.model,
         Nom: g.label,
         Catégorie: g.category,
-        ...Object.fromEntries(years.map((y) => [String(y), g.byYear[y] ?? 0])),
+        ...Object.fromEntries(years.map((y) => [labels.get(y)!, g.byYear[y] ?? 0])),
         "Total pièces": g.total,
         "CA (€)": Math.round(g.amount),
         "Taille n°1": topSize(g.allColors.sizes) ?? "",
@@ -480,7 +509,7 @@ export function buildSalesHistoryWorkbook(rows: SalesAggRow[], title: string): X
         const sh = sizeShares(e.sizes);
         return {
           Couleur: c,
-          ...Object.fromEntries(years.map((y) => [String(y), e.y[y] ?? 0])),
+          ...Object.fromEntries(years.map((y) => [labels.get(y)!, e.y[y] ?? 0])),
           "Total pièces": e.q,
           "CA (€)": Math.round(e.a),
           "Taille n°1": topSize(e.sizes) ?? "",
@@ -493,7 +522,7 @@ export function buildSalesHistoryWorkbook(rows: SalesAggRow[], title: string): X
   // 5. Données agrégées.
   add(
     rows.map((r) => ({
-      Année: r.year,
+      Période: r.period,
       Catégorie: r.category,
       Modèle: r.model,
       "Nom du groupe": r.label,

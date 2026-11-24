@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import * as XLSX from "xlsx";
 import {
+  b2bPeriod,
   buildProductGrids,
   groupSalesRows,
   modelKeyOf,
@@ -117,7 +118,7 @@ describe("modelKeyOf", () => {
 });
 
 const raw = (o: Partial<RawSalesRow>): RawSalesRow => ({
-  year: 2024, reference: "NMPULL_W001", productName: "Pull 1/2 zip col camionneur en laine",
+  year: 2024, period: "2024", reference: "NMPULL_W001", productName: "Pull 1/2 zip col camionneur en laine",
   color: "Marine", size: "M", qty: 1, amount: 50, ...o,
 });
 const cat = (n: string) => (/^pull/i.test(n) ? "Pull" : /^gilet/i.test(n) ? "Gilet" : "Autres");
@@ -145,6 +146,7 @@ describe("groupSalesRows", () => {
 });
 
 const agg = (o: Partial<SalesAggRow>): SalesAggRow => ({
+  period: String(o.year ?? 2024),
   year: 2024, reference: "NMPULL_W001", productName: "Pull A", model: "PULL_W001", label: "Pull A",
   category: "Pull", color: "Marine", size: "M", qty: 1, amount: 50, ...o,
 });
@@ -169,8 +171,8 @@ describe("buildProductGrids", () => {
     const a = grids[1];
     expect(a.sizes).toEqual(["M", "L", "XL"]);
     expect(a.colors[0].byYear).toEqual([
-      { year: 2024, sizes: { M: 3, L: 2 }, total: 5 },
-      { year: 2025, sizes: { L: 4 }, total: 4 },
+      { year: 2024, period: "2024", sizes: { M: 3, L: 2 }, total: 5 },
+      { year: 2025, period: "2025", sizes: { L: 4 }, total: 4 },
     ]);
     expect(a.allColors.sizes).toEqual({ M: 3, L: 6, XL: 1 });
     expect(a.byYear).toEqual({ 2024: 6, 2025: 4 });
@@ -186,10 +188,26 @@ describe("buildProductGrids", () => {
   });
   it("le classeur contient grilles (pièces + %) et synthèses", () => {
     const wb = buildSalesHistoryWorkbook(rows, "Test");
-    expect(wb.SheetNames).toEqual(["Grilles modèle×couleur", "Tailles par année", "Par modèle", "Par couleur", "Données"]);
+    expect(wb.SheetNames).toEqual(["Grilles modèle×couleur", "Tailles par période", "Par modèle", "Par couleur", "Données"]);
     const grid = XLSX.utils.sheet_to_json<string[]>(wb.Sheets["Grilles modèle×couleur"], { header: 1 });
     expect(grid.some((r) => r.includes("% L"))).toBe(true);
-    const t = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets["Tailles par année"]);
-    expect(t.map((x) => x["Année"])).toEqual(["2024", "2025", "Toutes années"]);
+    const t = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets["Tailles par période"]);
+    expect(t.map((x) => x["Période"])).toEqual(["2024", "2025", "Toutes périodes"]);
+  });
+});
+
+describe("b2bPeriod", () => {
+  it("saisons de collection : PE avant AH dans la même année", () => {
+    const pe = b2bPeriod({ name: "PE26", year: 2026, type: "PE" }, 2025);
+    const ah = b2bPeriod({ name: "AH26", year: 2026, type: "AH" }, null);
+    expect(pe).toEqual({ year: 20261, period: "PE26" });
+    expect(ah).toEqual({ year: 20262, period: "AH26" });
+  });
+  it("réassort et hors-saison : par année de commande, après l'AH de l'année", () => {
+    const r = b2bPeriod({ name: "Réassort", year: 0, type: "REASSORT" }, 2025);
+    expect(r).toEqual({ year: 20255, period: "Réassort 2025" });
+    expect(r.year).toBeGreaterThan(20252);
+    expect(r.year).toBeLessThan(20261);
+    expect(b2bPeriod({ name: "Hors-saison", year: 0, type: "DIVERS" }, null).period).toBe("Hors-saison (sans date)");
   });
 });

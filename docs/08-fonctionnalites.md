@@ -667,3 +667,26 @@ passe de 71 % à 83 %.*
 Les 57 pièces encore bloquées le sont **légitimement** : les servir créerait un trou et
 aucune boutique n'a 2 pièces de la taille manquante à prêter. Elles restent au « Répartir
 surplus », qui est un arbitrage manuel assumé.
+
+## Historique des ventes B2B (`/historique-ventes`)
+
+Canal **Commandes clients (B2B)** de l'écran Analyse → Historique des ventes : la **même
+méthode** que le canal Site (BtoC, voir [`07-btoc-brevo.md`](07-btoc-brevo.md#historique-des-ventes-saleshistoryline)) —
+regroupement par code modèle / référence hors saison / nom, catégorie globale déduite du nom
+(`Product.label`) et attribuée au modèle, grilles tailles × couleurs × périodes, % des tailles,
+export Excel. Requête : `b2bAggregates` dans `src/lib/sales-history-db.ts`.
+
+- **Une source par saison** : TEXAS dès qu'il en existe, sinon TIO (même sous-select corrélé
+  que les comparaisons) → pas de double comptage TIO + TEXAS (AH26 a les deux).
+- **Exclus** : PLV, commandes `ANNULEE`, pièces **soldées** (`cancelledBySize`, déduites taille
+  par taille). CA = `ClientOrderLine.amount` au prorata des pièces retenues.
+- **Tailles** = clés de `quantitiesBySize` (en majuscules). **Couleur** = libellé du code
+  couleur partagé avec le BtoC (`colorLabels`), sinon `Product.colorLabel`.
+- **Période** (`b2bPeriod`, testé) : saison PE/AH telle quelle (PE avant AH dans une année) ;
+  saisons techniques **Réassort** / **Hors-saison** (année 0) rangées par **année de commande**
+  (« Réassort 2025 », entre AH25 et PE26 ; « (sans date) » à la fin). Filtre *scope* :
+  `all` / `collection` (PE/AH) / `reassort`.
+- ⚠️ **Pas de filtre de date en B2B** : les 282 commandes TEXAS d'AH26 n'ont pas de date, un
+  filtre les écarterait en silence.
+- Volume de contrôle au 24/11/2026 : ≈ 702 000 pièces toutes saisons (hors PLV).
+

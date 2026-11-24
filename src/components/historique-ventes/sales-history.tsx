@@ -23,10 +23,21 @@ import {
   type SalesAggRow,
 } from "@/lib/sales-history";
 
+type Channel = "btoc" | "b2b";
+type Scope = "all" | "collection" | "reassort";
+const CHANNEL_LABELS: Record<Channel, string> = { btoc: "Site (BtoC)", b2b: "Commandes clients (B2B)" };
+const SCOPE_LABELS: Record<Scope, string> = {
+  all: "Tout (saisons + réassort)",
+  collection: "Saisons de collection",
+  reassort: "Réassort et hors-saison",
+};
+
 interface HistoryData {
+  channel: Channel;
   rows: SalesAggRow[];
   liveStart: string | null;
   coverage: { month: string; history: number; live: number }[];
+  periods: { period: string; qty: number }[];
   categories: { name: string; qty: number }[];
 }
 
@@ -39,10 +50,12 @@ const PAGE = 25;
 const fr = (ymd: string | null) => (ymd ? ymd.split("-").reverse().join("/") : "—");
 const pctLabel = (n: number | undefined) => `${String(n ?? 0).replace(".", ",")} %`;
 
-export function BtocSalesHistoryTab() {
+export function SalesHistory() {
   const [data, setData] = useState<HistoryData | null>(null);
   const [loadedKey, setLoadedKey] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
+  const [channel, setChannel] = useState<Channel>("btoc");
+  const [scope, setScope] = useState<Scope>("all");
   const [categories, setCategories] = useState<string[]>(["Pull"]);
   const [group, setGroup] = useState<GroupMode>("code");
   const [display, setDisplay] = useState<Display>("both");
@@ -57,18 +70,22 @@ export function BtocSalesHistoryTab() {
   const fileInput = useRef<HTMLInputElement>(null);
 
   const queryKey = (() => {
-    const p = new URLSearchParams({ group });
+    const p = new URLSearchParams({ channel, group });
     if (categories.length) p.set("categories", categories.join(","));
     if (q) p.set("q", q);
-    if (dateFrom) p.set("dateFrom", dateFrom);
-    if (dateTo) p.set("dateTo", dateTo);
+    if (channel === "btoc") {
+      if (dateFrom) p.set("dateFrom", dateFrom);
+      if (dateTo) p.set("dateTo", dateTo);
+    } else {
+      p.set("scope", scope);
+    }
     return `${p.toString()}#${reload}`;
   })();
   const loading = loadedKey !== queryKey;
 
   useEffect(() => {
     let cancelled = false;
-    fetch(`/api/btoc/sales-history?${queryKey.split("#")[0]}`)
+    fetch(`/api/historique-ventes?${queryKey.split("#")[0]}`)
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json();
@@ -85,9 +102,13 @@ export function BtocSalesHistoryTab() {
     };
   }, [queryKey]);
 
-  const grids = useMemo(() => buildProductGrids(data?.rows ?? []), [data]);
-  const summary = useMemo(() => sizeSummary(data?.rows ?? []), [data]);
+  // N'affiche que la réponse du canal demandé (pas l'ancienne pendant un changement de canal).
+  const rows = useMemo(() => (data?.channel === channel ? data.rows : []), [data, channel]);
+  const grids = useMemo(() => buildProductGrids(rows), [rows]);
+  const summary = useMemo(() => sizeSummary(rows), [rows]);
   const years = summary.years.map((y) => y.year);
+  const periodLabel = useMemo(() => new Map(summary.years.map((y) => [y.year, y.period])), [summary]);
+  const isB2b = channel === "b2b";
 
   const coverageYears = useMemo(() => {
     const m = new Map<string, Map<number, { history: number; live: number }>>();
@@ -121,7 +142,7 @@ export function BtocSalesHistoryTab() {
         let updated = 0;
         let skippedLive = 0;
         for (let i = 0; i < parsed.lines.length; i += BATCH) {
-          const res = await fetch("/api/btoc/sales-history/import", {
+          const res = await fetch("/api/historique-ventes/import", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ fileName: file.name, lines: parsed.lines.slice(i, i + BATCH) }),
@@ -151,13 +172,13 @@ export function BtocSalesHistoryTab() {
     }
   };
 
-  const selectionLabel = categories.length ? categories.join(" + ") : "Toutes catégories";
+  const selectionLabel = `${CHANNEL_LABELS[channel]} — ${categories.length ? categories.join(" + ") : "Toutes catégories"}`;
 
   const handleExport = () => {
-    if (!data?.rows.length) return;
+    if (!rows.length) return;
     const wb = buildSalesHistoryWorkbook(
-      data.rows,
-      `Ventes site (B2C) — ${selectionLabel}${q ? ` — « ${q} »` : ""} — regroupement : ${GROUP_MODE_LABELS[group]}`
+      rows,
+      `${selectionLabel}${isB2b ? ` — ${SCOPE_LABELS[scope]}` : ""}${q ? ` — « ${q} »` : ""} — regroupement : ${GROUP_MODE_LABELS[group]} — pièces`
     );
     const slug = selectionLabel.toLowerCase().normalize("NFD").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
     XLSX.writeFile(wb, `historique-ventes-${slug}-${fileStamp()}.xlsx`);
@@ -165,7 +186,51 @@ export function BtocSalesHistoryTab() {
 
   return (
     <div className="space-y-6">
-      {/* Couverture + import */}
+      {/* Canal */}
+      <div className="flex flex-wrap gap-2">
+        {(Object.keys(CHANNEL_LABELS) as Channel[]).map((c) => (
+          <Button
+            key={c}
+            variant={channel === c ? "default" : "outline"}
+            onClick={() => {
+              setChannel(c);
+              setShown(PAGE);
+              setOpen({});
+            }}
+          >
+            {CHANNEL_LABELS[c]}
+          </Button>
+        ))}
+      </div>
+
+      {isB2b && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <History className="h-4 w-4" />
+              Commandes clients B2B par période
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Pièces commandées par les clients professionnels, toutes catégories. Une source par saison : Texas dès qu&apos;il
+              existe, sinon TIO. Commandes annulées, pièces soldées et PLV exclues. Les commandes « Réassort » et
+              « Hors-saison » sont rangées par année de commande.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {(data?.channel === "b2b" ? data.periods : []).map((p) => (
+                <div key={p.period} className="rounded-md border px-3 py-1.5 text-sm">
+                  <div className="text-xs text-muted-foreground">{p.period}</div>
+                  <div className="font-medium tabular-nums">{formatNumber(p.qty)}</div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Couverture + import (BtoC) */}
+      {!isB2b && (
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
@@ -240,6 +305,7 @@ export function BtocSalesHistoryTab() {
           )}
         </CardContent>
       </Card>
+      )}
 
       {/* Filtres */}
       <Card>
@@ -321,15 +387,39 @@ export function BtocSalesHistoryTab() {
                 />
               </div>
             </div>
-            <div className="space-y-1">
-              <label className="block text-xs font-medium text-muted-foreground">Vendu du</label>
-              <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="w-40 h-9" />
-            </div>
-            <div className="space-y-1">
-              <label className="block text-xs font-medium text-muted-foreground">au</label>
-              <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="w-40 h-9" />
-            </div>
-            <Button onClick={handleExport} disabled={loading || !data?.rows.length}>
+            {isB2b ? (
+              <div className="space-y-1">
+                <label className="block text-xs font-medium text-muted-foreground">Commandes</label>
+                <Select
+                  value={scope}
+                  onValueChange={(v) => {
+                    setScope((v as Scope) || "all");
+                    setShown(PAGE);
+                  }}
+                >
+                  <SelectTrigger className="w-56 h-9">
+                    <span className="text-sm">{SCOPE_LABELS[scope]}</span>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(Object.keys(SCOPE_LABELS) as Scope[]).map((k) => (
+                      <SelectItem key={k} value={k}>{SCOPE_LABELS[k]}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : (
+              <>
+                <div className="space-y-1">
+                  <label className="block text-xs font-medium text-muted-foreground">Vendu du</label>
+                  <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="w-40 h-9" />
+                </div>
+                <div className="space-y-1">
+                  <label className="block text-xs font-medium text-muted-foreground">au</label>
+                  <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="w-40 h-9" />
+                </div>
+              </>
+            )}
+            <Button onClick={handleExport} disabled={loading || !rows.length}>
               <Download className="h-4 w-4 mr-2" />
               Export Excel
             </Button>
@@ -351,7 +441,7 @@ export function BtocSalesHistoryTab() {
             <table className="text-sm border-collapse min-w-full">
               <thead>
                 <tr className="border-b">
-                  <th className="px-2 py-1 text-left font-medium text-muted-foreground">Année</th>
+                  <th className="px-2 py-1 text-left font-medium text-muted-foreground">Période</th>
                   {summary.sizes.map((s) => (
                     <th key={s} className="px-2 py-1 text-right font-medium text-muted-foreground">{s}</th>
                   ))}
@@ -360,7 +450,7 @@ export function BtocSalesHistoryTab() {
                 </tr>
               </thead>
               <tbody>
-                {[...summary.years.map((y) => ({ label: String(y.year), ...y, bold: false })), { label: "Toutes années", ...summary.all, bold: true }].map(
+                {[...summary.years.map((y) => ({ label: y.period, ...y, bold: false })), { label: "Toutes périodes", ...summary.all, bold: true }].map(
                   (y) => (
                     <tr key={y.label} className={`border-t ${y.bold ? "font-semibold bg-muted/50" : ""}`}>
                       <td className="px-2 py-1">{y.label}</td>
@@ -387,6 +477,7 @@ export function BtocSalesHistoryTab() {
             key={g.model}
             grid={g}
             years={years}
+            periodLabel={periodLabel}
             display={display}
             open={!!open[g.model]}
             onToggle={() => setOpen((o) => ({ ...o, [g.model]: !o[g.model] }))}
@@ -416,12 +507,14 @@ function SizeCell({ qty, pct, display }: { qty: number | undefined; pct: number 
 function ProductCard({
   grid,
   years,
+  periodLabel,
   display,
   open,
   onToggle,
 }: {
   grid: ProductGrid;
   years: number[];
+  periodLabel: Map<number, string>;
   display: Display;
   open: boolean;
   onToggle: () => void;
@@ -443,7 +536,7 @@ function ProductCard({
           <span className="ml-auto flex gap-3 text-xs text-muted-foreground tabular-nums">
             {years.map((y) => (
               <span key={y}>
-                {y} : <span className="text-foreground font-medium">{formatNumber(grid.byYear[y] ?? 0)}</span>
+                {periodLabel.get(y) ?? y} : <span className="text-foreground font-medium">{formatNumber(grid.byYear[y] ?? 0)}</span>
               </span>
             ))}
           </span>
@@ -461,7 +554,7 @@ function ProductCard({
             <thead>
               <tr className="border-b">
                 <th className="px-2 py-1 text-left font-medium text-muted-foreground">Couleur</th>
-                <th className="px-2 py-1 text-left font-medium text-muted-foreground">Année</th>
+                <th className="px-2 py-1 text-left font-medium text-muted-foreground">Période</th>
                 {grid.sizes.map((s) => (
                   <th key={s} className="px-2 py-1 text-right font-medium text-muted-foreground">{s}</th>
                 ))}
@@ -473,7 +566,7 @@ function ProductCard({
               {[...grid.colors, grid.allColors].map((c, ci) => {
                 const isAll = ci === grid.colors.length;
                 const lines = [
-                  ...c.byYear.map((y) => ({ label: String(y.year), sizes: y.sizes, total: y.total, bold: false })),
+                  ...c.byYear.map((y) => ({ label: y.period, sizes: y.sizes, total: y.total, bold: false })),
                   ...(c.byYear.length > 1 ? [{ label: "Total", sizes: c.sizes, total: c.total, bold: true }] : []),
                 ];
                 return lines.map((l, li) => {

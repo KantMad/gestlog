@@ -11,9 +11,9 @@ produits, commandes, stock, remboursements) + **gestion VIP via Brevo**.
 - Synchro poussée via n8n vers **`/api/sync/btoc/*`** :
   `customers`, `orders`, `products`, `stock`, `refunds`, `order-countries`,
   `vip-recompute`, **`newsletter`** (lit Brevo lui-même, sans corps). (Auth `x-api-key=SYNC_API_KEY` comme les autres `/api/sync`.)
-- Écran : **`/btoc`** (onglets Statistiques, Export, **Historique ventes**, **Segmentation**, Clients, **Newsletter**, Paramètres).
+- Écran : **`/btoc`** (onglets Statistiques, Export, **Segmentation**, Clients, **Newsletter**, Paramètres).
   API de lecture/exports sous `/api/btoc/*` : `customers`, `stats`, `size-distribution`,
-  **`segmentation`**, **`newsletter`**, **`sales-history`** (+ `sales-history/import`), `export/{orders,products,best-sellers,top-clients,contacts,sales-details,parents}`,
+  **`segmentation`**, **`newsletter`**, `export/{orders,products,best-sellers,top-clients,contacts,sales-details,parents}`,
   `settings`.
 
 ## Stats BtoC — Top 15 produits
@@ -250,13 +250,16 @@ aussi à dater les comptes Woo dans l'export Clients & prospects.
   liste, date d'inscription, recherche) et export Excel (`export=1`). « A commandé » =
   commande aboutie live **ou** historique (même règle que l'export ci-dessous).
 
-## Historique des ventes (`SalesHistoryLine`, onglet Historique ventes)
+## Historique des ventes (`SalesHistoryLine`)
+
+> Écran **Analyse → Historique des ventes** (`/historique-ventes`), canal **Site (BtoC)**.
+> Le canal B2B du même écran est décrit dans [`08-fonctionnalites.md`](08-fonctionnalites.md#historique-des-ventes-b2b-historique-ventes).
 
 Analyse **modèle × couleur × taille sur plusieurs années**, toutes catégories (demande de la
 réunion du 24/11/2026, réunion pulls). Code : `src/lib/sales-history.ts` (pur, testé :
 lecture des exports, tri des tailles, grilles, classeur Excel), `src/lib/sales-history-db.ts`
-(requêtes), `src/app/api/btoc/sales-history/route.ts` (lecture) et `…/import/route.ts`
-(écriture), `src/components/btoc/sales-history-tab.tsx`.
+(requêtes), `src/app/api/historique-ventes/route.ts` (lecture) et `…/import/route.ts`
+(écriture), `src/components/historique-ventes/sales-history.tsx`.
 
 - **Deux sources, sans recouvrement** : `SalesHistoryLine` (importé) est lu **avant** le jour
   de la 1re `BtocOrder` (heure de Paris, aujourd'hui le 01/01/2026) ; `BtocOrderLine` (live) à

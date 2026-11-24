@@ -3,7 +3,7 @@ import {
   Users, Tag, ClipboardList, Warehouse, Receipt, RefreshCw, ShoppingBag, Store,
   ArrowLeftRight, Building2, UserCog, Download, LifeBuoy, ScanSearch, PackageCheck,
   FlaskConical, FileSpreadsheet, Rocket, Tags, Handshake, Boxes, ClipboardCheck, Barcode,
-  Send, SlidersHorizontal, FileCheck2, type LucideIcon,
+  Send, SlidersHorizontal, FileCheck2, History, type LucideIcon,
 } from "lucide-react";
 import { canAccessScreen } from "./screens";
 
@@ -92,6 +92,7 @@ export const NAV_TREE: NavEntry[] = [
       { href: "/statistics", label: "Statistiques", icon: BarChart3 },
       { href: "/season-comparison", label: "Comparaison saisons / catalogues", icon: ArrowLeftRight },
       { href: "/client-comparison", label: "Comparaison clients", icon: Building2 },
+      { href: "/historique-ventes", label: "Historique des ventes", icon: History },
     ],
   },
   {

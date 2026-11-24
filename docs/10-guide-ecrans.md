@@ -663,6 +663,30 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
 - **Source** : `/api/statistics/client-comparison`. **CA = `ClientOrderLine.amount`**. Filtre
   boutique **côté front** (l'API renvoie tout, recalcul JS). PLV exclu.
 
+## Historique des ventes (`/historique-ventes`, menu Analyse)
+- **Rôle** : ventes sur plusieurs années **par modèle, couleur et taille**, pour une ou
+  plusieurs catégories au choix (Pull, Gilet, Chemise, Jean…), en **Site (BtoC)** ou en
+  **Commandes clients (B2B)** — même méthode des deux côtés. Demandé pour la réunion pulls
+  (24/11/2026) et l'analyse des tendances.
+- **Regroupement** : par **code modèle** (tous les `PULL_W001` de toutes les saisons
+  ensemble), ou au choix par référence hors saison ou par nom. Pour chaque modèle, une **grille
+  des tailles par couleur et par période**, en pièces et/ou en **% des tailles**, avec la
+  taille n°1 ; en tête, la répartition des tailles de toute la sélection par période.
+  Filtres catégories / nom ou référence ; **export Excel** (grilles pièces + %, synthèses par
+  modèle, couleur, taille).
+- **Période** : BtoC = **année** ; B2B = **saison** (PE26, AH26…), les commandes « Réassort »
+  et « Hors-saison » étant rangées par **année de commande** (« Réassort 2025 »).
+- **BtoC** : filtre de dates ; **couverture mois par mois** (bleu = historique importé, vert =
+  synchro live, rouge = trou) et bouton **Importer des exports WooCommerce**. ⚠️ Mois sans
+  donnée = ventes absentes, pas ventes nulles.
+- **B2B** : filtre *Tout / Saisons de collection / Réassort et hors-saison* ; pas de filtre de
+  date (les commandes TEXAS d'AH26 n'en ont pas). Pièces par période en tête.
+- **Source** : `/api/historique-ventes` (+ `/import`). Règles détaillées : BtoC dans
+  [`07-btoc-brevo.md`](07-btoc-brevo.md#historique-des-ventes-saleshistoryline), B2B dans
+  [`08-fonctionnalites.md`](08-fonctionnalites.md#historique-des-ventes-b2b-historique-ventes).
+- **Accès** : écran à part (`/historique-ventes`) : un utilisateur restreint doit le recevoir
+  dans `/users` — avoir « BtoC » ne suffit pas.
+
 ## Infos produits (`/product-info`)
 - **Rôle** : gérer le **référentiel trans-saison** : Types de taille, Correspondances
   Fournisseur→Réf, base **EAN**, **Équivalences couleur**.
@@ -940,16 +964,6 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
   **Drill-down** : chaque ligne chiffrée est cliquable → liste des clients du segment avec
   recherche e-mail/nom et export. ⚠️ Les blocs promo/panier comptent des **commandes**, le
   détail liste des **clients** : les totaux diffèrent légitimement.
-- **Onglet Historique ventes** : ventes du site sur plusieurs années, **par modèle, couleur et
-  taille**, pour une ou plusieurs catégories au choix (Pull, Gilet, Chemise, Jean…). Les
-  modèles sont regroupés par **code modèle** (tous les `PULL_W001` de toutes les saisons
-  ensemble), ou au choix par référence hors saison ou par nom. Pour chaque modèle, une **grille
-  des tailles par couleur et par année**, en pièces et/ou en **% des tailles**, avec la taille
-  n°1 ; en tête, la répartition des tailles de toute la sélection par année. Filtres catégories /
-  nom ou référence / dates, **export Excel** (grilles pièces + %, synthèses par modèle, couleur,
-  taille). En haut, la **couverture mois par mois** (bleu = historique importé,
-  vert = synchro live, rouge = trou) et le bouton **Importer des exports WooCommerce** pour
-  compléter l'historique. ⚠️ Mois sans donnée = ventes absentes, pas ventes nulles.
 - **Note** : hors périmètre du **menu Exports** (`/export`) qui regroupe les exports **B2B**.
 
 ## Recherche EAN (`/recherche-ean`)

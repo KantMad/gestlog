@@ -108,7 +108,7 @@ colonne.
 - **`HistOrder`**, **`HistOrderLine`** — historique de commandes (import historique).
 - **`SalesHistoryLine`** — historique des ventes **par ligne d'article** (produit, UGS, couleur, taille,
   quantité, prix) importé des exports « Commandes » WooCommerce, **sans donnée personnelle** ;
-  unique sur `(channel, orderNumber, lineKey)`. Voir [`07`](07-btoc-brevo.md#historique-des-ventes-saleshistoryline-onglet-historique-ventes).
+  unique sur `(channel, orderNumber, lineKey)`. Voir [`07`](07-btoc-brevo.md#historique-des-ventes-saleshistoryline).
 
 ### Système & auth
 - **`User`** — utilisateur. `name`, **`code`** (unique, 4 chiffres — sert d'identifiant ET

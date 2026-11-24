@@ -929,6 +929,23 @@ export const HELP_THEMES: HelpTheme[] = [
         ],
       },
       {
+        id: "historique-ventes",
+        icon: "📈",
+        title: "Historique des ventes (modèle × couleur × taille)",
+        keywords: "historique ventes tailles couleurs modèle pull w001 grille b2b btoc site réassort saison pourcentage",
+        screen: "/historique-ventes",
+        sections: [
+          {
+            lines: [
+              "Choisis le canal : **Site (BtoC)** (par année) ou **Commandes clients (B2B)** (par saison, réassort par année de commande).",
+              "Choisis une ou plusieurs **catégories** (Pull, Gilet, Chemise…). Les modèles sont regroupés par **code modèle** : tous les `PULL_W001` de toutes les saisons ensemble.",
+              "Pour chaque modèle : la **grille des tailles par couleur et par période**, en pièces et en **% des tailles**, avec la taille n°1. **Export Excel** de tout ce qui est affiché.",
+            ],
+            tip: "Côté site, le tableau des mois en haut montre les trous de l'historique (en rouge) : importe l'export « Commandes » WooCommerce du mois manquant pour le combler.",
+          },
+        ],
+      },
+      {
         id: "reassort",
         icon: "📿",
         title: "Suivi & réassort (Commandes client)",

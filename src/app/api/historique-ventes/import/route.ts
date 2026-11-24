@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { handleApiError, parseBody } from "@/lib/api";
 import { liveStartDay } from "@/lib/sales-history-db";
 
-// POST — import d'un lot de lignes d'historique (écran BtoC → Historique ventes).
+// POST — import d'un lot de lignes d'historique BtoC (écran Analyse → Historique des ventes).
 // Le navigateur lit le fichier xlsx (lib/sales-history.parseExportWorkbook) et envoie
 // les lignes par lots : pas de gros fichier à faire transiter par nginx.
 // Idempotent : (channel, orderNumber, lineKey) unique → réimporter un fichier, ou deux
@@ -71,6 +71,6 @@ export async function POST(request: NextRequest) {
     const inserted = res.filter((x) => x.inserted).length;
     return NextResponse.json({ inserted, updated: res.length - inserted, skippedLive });
   } catch (e) {
-    return handleApiError(e, "api/btoc/sales-history/import");
+    return handleApiError(e, "api/historique-ventes/import");
   }
 }
