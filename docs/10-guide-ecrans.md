@@ -14,7 +14,7 @@ par étape du flux métier**, pas à plat : 26 entrées alignées devenaient ill
 | Groupe | Écrans |
 |---|---|
 | *(premier niveau)* | Tableau de bord |
-| **Marchandise** | Import, Correction réception, Comparaison, Échantillons, Infos produits |
+| **Marchandise** | Import, Correction réception, Comparaison, Échantillons, Infos produits, Recherche EAN, Renommage photos |
 | **Commandes** | Commandes client, Lancement de commande, Contrôle commandes, Vente en conditionnelle |
 | **Répartition & expédition** | Répartition, Répartition magasin, Préparation, Livraisons, Vue dépôt, Récap clients, À vendre |
 | **Analyse** | Statistiques, Comparaison saisons / catalogues, Comparaison clients |
@@ -1055,6 +1055,29 @@ composants shadcn ; graphes recharts ; Excel via `xlsx` ; PDF via `pdfjs-dist`. 
   faire passer le plafond pour un compte exact.
 - ⚠️ À ne pas confondre avec l'onglet **EAN** d'`Infos produits`, qui sert à **importer et
   maintenir** la table ; celui-ci ne fait que **chercher**.
+
+## Renommage photos (`/photos-etiquettes`, menu Marchandise)
+- **Rôle** : renommer une série de photos produit d'après une **étiquette manuscrite**
+  photographiée **avant** les photos du vêtement (ligne 1 : référence, ligne 2 : code et
+  nom de couleur). Chaque étiquette nomme les photos qui la suivent, jusqu'à la suivante :
+  `REFERENCE-CODECOULEUR-N.ext` (ex. `THTMANT_901-209-1.jpg`). Le nom de couleur n'entre
+  pas dans le nom de fichier.
+- **Lecture** : chaque photo est **réduite dans le navigateur** (1600 px, JPEG) puis envoyée
+  à `POST /api/photos-etiquettes`, qui demande à Claude (`claude-opus-5-5`, effort `low`,
+  sortie structurée) si c'est une étiquette et ce qu'elle dit. 3 photos en parallèle.
+  Coût de l'ordre du centime par photo. Clé : `ANTHROPIC_API_KEY` (cf. `02`) ; absente →
+  503 et l'écran s'arrête avec un message clair.
+- **Renommage et ZIP dans le navigateur** (`jszip`) : les fichiers **d'origine**, en pleine
+  résolution, sont mis dans le ZIP ; ils ne sont jamais envoyés en entier au serveur.
+- **Ordre** = tri naturel du nom de fichier (`IMG_2` avant `IMG_10`), soit l'ordre de prise
+  de vue des appareils photo et téléphones.
+- **Contrôle humain avant téléchargement** : référence et code éditables sur chaque
+  étiquette, bouton Étiquette / Vêtement pour corriger un classement. Alertes : photo sans
+  étiquette avant elle (garde son nom d'origine), étiquette illisible, photo non lue
+  (HEIC non décodable hors Safari → exporter en JPEG).
+- Même étiquette rencontrée deux fois → la numérotation continue (pas d'écrasement).
+  Option « Inclure les photos d'étiquette » → `REF-CODE-ETIQUETTE.jpg`.
+- Logique pure et testée : `lib/photo-labels.ts` (`planNames`).
 
 ## Exports (`/export`)
 - **Rôle** : hub des exports **hors BtoC**. Direct : **Réceptions CSV EAN/quantité**

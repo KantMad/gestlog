@@ -77,6 +77,7 @@ Dans **`/var/www/gestlog/.env`** (chargées au runtime ; **absentes** de `/proc/
 | `CAISSE_TRIGGER_STATUS` | Statut de livraison qui déclenche l'envoi caisse (défaut `EXPEDIEE`) |
 | `CAISSE_STORE_ID` | (optionnel) id magasin envoyé à la caisse |
 | `BREVO_API_KEY` | Clé API Brevo |
+| `ANTHROPIC_API_KEY` | Clé API Claude pour la lecture des étiquettes photo (`/api/photos-etiquettes`). Absente = écran Renommage photos inutilisable (503). Cf. [`10`](10-guide-ecrans.md) |
 | `BREVO_SENDER_EMAIL` / `BREVO_SENDER_NAME` | Expéditeur Brevo |
 | `BREVO_VIP_LIST_ID` / `BREVO_VIP_THRESHOLD` | Liste VIP Brevo + seuil (€) |
 | `NODE_ENV` | `production` sur le VPS (active cookies `secure`, etc.) |

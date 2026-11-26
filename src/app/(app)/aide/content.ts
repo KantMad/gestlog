@@ -1181,6 +1181,32 @@ export const HELP_THEMES: HelpTheme[] = [
         ],
       },
       {
+        id: "photos-etiquettes",
+        icon: "\ud83d\udcf7",
+        title: "Renommage photos",
+        keywords: "photo photos renommer renommage etiquette manuscrite reference couleur zip shooting",
+        screen: "/photos-etiquettes",
+        sections: [
+          {
+            lines: [
+              "**Marchandise \u2192 Renommage photos** : renomme une série de photos produit d'après l'étiquette écrite à la main.",
+              "Pendant la prise de vue, photographie d'abord l'**étiquette** (ligne 1 : la référence, ligne 2 : le code et le nom de la couleur), puis les photos du vêtement. Recommence pour le produit suivant.",
+              "Dépose toutes les photos, clique **Lire les étiquettes**, vérifie, puis **Télécharger le ZIP renommé**. Exemple : `THTMANT_901-209-1.jpg`, `THTMANT_901-209-2.jpg`.",
+            ],
+            tip: "Les photos sont prises dans l'ordre de leur nom de fichier : ne les renomme pas avant. \ud83d\udcf7",
+          },
+          {
+            h: "Vérifier avant de télécharger",
+            lines: [
+              "Les étiquettes sont encadrées en bleu : corrige la référence ou le code couleur directement dans les cases si l'IA a mal lu.",
+              "Le bouton **Étiquette / Vêtement** corrige une photo mal classée.",
+              "\u26a0\ufe0f Une photo **sans étiquette** avant elle garde son nom d'origine.",
+              "Les photos d'étiquette ne sont pas dans le ZIP, sauf si tu actives **Inclure les photos d'étiquette**.",
+            ],
+          },
+        ],
+      },
+      {
         id: "export-ean-fournisseurs",
         icon: "\ud83c\udfed",
         title: "Commandes par fournisseur (EAN)",
